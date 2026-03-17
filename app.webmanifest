@@ -1,13 +1,13 @@
 {
-  "name": "Personal Ops Hub",
-  "short_name": "Ops Hub",
+  "name": "App in My Life",
+  "short_name": "App in My Life",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F6F3EF",
   "theme_color": "#F6F3EF",
-  "description": "A local-first personal operations hub for training, nutrition, planning, recovery, and daily execution.",
+  "description": "A local-first personal daily planning hub for training, nutrition, planning, recovery, and daily execution.",
   "icons": [
     {
       "src": "/icons/icon-192.png",
