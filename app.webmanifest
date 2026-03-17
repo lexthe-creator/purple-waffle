@@ -1,0 +1,25 @@
+{
+  "name": "Personal Ops Hub",
+  "short_name": "Ops Hub",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F6F3EF",
+  "theme_color": "#F6F3EF",
+  "description": "A local-first personal operations hub for training, nutrition, planning, recovery, and daily execution.",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
