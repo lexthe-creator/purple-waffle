@@ -42,6 +42,7 @@ export default function DailyExecutionPanel({
   setDailyExecutionMode,
   openCalendar,
 }){
+  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
   const visibleTasks=dailyExecutionEntry.mode==='execution'
     ?dailyExecutionEntry.agenda
     :dailyExecutionEntry.priorities;
@@ -86,16 +87,20 @@ export default function DailyExecutionPanel({
     <div style={{display:'grid',gap:8,marginBottom:12}}>
       {visibleTasks.map((task,index,items)=><div key={task.id} style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
         <button style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700}} onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}>{task.completed?'✓':''}</button>
-        <FieldInput
-          value={task.text||''}
-          placeholder={dailyExecutionEntry.mode==='planning'?`Priority ${index+1}`:`Agenda item ${index+1}`}
-          style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
-          onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
-        />
+        {dailyExecutionEntry.mode==='planning'
+          ?<FieldInput
+            value={task.text||''}
+            placeholder={`Priority ${index+1}`}
+            style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
+            onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
+          />
+          :<div style={{minHeight:42,display:'flex',alignItems:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
+            {task.text||`Agenda item ${index+1}`}
+          </div>}
         <div style={{display:'flex',gap:6}}>
           <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
           <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
-          <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>
+          {dailyExecutionEntry.mode==='planning'&&<button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
         </div>
       </div>)}
       {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
@@ -139,7 +144,7 @@ export default function DailyExecutionPanel({
     <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
       <button style={{...S.btnGhost,flex:1}} onClick={addPriorityTask}>Add Item</button>
       {dailyExecutionEntry.mode==='planning'
-        ?<button style={{...S.btnSolid(C.navy),flex:1}} onClick={()=>setDailyExecutionMode('execution')} disabled={dailyExecutionEntry.priorities.filter(task=>task.text.trim()).length===0}>Move to Execution</button>
+        ?<button style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Move to Execution</button>
         :<button style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Return to Planning</button>}
       <button style={{...S.btnGhost,flex:1}} onClick={openCalendar}>Open Calendar</button>
     </div>

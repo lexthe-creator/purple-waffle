@@ -76,25 +76,44 @@ function shouldKeepKeyEventLocal(event){
   return !event.metaKey&&!event.ctrlKey;
 }
 
-function composeFieldKeyHandler(handler){
+function composeFieldKeyHandler(handler,{allowEnterSubmit=false,isMultiline=false}={}){
   if(!handler)return event=>{
+    if(event.key==='Enter'&&!allowEnterSubmit&&!isMultiline){
+      event.preventDefault();
+    }
     if(shouldKeepKeyEventLocal(event))event.stopPropagation();
   };
   return event=>{
+    if(event.key==='Enter'&&!allowEnterSubmit&&!isMultiline){
+      event.preventDefault();
+    }
     handler(event);
     if(shouldKeepKeyEventLocal(event)&&!event.isPropagationStopped?.())event.stopPropagation();
   };
 }
 
-const FieldInput=React.forwardRef(function FieldInput({id,name,...props},ref){
+function getSharedTextFieldProps(props){
+  const type=props.type||'text';
+  const isTextLike=!['file','date','time','number','range','checkbox','radio','color','hidden'].includes(type);
+  if(!isTextLike)return{};
+  return{
+    autoComplete:props.autoComplete??'off',
+    autoCorrect:props.autoCorrect??'off',
+    autoCapitalize:props.autoCapitalize??'none',
+    spellCheck:props.spellCheck??false,
+  };
+}
+
+const FieldInput=React.forwardRef(function FieldInput({id,name,allowEnterSubmit=false,...props},ref){
   const generatedId=useId();
   const fieldId=id??name??generatedId;
   return React.createElement('input',{
     ...props,
+    ...getSharedTextFieldProps(props),
     ref,
     id:fieldId,
     name:name??fieldId,
-    onKeyDown:composeFieldKeyHandler(props.onKeyDown),
+    onKeyDown:composeFieldKeyHandler(props.onKeyDown,{allowEnterSubmit}),
   });
 });
 
@@ -115,10 +134,14 @@ const FieldTextarea=React.forwardRef(function FieldTextarea({id,name,...props},r
   const fieldId=id??name??generatedId;
   return React.createElement('textarea',{
     ...props,
+    autoComplete:props.autoComplete??'off',
+    autoCorrect:props.autoCorrect??'off',
+    autoCapitalize:props.autoCapitalize??'none',
+    spellCheck:props.spellCheck??false,
     ref,
     id:fieldId,
     name:name??fieldId,
-    onKeyDown:composeFieldKeyHandler(props.onKeyDown),
+    onKeyDown:composeFieldKeyHandler(props.onKeyDown,{isMultiline:true}),
   });
 });
 
@@ -1561,6 +1584,18 @@ function hydrateWorkoutSession(sess){
   return{...sess,ex:exercises,currentExerciseIdx:sess.currentExerciseIdx||0,startedAt:sess.startedAt||Date.now(),inProgress:true};
 }
 
+function resolveWorkoutSelectionId(session,dateKey=getTodayKey()){
+  if(!session)return null;
+  return session.id
+    || session.libraryId
+    || session.plannedWorkoutId
+    || session.plannedName
+      ?`${session.id||session.libraryId||session.plannedWorkoutId||session.plannedName}-${dateKey}`
+      :session.name
+        ?`${session.name}-${dateKey}`
+        :null;
+}
+
 function getSwapCandidates(ex){
   const baseDef=resolveExerciseDefinition(ex.exerciseId||ex.n);
   const direct=(baseDef.substitutions||[]).map(id=>buildExerciseInstance({exerciseId:id,s:ex.targetSets,r:ex.targetReps,note:ex.targetNote},0));
@@ -2166,6 +2201,8 @@ function normalizeDailyRecommendation(recommendation={},dateKey=getTodayKey()){
     userOverride:!!next.userOverride,
     finalSelection:next.finalSelection&&typeof next.finalSelection==='object'?next.finalSelection:null,
     action:['accept','modify','ignore'].includes(next.action)?next.action:null,
+    workoutDecisionMade:next.workoutDecisionMade===true,
+    selectedWorkoutId:typeof next.selectedWorkoutId==='string'&&next.selectedWorkoutId.trim()?next.selectedWorkoutId:null,
   };
 }
 
@@ -3575,9 +3612,18 @@ function App(){
   }):null;
   const recoveryWorkoutOption=suggestedWorkoutBase?adjustWorkoutForRecovery(suggestedWorkoutBase,{...recoveryToday,level:'Low'}):restDayRecovery;
   const dailyWorkoutRecommendation=profile.dailyRecommendations?.[selectedDate]?.workout||null;
-  const shouldPromptWorkoutDecision=selectedDateRelation===0&&!!scheduledTodayWorkout&&recoveryToday.readiness<workoutDecisionThreshold&&!wktDone&&!dailyWorkoutRecommendation?.action;
-  const selectedTodayWorkout=shouldPromptWorkoutDecision&&dailyWorkoutRecommendation?.action==='modify'
-    ?hydrateWorkoutSession(dailyWorkoutRecommendation.finalSelection||recoveryWorkoutOption)
+  const workoutDecisionMade=dailyWorkoutRecommendation?.workoutDecisionMade===true;
+  const selectedWorkoutId=dailyWorkoutRecommendation?.selectedWorkoutId||null;
+  const scheduledWorkoutId=resolveWorkoutSelectionId(scheduledTodayWorkout,selectedDate);
+  const recoveryWorkoutId=resolveWorkoutSelectionId(recoveryWorkoutOption,selectedDate);
+  const shouldPromptWorkoutDecision=selectedDateRelation===0&&!!scheduledTodayWorkout&&recoveryToday.readiness<workoutDecisionThreshold&&!wktDone&&!workoutDecisionMade;
+  const selectedTodayWorkout=workoutDecisionMade
+    ?dailyWorkoutRecommendation?.action==='modify'
+      ?hydrateWorkoutSession({
+        ...(dailyWorkoutRecommendation.finalSelection||recoveryWorkoutOption||scheduledTodayWorkout||{}),
+        dateKey:selectedDate,
+      })
+      :scheduledTodayWorkout
     :scheduledTodayWorkout;
   const adjustedTodayWorkout=selectedTodayWorkout;
   const hasModifiedSession=false;
@@ -3938,6 +3984,11 @@ function App(){
     syncDailyCheckinTop3(dateKey,nextTop3);
   }
   function updateWorkoutRecommendationForDate(dateKey,action,finalSelection=null){
+    const nextSelectedWorkoutId=action==='modify'
+      ?resolveWorkoutSelectionId(finalSelection,dateKey)
+      :action==='accept'
+        ?resolveWorkoutSelectionId(scheduledTodayWorkout,dateKey)
+        :null;
     updateProfile(current=>({
       ...current,
       dailyRecommendations:{
@@ -3954,6 +4005,8 @@ function App(){
             userOverride:action==='modify',
             finalSelection,
             action,
+            workoutDecisionMade:true,
+            selectedWorkoutId:nextSelectedWorkoutId,
           },dateKey),
         },
       },
@@ -4263,11 +4316,15 @@ function App(){
       ?'Workout history is fixed for past dates.'
       :isFutureDate
         ?'Planning only. No recovery prompt for future dates.'
+        :workoutDecisionMade&&dailyWorkoutRecommendation?.action==='modify'
+          ?'Recovery workout selected for today.'
+          :workoutDecisionMade&&dailyWorkoutRecommendation?.action==='accept'
+            ?'Scheduled workout confirmed for today.'
+            :workoutDecisionMade&&dailyWorkoutRecommendation?.action==='ignore'
+              ?'Scheduled workout left unchanged for today.'
         :shouldPromptWorkoutDecision&&!dailyWorkoutRecommendation?.action
-      ?'Recovery is low. Choose whether to continue or switch.'
-      :todaysStatus==='recovery_override'
-        ?'Recovery workout selected for today'
-        :suggestionLabel||selectedTodayWorkout?.adjustmentReason||'Open today’s plan';
+          ?'Recovery is low. Choose whether to continue or switch.'
+          :selectedTodayWorkout?.adjustmentReason||'Open today’s plan';
     const workoutDuration=selectedTodayWorkout?.dur||selectedTodayWorkout?.duration||restDayRecovery.dur||'25 min';
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
@@ -4282,6 +4339,10 @@ function App(){
     },[activeDate,dailyExecutionEntry]);
 
     function setDailyExecutionMode(nextMode){
+      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>task.text.trim())){
+        showNotif('Add at least one priority before moving to execution.','warn');
+        return;
+      }
       updateDailyExecution(activeDate,entry=>({
         ...entry,
         mode:nextMode,
@@ -4289,6 +4350,7 @@ function App(){
           ?(entry.agenda.length>0?entry.agenda:entry.priorities.map(task=>({...task})))
           :entry.agenda,
       }));
+      showNotif(nextMode==='execution'?'Execution mode enabled':'Returned to planning mode','success');
     }
 
     function updatePriorityTask(taskId,patch){
@@ -4615,88 +4677,6 @@ function App(){
         openCalendar={()=>openTab('calendar',{calendarFocusDay:activeDate,calendarViewMode:'week',calendarWeekIndex:getWeekIndexForDate(activeDate,TODAY),calendarMonthIndex:getMonthIndexForDate(activeDate,TODAY)})}
       />
 
-      <div style={S.card}>
-        <button style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}} onClick={()=>setWeekAheadOpen(o=>!o)}>
-          <div style={S.row}>
-            <div><span style={S.lbl}>Week Ahead</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>{formatDateRange(nextWeekDates[0],nextWeekDates[6],'monthDayShort')}</div></div>
-            <span style={{fontSize:13,color:C.muted}}>{weekAheadOpen?'▲':'▼'}</span>
-          </div>
-        </button>
-        {weekAheadOpen&&<div style={{marginTop:12,display:'grid',gap:8}}>
-          {nextWeekDates.map(dateStr=>{
-            const dayLabel=formatDate(dateStr,'weekdayMonthDayShort');
-            const scheduledCount=taskBuckets.scheduled.filter(t=>t.date===dateStr).length;
-            return <div key={dateStr} style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-              <div>
-                <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{dayLabel}</div>
-                <div style={{fontSize:10,color:C.muted}}>{scheduledCount>0?`${scheduledCount} task${scheduledCount!==1?'s':''}`:'Nothing scheduled'}</div>
-              </div>
-              <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>openComposerForDate(dateStr)}>+ task</button>
-            </div>;
-          })}
-        </div>}
-      </div>
-
-      {annualHoldingItems.length>0&&<div style={{...S.card,padding:'16px 16px 12px'}}>
-        <div style={{...S.row,marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Things to Accomplish</div>
-            <div style={{fontSize:13,fontWeight:600,color:C.tx2}}>Someday / Soon</div>
-          </div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('maintenance')}>View all</button>
-        </div>
-        <div style={{display:'grid',gap:8}}>
-          {annualHoldingItems.slice(0,4).map(item=>{
-            const dueLabel=item.dueDate?formatDate(item.dueDate,'monthYear'):null;
-            return <div key={item.id} style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{item.label}</div>
-                {dueLabel&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>Target: {dueLabel}</div>}
-              </div>
-              <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>completeMaintenanceItem(item.id)}>Done</button>
-            </div>;
-          })}
-        </div>
-      </div>}
-
-      <div style={{...S.card,padding:'20px 16px',borderTop:`4px solid ${todaysStatus==='recovery_override'||todaysStatus==='rest'?C.sage:recoveryState.color}`}}>
-        <div style={{...S.row,alignItems:'flex-start',marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Today’s Workout</div>
-            <div style={{fontSize:24,fontWeight:800,color:C.tx,lineHeight:1.1}}>{doneForToday?'You’re done for today':workoutTitle}</div>
-          </div>
-          <span style={S.pill(recoveryState.bg,recoveryState.color)}>{wktDone?'Completed':adjustedTodayWorkout?.adjustmentLabel||recoveryState.label}</span>
-        </div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-          <span style={S.pill(C.navyL,C.navyDk)}>{workoutDuration}</span>
-          {getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)&&<span style={S.pill(C.navyL,C.navyDk)}>{getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)}</span>}
-          {suggestedPlanEntry?.suggestedCarryover&&<span style={S.pill(C.amberL,C.amberDk)}>Carryover</span>}
-        </div>
-        <div style={{...S.support,marginBottom:10}}>{doneForToday?'Nothing urgent remains. You can stop here.':workoutMeta}</div>
-        <div style={{display:'flex',gap:8,marginBottom:10}}>
-          <button style={{...S.btnSolid(),flex:1}} onClick={()=>{
-            if(wktDone){openTab('training',{trainSection:'history'});return;}
-            if(todaysStatus==='rest'){startRec(RECOVERY_SESSIONS.find(s=>s.id==='runner')||RECOVERY_SESSIONS[0]);openTab('training');return;}
-            openTodayWorkoutAction();
-          }}>{wktDone?'View log':todaysStatus==='rest'||todaysStatus==='recovery_override'?'Start recovery':'Start workout'}</button>
-          <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('training',{trainSection:'plan'})}>View plan</button>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-          <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Run</div>
-            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{latestRunMetric}</div>
-          </div>
-          <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Strength</div>
-            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{latestStrengthPr}</div>
-          </div>
-          <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Simulation</div>
-            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{latestSimulationMetric}</div>
-          </div>
-        </div>
-      </div>
-
       <div style={{display:'grid',gridTemplateColumns:'1.15fr 0.85fr',gap:12}}>
         <div style={S.card}>
           <div style={{...S.row,marginBottom:10}}>
@@ -4751,6 +4731,50 @@ function App(){
         </div>
       </div>
 
+      <div style={S.card}>
+        <button style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}} onClick={()=>setWeekAheadOpen(o=>!o)}>
+          <div style={S.row}>
+            <div><span style={S.lbl}>Week Ahead</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>{formatDateRange(nextWeekDates[0],nextWeekDates[6],'monthDayShort')}</div></div>
+            <span style={{fontSize:13,color:C.muted}}>{weekAheadOpen?'▲':'▼'}</span>
+          </div>
+        </button>
+        {weekAheadOpen&&<div style={{marginTop:12,display:'grid',gap:8}}>
+          {nextWeekDates.map(dateStr=>{
+            const dayLabel=formatDate(dateStr,'weekdayMonthDayShort');
+            const scheduledCount=taskBuckets.scheduled.filter(t=>t.date===dateStr).length;
+            return <div key={dateStr} style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{dayLabel}</div>
+                <div style={{fontSize:10,color:C.muted}}>{scheduledCount>0?`${scheduledCount} task${scheduledCount!==1?'s':''}`:'Nothing scheduled'}</div>
+              </div>
+              <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>openComposerForDate(dateStr)}>+ task</button>
+            </div>;
+          })}
+        </div>}
+      </div>
+
+      {annualHoldingItems.length>0&&<div style={{...S.card,padding:'16px 16px 12px'}}>
+        <div style={{...S.row,marginBottom:10}}>
+          <div>
+            <div style={S.lbl}>Things to Accomplish</div>
+            <div style={{fontSize:13,fontWeight:600,color:C.tx2}}>Someday / Soon</div>
+          </div>
+          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('maintenance')}>View all</button>
+        </div>
+        <div style={{display:'grid',gap:8}}>
+          {annualHoldingItems.slice(0,4).map(item=>{
+            const dueLabel=item.dueDate?formatDate(item.dueDate,'monthYear'):null;
+            return <div key={item.id} style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{item.label}</div>
+                {dueLabel&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>Target: {dueLabel}</div>}
+              </div>
+              <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>completeMaintenanceItem(item.id)}>Done</button>
+            </div>;
+          })}
+        </div>
+      </div>}
+
       <CollapsibleCard
         title="Habits Today"
         summary={`${completedHabits}/${dueHabits.length||0} habits · ${dailyDone}/${activeLifestyleItems.length} routines`}
@@ -4802,15 +4826,14 @@ function App(){
         </div>
       </CollapsibleCard>}
 
-      <CollapsibleCard
-        title="Weekly Preview"
-        summary={`${weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/${Math.min(weekPlannedWorkouts.length,4)} workouts done this week`}
-        open={homeCardsOpen.weekly}
-        onToggle={()=>setHomeCardsOpen(s=>({...s,weekly:!s.weekly}))}
-        cardStyle={{background:C.surf,boxShadow:'none'}}>
-        <div style={{...S.row,marginBottom:10}}>
-          <div style={{fontSize:11,color:C.muted}}>{weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{Math.min(weekPlannedWorkouts.length,4)} done this week</div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={e=>{e.stopPropagation();openTab('calendar',{calendarFocusDay:TODAY});}}>Open week</button>
+      <button style={{...S.card,width:'100%',textAlign:'left',cursor:'pointer',background:C.surf}} onClick={()=>openTab('training',{trainSection:'plan'})}>
+        <div style={{...S.row,marginBottom:10,alignItems:'flex-start'}}>
+          <div>
+            <div style={S.lbl}>Weekly Preview</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{resolvedWkType} week · {weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{Math.min(weekPlannedWorkouts.length,4)} completed</div>
+          </div>
+          <span style={{fontSize:11,color:C.navy,fontWeight:700}}>Open Plan</span>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
           {weekPlannedWorkouts.slice(0,4).map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 8px'}}>
@@ -4819,7 +4842,7 @@ function App(){
             <span style={S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk)}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
           </div>)}
         </div>
-      </CollapsibleCard>
+      </button>
     </div>;
   }
 
@@ -5073,7 +5096,7 @@ function App(){
               </div>
               <div style={{...S.pill(todayWorkoutStatusMeta.bg,todayWorkoutStatusMeta.color),marginRight:0,marginBottom:0}}>{todayWorkoutStatusMeta.label}</div>
             </div>
-            {suggestionLabel&&<div style={{background:C.surf,borderRadius:10,padding:'9px 10px',marginBottom:12}}>
+            {suggestionLabel&&!workoutDecisionMade&&<div style={{background:C.surf,borderRadius:10,padding:'9px 10px',marginBottom:12}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Schedule</div>
               <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{suggestionLabel}</div>
               {suggestedPlanEntry?.plannedDate!==TODAY&&<div style={{fontSize:11,color:C.tx2,marginTop:2}}>The calendar keeps the original plan. Completion will be marked off-schedule unless you replan the week.</div>}
@@ -5099,11 +5122,19 @@ function App(){
               </div>
               <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
                 <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Duration</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{todayWorkoutDuration}</div>
+              <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{todayWorkoutDuration}</div>
               </div>
               <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
                 <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Recovery Adjustment</div>
-                <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{describeWorkoutAdjustment(adjustedTodayWorkout)||adjustedTodayWorkout?.adjustmentReason||'No change'}</div>
+                <div style={{fontSize:13,fontWeight:700,color:C.tx}}>
+                  {workoutDecisionMade&&dailyWorkoutRecommendation?.action==='ignore'
+                    ?'No change'
+                    :workoutDecisionMade&&dailyWorkoutRecommendation?.action==='accept'
+                      ?'Scheduled workout confirmed'
+                      :workoutDecisionMade&&dailyWorkoutRecommendation?.action==='modify'
+                        ?'Recovery workout selected'
+                        :describeWorkoutAdjustment(adjustedTodayWorkout)||adjustedTodayWorkout?.adjustmentReason||'No change'}
+                </div>
               </div>
             </div>
             {todaysStatus==='training'&&adjustedTodayWorkout&&<div style={{background:C.card,borderRadius:12,padding:'12px 12px 10px',marginBottom:12}}>
@@ -5120,9 +5151,13 @@ function App(){
               </div>}
             </div>}
             {todaysStatus==='recovery_override'&&adjustedTodayWorkout&&<div style={{background:C.card,borderRadius:12,padding:'12px 12px 10px',marginBottom:12}}>
-              <div style={{fontSize:12,color:C.red,marginBottom:4}}>Workout replaced due to low recovery</div>
+              <div style={{fontSize:12,color:workoutDecisionMade?C.muted:C.red,marginBottom:4}}>{workoutDecisionMade?'Recovery workout selected':'Workout replaced due to low recovery'}</div>
               <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:4}}>{adjustedTodayWorkout.name}</div>
-              <div style={{fontSize:12,color:C.tx2,marginBottom:8}}>{describeWorkoutAdjustment(adjustedTodayWorkout)||adjustedTodayWorkout.adjustmentReason||'Low recovery detected.'}</div>
+              <div style={{fontSize:12,color:C.tx2,marginBottom:8}}>
+                {workoutDecisionMade
+                  ?'This is the final workout selected for today.'
+                  :describeWorkoutAdjustment(adjustedTodayWorkout)||adjustedTodayWorkout.adjustmentReason||'Low recovery detected.'}
+              </div>
               <div style={{background:C.surf,borderRadius:10,padding:'9px 10px'}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Original plan</div>
                 <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{originalWorkoutLabel}</div>
@@ -5237,6 +5272,47 @@ function App(){
               })}
             </div>}
           </div>
+          {(()=>{
+            const programTitle=PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan';
+            const isRaceFocused=profile.goalType==='race';
+            const goalLabel=isRaceFocused?'Race Goal':'Primary Goal';
+            const goalValue=fitnessProgram==='hyrox'
+              ?'HYROX Tampa'
+              :fitnessProgram==='running'
+                ?'Running race build'
+                :fitnessProgram==='strength'
+                  ?'Strength progression'
+                  :fitnessProgram==='pilates'
+                    ?'Pilates consistency'
+                    :'Recovery reset';
+            const goalMeta=raceDate?`${formatDate(raceDate,'monthYear')} target`:`Built around ${programTitle.toLowerCase()}`;
+            const phaseLabel=fitnessProgram==='hyrox'?'Current Phase':'Current Rotation';
+            const phaseValue=fitnessProgram==='hyrox'
+              ?`${PH.name} — Week ${CUR_WK}`
+              :`${resolvedWkType} week`;
+            const phaseMeta=fitnessProgram==='hyrox'
+              ?PH.theme
+              :PROGRAM_DETAIL_CARDS[fitnessProgram]?.note||'Complete planned sessions within the current weekly rotation.';
+            return <div style={{...S.card,background:fitnessProgram==='hyrox'?PH.lClr:C.card,borderColor:fitnessProgram==='hyrox'?'transparent':C.bd}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,alignItems:'flex-start'}}>
+                <div>
+                  <div style={S.lbl}>{goalLabel}</div>
+                  <div style={{fontSize:18,fontWeight:700,color:fitnessProgram==='hyrox'?PH.clr:C.tx,marginBottom:2}}>{goalValue}</div>
+                  <div style={{fontSize:11,color:fitnessProgram==='hyrox'?PH.tClr:C.tx2}}>{goalMeta}</div>
+                </div>
+                {fitnessProgram==='hyrox'&&<div style={{textAlign:'right'}}>
+                  <div style={{fontSize:26,fontWeight:700,color:PH.clr,lineHeight:1}}>{DTR}</div>
+                  <div style={{fontSize:10,color:C.muted}}>days remaining</div>
+                </div>}
+              </div>
+              <div style={{height:1,background:fitnessProgram==='hyrox'?PH.tClr:C.bd,opacity:0.18,margin:'12px 0'}}/>
+              <div>
+                <div style={{...S.lbl,color:fitnessProgram==='hyrox'?PH.tClr:C.muted}}>{phaseLabel}</div>
+                <div style={{fontSize:18,fontWeight:700,color:fitnessProgram==='hyrox'?PH.clr:C.tx,marginBottom:2}}>{phaseValue}</div>
+                <div style={{fontSize:12,color:fitnessProgram==='hyrox'?PH.tClr:C.tx2}}>{phaseMeta}</div>
+              </div>
+            </div>;
+          })()}
           <div style={S.card}>
             <span style={S.lbl}>Weekly Schedule</span>
             {weekPlannedWorkouts.map((item,idx)=><div key={item.plannedDate} style={{...S.row,padding:'10px 0',borderBottom:idx<weekPlannedWorkouts.length-1?`0.5px solid ${C.bd}`:'none',alignItems:'flex-start',gap:10}}>
@@ -5258,24 +5334,6 @@ function App(){
                 {item.status==='moved'?'Moved':item.status==='completed'?'Done':item.status==='missed'?'Open':item.status==='today'?'Today':'Planned'}
               </span>
             </div>)}
-          </div>
-          {fitnessProgram==='hyrox'&&<div style={{...S.card,borderLeft:`3px solid ${PH.clr}`,padding:'10px 14px',marginBottom:8}}>
-            <div style={S.row}>
-              <div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:1}}>Race Goal</div>
-                <div style={{fontSize:14,fontWeight:700,color:C.tx}}>HYROX Tampa</div>
-                <div style={{fontSize:10,color:C.muted}}>{PH.name} · Week {CUR_WK}</div>
-              </div>
-              <div style={{textAlign:'right'}}>
-                <div style={{fontSize:26,fontWeight:700,color:PH.clr,lineHeight:1}}>{DTR}</div>
-                <div style={{fontSize:10,color:C.muted}}>days remaining</div>
-              </div>
-            </div>
-          </div>}
-          <div style={{...S.card,background:fitnessProgram==='hyrox'?PH.lClr:C.card,borderColor:'transparent'}}>
-            <span style={{...S.lbl,color:fitnessProgram==='hyrox'?PH.tClr:C.muted}}>{fitnessProgram==='hyrox'?'Current Phase':'Current Rotation'}</span>
-            <div style={{fontSize:20,fontWeight:700,color:fitnessProgram==='hyrox'?PH.clr:C.tx,marginBottom:2}}>{fitnessProgram==='hyrox'?`${PH.name} — Week ${CUR_WK}`:`${PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training'} — ${resolvedWkType} week`}</div>
-            <div style={{fontSize:12,color:fitnessProgram==='hyrox'?PH.tClr:C.tx2}}>{fitnessProgram==='hyrox'?PH.theme:'Complete planned sessions on their assigned days or finish them later in the same 7-day cycle.'}</div>
           </div>
           <div style={S.card}>
             <span style={S.lbl}>Training Load</span>
@@ -7020,6 +7078,7 @@ function App(){
         {showAddTask&&<div style={{...S.card,marginBottom:12}}>
           <FieldInput
             value={taskDraftText}
+            allowEnterSubmit
             onChange={e=>setTaskDraftText(e.target.value)}
             onKeyDown={e=>{
               if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing)return;
@@ -9166,6 +9225,7 @@ function App(){
             </div>
             <FieldInput
               value={captureText}
+              allowEnterSubmit
               onChange={e=>setCaptureText(e.target.value)}
               onKeyDown={e=>{
                 if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing||!routed)return;
