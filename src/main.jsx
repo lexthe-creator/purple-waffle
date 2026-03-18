@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
+import { FlowRoot } from './flow/FlowRoot.jsx';
 
 const IS_DEV=import.meta.env.DEV;
 const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
@@ -2936,9 +2937,10 @@ const BUSY_PRESETS=[
   {label:'Afternoon block',  startTime:'13:00',endTime:'17:00',category:'meeting'},
   {label:'All-day hold',     startTime:'08:00',endTime:'18:00',category:'unavailable'},
 ];
-function timeToMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
+function timeToMins(t){if(typeof t!=='string'||!t.includes(':'))return 0;const[h,m]=t.split(':').map(Number);return(h||0)*60+(m||0);}
 function minsToTime(m){return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;}
 function fmtTimeRange(s,e){
+  if(typeof s!=='string'||typeof e!=='string')return'–';
   const fmt=t=>{const[h,m]=t.split(':').map(Number);const ampm=h>=12?'pm':'am';const hh=h>12?h-12:h||12;return m?`${hh}:${String(m).padStart(2,'0')}${ampm}`:`${hh}${ampm}`;};
   return`${fmt(s)} – ${fmt(e)}`;
 }
@@ -3273,7 +3275,7 @@ const G={xs:4,sm:8,md:12,lg:16,xl:24};
 
 const S={
   wrap:{background:C.bg,minHeight:'100vh',maxWidth:430,margin:'0 auto',paddingBottom:64,paddingTop:'env(safe-area-inset-top)',position:'relative'},
-  hdr:{padding:`14px ${G.lg}px 10px`,borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center',position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,zIndex:250,background:C.headerBg,backdropFilter:'blur(18px)'},
+  hdr:{padding:`calc(14px + env(safe-area-inset-top)) ${G.lg}px 10px`,borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center',position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,zIndex:250,background:C.headerBg,backdropFilter:'blur(18px)'},
   body:{padding:`${G.md}px ${G.lg}px ${G.xs}px`},
   card:{background:C.card,border:`1px solid ${C.bd}`,borderRadius:16,padding:G.lg,marginBottom:G.md,boxShadow:C.shadow},
   lbl:{fontSize:T.micro,fontWeight:700,letterSpacing:'0.8px',color:C.muted,textTransform:'uppercase',marginBottom:G.xs,display:'block',lineHeight:1.2},
@@ -3485,6 +3487,14 @@ function App(){
   const [focusTmrSec,setFocusTmrSec]=useState(null);
   const [focusTmrRunning,setFocusTmrRunning]=useState(false);
   const [googleConnected,setGoogleConnected]=useState(false);
+  const [showFlow,setShowFlow]=useState(false);
+  const [flowDayType,setFlowDayType]=useState(()=>{
+    try{const v=localStorage.getItem('flow_day_type_'+new Date().toISOString().slice(0,10));return v||null;}catch{return null;}
+  });
+  const handleFlowDayType=useCallback(type=>{
+    setFlowDayType(type);
+    try{localStorage.setItem('flow_day_type_'+new Date().toISOString().slice(0,10),type);}catch{}
+  },[]);
   const contentRef=useRef(null);
   const restRef=useRef(null),recRef=useRef(null),saveRef=useRef(null);
   const latestProfileRef=useRef(DEFAULT_OPS);
@@ -4376,7 +4386,7 @@ function App(){
   }
   function getBusyForDay(dateStr){
     const d=new Date(dateStr+'T12:00:00');const dow=d.getDay();
-    return (busyBlocks||[]).filter(b=>b.recurring?b.dow===dow:b.date===dateStr)
+    return (busyBlocks||[]).filter(b=>(b.recurring?b.dow===dow:b.date===dateStr)&&b.startTime&&b.endTime)
       .sort((a,b)=>timeToMins(a.startTime)-timeToMins(b.startTime));
   }
 
@@ -7268,7 +7278,7 @@ function App(){
           <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:6}}>Daily and weekly structure</div>
           <div style={{fontSize:11,color:C.tx2,marginBottom:12}}>Keep routines and planning flows here, separate from body-state tracking.</div>
           <div style={{display:'flex',gap:8,marginBottom:8}}>
-            <button style={{...S.btnSmall(C.navy),flex:1}} onClick={()=>setTab('home')}>Open Daily Flow</button>
+            <button style={{...S.btnSmall(C.navy),flex:1}} onClick={()=>openTab('home')}>Open Daily Flow</button>
             <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('calendar')}>Open Calendar</button>
           </div>
           <button style={{...S.btnGhost,width:'100%',textAlign:'center'}} onClick={()=>setShowWeeklyPlanner(true)}>Open Weekly Planner</button>
@@ -9925,6 +9935,18 @@ function App(){
 
       {/* Quick Capture floating button */}
       <button onClick={openCommandBar} style={{position:'fixed',right:20,bottom:80,width:48,height:48,borderRadius:'50%',background:C.navy,color:C.white,border:'none',fontSize:24,fontWeight:300,cursor:'pointer',zIndex:400,boxShadow:C.shadowStrong,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>
+
+      {/* Flow Engine overlay */}
+      {showFlow&&(
+        <FlowRoot
+          dayType={flowDayType}
+          onDayType={handleFlowDayType}
+          calendarCache={calendarCache}
+          todayKey={TODAY}
+          now={NOW}
+          onClose={()=>setShowFlow(false)}
+        />
+      )}
 
     </div>
   );
