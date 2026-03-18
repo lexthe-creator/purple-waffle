@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import { FlowRoot } from './flow/FlowRoot.jsx';
 
 const IS_DEV=import.meta.env.DEV;
 const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
@@ -2810,6 +2811,14 @@ function App(){
   const [notifDetail,setNotifDetail]=useState('');
   const [notifAction,setNotifAction]=useState(null);
   const [googleConnected,setGoogleConnected]=useState(false);
+  const [showFlow,setShowFlow]=useState(false);
+  const [flowDayType,setFlowDayType]=useState(()=>{
+    try{const v=localStorage.getItem('flow_day_type_'+new Date().toISOString().slice(0,10));return v||null;}catch{return null;}
+  });
+  const handleFlowDayType=useCallback(type=>{
+    setFlowDayType(type);
+    try{localStorage.setItem('flow_day_type_'+new Date().toISOString().slice(0,10),type);}catch{}
+  },[]);
   const contentRef=useRef(null);
   const restRef=useRef(null),recRef=useRef(null),saveRef=useRef(null);
   const latestProfileRef=useRef(DEFAULT_OPS);
@@ -4154,7 +4163,7 @@ function App(){
             <div style={S.lbl}>Daily Execution</div>
             <div style={{fontSize:16,fontWeight:700,color:C.tx}}>What’s next across the day</div>
           </div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('tasks',{taskTab:'next'})}>Open flow</button>
+          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>setShowFlow(true)}>Open flow</button>
         </div>
         <div style={{display:'grid',gap:8}}>
           <div style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px',alignItems:'center'}}>
@@ -8403,6 +8412,18 @@ function App(){
 
       {/* Quick Capture floating button */}
       <button onClick={openCommandBar} style={{position:'fixed',right:20,bottom:80,width:48,height:48,borderRadius:'50%',background:C.navy,color:C.white,border:'none',fontSize:24,fontWeight:300,cursor:'pointer',zIndex:400,boxShadow:C.shadowStrong,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>
+
+      {/* Flow Engine overlay */}
+      {showFlow&&(
+        <FlowRoot
+          dayType={flowDayType}
+          onDayType={handleFlowDayType}
+          calendarCache={calendarCache}
+          todayKey={TODAY}
+          now={NOW}
+          onClose={()=>setShowFlow(false)}
+        />
+      )}
 
     </div>
   );
