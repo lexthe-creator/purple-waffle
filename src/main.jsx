@@ -2,18 +2,49 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
+const IS_DEV=import.meta.env.DEV;
+const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
+
 window.__PERSONAL_HUB_PWA__={
   isSecureOrigin:window.isSecureContext||location.hostname==='localhost'||location.hostname==='127.0.0.1'
 };
 
-if(window.__PERSONAL_HUB_PWA__.isSecureOrigin&&'serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('./sw.js',{scope:'./'})
-      .then(registration=>registration.update().catch(()=>{}))
-      .catch(error=>{
-        console.error('Service worker registration failed:',error);
+if('serviceWorker' in navigator){
+  if(IS_DEV){
+    navigator.serviceWorker.getRegistrations()
+      .then(registrations=>Promise.all(registrations.map(registration=>registration.unregister())))
+      .catch(()=>{})
+      .finally(()=>{
+        if('caches' in window){
+          caches.keys()
+            .then(keys=>Promise.all(keys.filter(key=>key.startsWith('app-in-my-life-shell-')).map(key=>caches.delete(key))))
+            .catch(()=>{})
+            .finally(()=>{
+              if(navigator.serviceWorker.controller&&!sessionStorage.getItem(DEV_SW_RESET_KEY)){
+                sessionStorage.setItem(DEV_SW_RESET_KEY,'1');
+                location.reload();
+              }
+            });
+          return;
+        }
+
+        if(navigator.serviceWorker.controller&&!sessionStorage.getItem(DEV_SW_RESET_KEY)){
+          sessionStorage.setItem(DEV_SW_RESET_KEY,'1');
+          location.reload();
+        }
       });
-  });
+  }else{
+    window.addEventListener('load',()=>{
+
+      if(window.__PERSONAL_HUB_PWA__.isSecureOrigin){
+        navigator.serviceWorker.register('./sw.js',{scope:'./'})
+          .then(registration=>registration.update().catch(()=>{}))
+          .catch(error=>{
+            console.error('Service worker registration failed:',error);
+          });
+      }
+    });
+  }
 }
 
 const STORAGE_KEYS={
@@ -3588,7 +3619,6 @@ function App(){
       if(!entry)return;
       addMeal({
         meal:entry.meal,
-        foodId:entry.foodId,
         pantryItemId:entry.pantryItemId,
         recipeId:entry.recipeId,
         source:'repeat-last',
@@ -7725,10 +7755,18 @@ function App(){
   );
 }
 
-try{
-  createRoot(document.getElementById('root')).render(React.createElement(App));
-}catch(error){
-  console.error('App render failed:',error);
-  const loading=document.getElementById('loading');
-  if(loading)loading.textContent='App failed to load. Refresh to retry.';
+function mountApp(){
+  try{
+    const rootElement=document.getElementById('root');
+    if(!rootElement)throw new Error('Root element #root was not found.');
+    const root=rootElement.__appRoot??createRoot(rootElement);
+    rootElement.__appRoot=root;
+    root.render(React.createElement(App));
+  }catch(error){
+    console.error('App render failed:',error);
+    const loading=document.getElementById('loading');
+    if(loading)loading.textContent='App failed to load. Refresh to retry.';
+  }
 }
+
+mountApp();
