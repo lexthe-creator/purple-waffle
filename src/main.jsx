@@ -6142,7 +6142,7 @@ function App(){
           <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:6}}>Daily and weekly structure</div>
           <div style={{fontSize:11,color:C.tx2,marginBottom:12}}>Keep routines and planning flows here, separate from body-state tracking.</div>
           <div style={{display:'flex',gap:8,marginBottom:8}}>
-            <button style={{...S.btnSmall(C.navy),flex:1}} onClick={()=>setTab('home')}>Open Daily Flow</button>
+            <button style={{...S.btnSmall(C.navy),flex:1}} onClick={()=>openTab('home')}>Open Daily Flow</button>
             <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('calendar')}>Open Calendar</button>
           </div>
           <button style={{...S.btnGhost,width:'100%',textAlign:'center'}} onClick={()=>setShowWeeklyPlanner(true)}>Open Weekly Planner</button>
@@ -8187,7 +8187,7 @@ function App(){
         </div>
       </div>
       <div ref={contentRef} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
-        <ScreenErrorBoundary resetKey={tab} fallback={screenFallback}>
+        <ScreenErrorBoundary resetKey={tab==='calendar'?`calendar-${calendarFocusDay}`:tab} fallback={screenFallback}>
           <ActiveScreen focusDay={calendarFocusDay}/>
         </ScreenErrorBoundary>
       </div>
