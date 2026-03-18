@@ -33,6 +33,9 @@ export default function DailyExecutionPanel({
   openTodayWorkoutAction,
   nextTaskItem,
   toggleTaskDone,
+  habitsSummary,
+  habitsBadge,
+  openHabitsModal,
   todayLog,
   selectedDateLabel,
   isViewingToday,
@@ -133,6 +136,13 @@ export default function DailyExecutionPanel({
         </div>
         {nextTaskItem&&<button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>toggleTaskDone(nextTaskItem.id)}>Done</button>}
       </div>
+      <button style={{...S.btnGhost,width:'100%',justifyContent:'space-between',padding:'10px 12px'}} onClick={openHabitsModal}>
+        <div style={{textAlign:'left'}}>
+          <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Habits</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{habitsSummary}</div>
+        </div>
+        {habitsBadge&&<span style={{...S.pill(habitsBadge==='done'?C.sageL:C.navyL,habitsBadge==='done'?C.sageDk:C.navyDk),marginRight:0,marginBottom:0}}>{habitsBadge==='done'?'✓':habitsBadge}</span>}
+      </button>
     </div>
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowMorningCheckin(true)}>{todayLog.checkInDone?'Review check-in':'Morning check-in'}</button>

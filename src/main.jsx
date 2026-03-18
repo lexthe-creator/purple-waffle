@@ -328,18 +328,27 @@ function getDailyCheckinEntry(dateKey=getTodayKey()){
   const store=readDailyCheckinStore();
   return store?.[dateKey]&&typeof store[dateKey]==='object'?store[dateKey]:null;
 }
+function hasSavedDailyCheckin(entry,dateKey=getTodayKey()){
+  if(!entry||typeof entry!=='object')return false;
+  if(entry.completed===true)return true;
+  return entry.date===dateKey;
+}
 function isDailyCheckinCompleted(dateKey=getTodayKey()){
-  return getDailyCheckinEntry(dateKey)?.completed===true;
+  return hasSavedDailyCheckin(getDailyCheckinEntry(dateKey),dateKey);
 }
 function buildDailyCheckinEntryFromProfile(profile,dateKey){
   const log=profile?.dailyLogs?.[dateKey];
   if(!log?.checkInDone)return null;
-  const top3=Array.isArray(profile?.top3?.[dateKey])?profile.top3[dateKey]:[];
   return{
-    completed:true,
-    energy:typeof log.energyScore==='number'?log.energyScore:null,
-    sleep:typeof log.sleepHours==='number'?log.sleepHours:null,
-    top3:[...top3],
+    date:dateKey,
+    mood:typeof log.mood==='number'?log.mood:null,
+    energy:typeof log.checkInEnergy==='number'
+      ?log.checkInEnergy
+      :typeof log.energyScore==='number'
+        ?Math.max(0,Math.min(5,Math.round(log.energyScore/2)))
+        :null,
+    stress:typeof log.stress==='number'?log.stress:null,
+    note:typeof log.checkInNote==='string'&&log.checkInNote.trim()?log.checkInNote.trim():null,
   };
 }
 function migrateDailyCheckinStore(profile){
@@ -366,8 +375,8 @@ function saveDailyCheckin(dateKey,entry){
 function syncDailyCheckinTop3(dateKey,top3){
   const store=readDailyCheckinStore();
   const existingEntry=store?.[dateKey];
-  if(existingEntry?.completed!==true)return store;
-  const nextStore={...store,[dateKey]:{...existingEntry,top3:[...(Array.isArray(top3)?top3:[])]}};
+  if(!hasSavedDailyCheckin(existingEntry,dateKey))return store;
+  const nextStore={...store,[dateKey]:existingEntry};
   writeDailyCheckinStore(nextStore);
   return nextStore;
 }
@@ -3119,11 +3128,18 @@ function App(){
   const [showWeeklyPlanner,setShowWeeklyPlanner]=useState(false);
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
-  const [morningStep,setMorningStep]=useState(1);
+  const [showHabitsModal,setShowHabitsModal]=useState(false);
+  const [habitDraftCompletions,setHabitDraftCompletions]=useState({});
   const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
   const [showProgramPicker,setShowProgramPicker]=useState(false);
   const [energyScore,setEnergyScore]=useState(5);
   const [sleepHours,setSleepHours]=useState(7.5);
+  const [checkInMood,setCheckInMood]=useState(null);
+  const [checkInEnergy,setCheckInEnergy]=useState(3);
+  const [checkInStress,setCheckInStress]=useState(2);
+  const [checkInNote,setCheckInNote]=useState('');
+  const [showCheckInNote,setShowCheckInNote]=useState(false);
+  const [dismissedMorningCheckinDate,setDismissedMorningCheckinDate]=useState(null);
   const [tier2Open,setTier2Open]=useState({energy:true,finance:false,habits:false});
   const [homeCardsOpen,setHomeCardsOpen]=useState({habits:false,alerts:false,weekly:false});
   const [showInsights,setShowInsights]=useState(false);
@@ -3343,10 +3359,28 @@ function App(){
     if(!loaded)return;
     const todayKey=getTodayKey();
     const h=NOW.getHours();
-    const shouldShow=h>=5&&h<=13&&!isDailyCheckinCompleted(todayKey);
+    const shouldShow=h>=5&&h<=13&&!isDailyCheckinCompleted(todayKey)&&dismissedMorningCheckinDate!==todayKey;
     setShowMorningCheckin(shouldShow);
-    if(!shouldShow)setMorningStep(1);
-  },[loaded,NOW,TODAY,dailyLogs]);
+  },[loaded,NOW,TODAY,dailyLogs,dismissedMorningCheckinDate]);
+
+  useEffect(()=>{
+    if(!showMorningCheckin)return;
+    const todayKey=getTodayKey();
+    const existingEntry=getDailyCheckinEntry(todayKey);
+    setCheckInMood(typeof existingEntry?.mood==='number'?existingEntry.mood:null);
+    setCheckInEnergy(typeof existingEntry?.energy==='number'?existingEntry.energy:3);
+    setCheckInStress(typeof existingEntry?.stress==='number'?existingEntry.stress:2);
+    setCheckInNote(typeof existingEntry?.note==='string'?existingEntry.note:'');
+    setShowCheckInNote(!!existingEntry?.note);
+    const onKeyDown=e=>{
+      if(e.key!=='Escape')return;
+      e.preventDefault();
+      setShowMorningCheckin(false);
+      setDismissedMorningCheckinDate(todayKey);
+    };
+    window.addEventListener('keydown',onKeyDown);
+    return()=>window.removeEventListener('keydown',onKeyDown);
+  },[showMorningCheckin]);
 
   useEffect(()=>{
     if(!loaded)return;
@@ -3972,6 +4006,44 @@ function App(){
     saveDailyLog({energyScore,sleepHours,workoutDone:wktDone,proteinMet:totPro>=(proGoal*0.9),hydrationMet:todayH>=(hydGoal*0.9)});
     setShowEnergyIn(false);showNotif('Energy logged','success');
   }
+  function closeMorningCheckin(){
+    setShowMorningCheckin(false);
+    setDismissedMorningCheckinDate(getTodayKey());
+  }
+  function saveMorningCheckin(){
+    const todayKey=getTodayKey();
+    const noteValue=checkInNote.trim();
+    const entry={
+      date:todayKey,
+      mood:typeof checkInMood==='number'?checkInMood:null,
+      energy:checkInEnergy,
+      stress:checkInStress,
+      note:noteValue||null,
+    };
+    saveDailyCheckin(todayKey,entry);
+    updateProfile(p=>({
+      ...p,
+      dailyLogs:{
+        ...p.dailyLogs,
+        [todayKey]:{
+          ...(p.dailyLogs?.[todayKey]||{}),
+          date:todayKey,
+          mood:entry.mood,
+          checkInEnergy:entry.energy,
+          energyScore:entry.energy*2,
+          stress:entry.stress,
+          checkInNote:entry.note,
+          workoutDone:wktDone,
+          proteinMet:totPro>=(proGoal*0.9),
+          hydrationMet:todayH>=(hydGoal*0.9),
+          checkInDone:true,
+        },
+      },
+    }));
+    setDismissedMorningCheckinDate(todayKey);
+    setShowMorningCheckin(false);
+    showNotif('Check-in saved','success');
+  }
   function updateDailyExecution(dateKey,updater){
     const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
     const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
@@ -4013,10 +4085,21 @@ function App(){
     }));
   }
   function completeHabit(habitId){
-    const log=dailyLogs?.[TODAY]||{};
+    const log=dailyLogs?.[selectedDate]||{};
     const done=[...(log.habitsCompleted||[])];
     if(!done.includes(habitId))done.push(habitId);
-    saveDailyLog({habitsCompleted:done});
+    saveDailyLog({habitsCompleted:done},selectedDate);
+  }
+  function openHabitsEditor(dateKey=selectedDate){
+    const completedIds=dailyLogs?.[dateKey]?.habitsCompleted||[];
+    setHabitDraftCompletions(completedIds.reduce((acc,id)=>{acc[id]=true;return acc;},{}));
+    setShowHabitsModal(true);
+  }
+  function saveHabitCompletions(dateKey=selectedDate){
+    const completedIds=(habits||[]).filter(habit=>habitDraftCompletions[habit.id]).map(habit=>habit.id);
+    saveDailyLog({habitsCompleted:completedIds},dateKey);
+    setShowHabitsModal(false);
+    showNotif('Habits saved','success');
   }
   // Toggle a task's done state from dashboard or agenda
   function toggleTaskDone(taskId){
@@ -4295,6 +4378,10 @@ function App(){
     const dueHabits=(habits||[]).filter(h=>habitDueToday(h,dailyLogs));
     const completedHabitIds=dailyLogs?.[activeDate]?.habitsCompleted||[];
     const completedHabits=dueHabits.filter(h=>completedHabitIds.includes(h.id)).length;
+    const activeHabits=(habits||[]).filter(h=>!h.archived);
+    const completedActiveHabits=activeHabits.filter(h=>completedHabitIds.includes(h.id)).length;
+    const habitsSummary=activeHabits.length>0?`${completedActiveHabits} of ${activeHabits.length} habits completed today`:'No habits set up yet';
+    const habitsBadge=activeHabits.length===0?null:(completedActiveHabits===activeHabits.length&&activeHabits.length>0?'done':completedActiveHabits>0?`${completedActiveHabits}/${activeHabits.length}`:null);
     const activeLifestyleItems=(lifestyleItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.order||0)-(b.order||0));
     const dailyDone=activeLifestyleItems.filter(i=>!!todayChores[i.id]).length;
 
@@ -4667,6 +4754,9 @@ function App(){
         openTodayWorkoutAction={openTodayWorkoutAction}
         nextTaskItem={nextTaskItem}
         toggleTaskDone={toggleTaskDone}
+        habitsSummary={habitsSummary}
+        habitsBadge={habitsBadge}
+        openHabitsModal={()=>openHabitsEditor(activeDate)}
         todayLog={todayLog}
         selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):''}
         isViewingToday={isViewingToday}
@@ -4731,6 +4821,24 @@ function App(){
         </div>
       </div>
 
+      <button style={{...S.card,width:'100%',textAlign:'left',cursor:'pointer',background:C.surf}} onClick={()=>openTab('training',{trainSection:'plan'})}>
+        <div style={{...S.row,marginBottom:10,alignItems:'flex-start'}}>
+          <div>
+            <div style={S.lbl}>Weekly Preview</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{resolvedWkType} week · {weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{Math.min(weekPlannedWorkouts.length,4)} completed</div>
+          </div>
+          <span style={{fontSize:11,color:C.navy,fontWeight:700}}>Open Plan</span>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+          {weekPlannedWorkouts.slice(0,4).map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 8px'}}>
+            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.plannedDayLabel}</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.tx,marginBottom:4}}>{item.plannedName?.replace('Strength — ','')||item.name}</div>
+            <span style={S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk)}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
+          </div>)}
+        </div>
+      </button>
+
       <div style={S.card}>
         <button style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}} onClick={()=>setWeekAheadOpen(o=>!o)}>
           <div style={S.row}>
@@ -4740,7 +4848,7 @@ function App(){
         </button>
         {weekAheadOpen&&<div style={{marginTop:12,display:'grid',gap:8}}>
           {nextWeekDates.map(dateStr=>{
-            const dayLabel=formatDate(dateStr,'weekdayMonthDayShort');
+            const dayLabel=formatDate(dateStr,'primary');
             const scheduledCount=taskBuckets.scheduled.filter(t=>t.date===dateStr).length;
             return <div key={dateStr} style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px'}}>
               <div>
@@ -4775,31 +4883,6 @@ function App(){
         </div>
       </div>}
 
-      <CollapsibleCard
-        title="Habits Today"
-        summary={`${completedHabits}/${dueHabits.length||0} habits · ${dailyDone}/${activeLifestyleItems.length} routines`}
-        open={homeCardsOpen.habits}
-        onToggle={()=>setHomeCardsOpen(s=>({...s,habits:!s.habits}))}>
-        <div style={{...S.row,marginBottom:10}}>
-          <div style={{fontSize:11,color:C.muted}}>{completedHabits}/{dueHabits.length||0} habits · {dailyDone}/{activeLifestyleItems.length} routines</div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={e=>{e.stopPropagation();openTab('habits');}}>Open Lifestyle</button>
-        </div>
-        {dueHabits.length===0
-          ?<div style={{fontSize:12,color:C.muted}}>No habits due today.</div>
-          :<div style={{display:'grid',gap:8}}>
-            {dueHabits.slice(0,3).map(habit=>{
-              const done=completedHabitIds.includes(habit.id);
-              return <div key={habit.id} style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px',gap:10}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.tx,textDecoration:done?'line-through':'none'}}>{habit.name}</div>
-                  <div style={{fontSize:10,color:C.muted}}>{done?'Completed':'Due today'}</div>
-                </div>
-                <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>completeHabit(habit.id)}>{done?'Done':'Complete'}</button>
-              </div>;
-            })}
-          </div>}
-      </CollapsibleCard>
-
       {alertsVisible&&<CollapsibleCard
         title="Alerts"
         summary={[urgentMaintenanceItems.length>0&&`${urgentMaintenanceItems.length} maintenance`,pendingInbox.length>0&&`${pendingInbox.length} inbox`].filter(Boolean).join(' · ')||'No active alerts'}
@@ -4826,23 +4909,38 @@ function App(){
         </div>
       </CollapsibleCard>}
 
-      <button style={{...S.card,width:'100%',textAlign:'left',cursor:'pointer',background:C.surf}} onClick={()=>openTab('training',{trainSection:'plan'})}>
-        <div style={{...S.row,marginBottom:10,alignItems:'flex-start'}}>
-          <div>
-            <div style={S.lbl}>Weekly Preview</div>
-            <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{resolvedWkType} week · {weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{Math.min(weekPlannedWorkouts.length,4)} completed</div>
+      {showHabitsModal&&<div style={{position:'fixed',inset:0,background:C.scrim,zIndex:520,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+        <div style={{background:C.card,borderRadius:20,padding:'20px 16px',width:'100%',maxWidth:390,maxHeight:'80vh',overflowY:'auto',boxShadow:C.shadowStrong}}>
+          <div style={{...S.row,alignItems:'flex-start',marginBottom:12}}>
+            <div>
+              <div style={S.lbl}>Daily Habits</div>
+              <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{formatDate(activeDate,'primary')}</div>
+            </div>
+            <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>setShowHabitsModal(false)}>Close</button>
           </div>
-          <span style={{fontSize:11,color:C.navy,fontWeight:700}}>Open Plan</span>
+          <div style={{display:'grid',gap:8,marginBottom:12}}>
+            {activeHabits.length===0
+              ?<div style={{background:C.surf,borderRadius:12,padding:'14px 12px',fontSize:12,color:C.muted}}>No habits set up yet.</div>
+              :activeHabits.map(habit=>{
+                const checked=!!habitDraftCompletions[habit.id];
+                return <button key={habit.id} style={{...S.row,width:'100%',background:C.surf,border:`1px solid ${checked?C.sage:C.bd}`,borderRadius:12,padding:'12px 12px',cursor:'pointer',textAlign:'left'}} onClick={()=>setHabitDraftCompletions(prev=>({...prev,[habit.id]:!prev[habit.id]}))}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,flex:1,minWidth:0}}>
+                    <span style={{width:22,height:22,borderRadius:checked?8:999,border:`1px solid ${checked?C.sage:C.bd}`,background:checked?C.sage:'transparent',color:checked?C.white:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,flexShrink:0}}>{checked?'✓':''}</span>
+                    <span style={{fontSize:14,fontWeight:600,color:C.tx,textDecoration:checked?'line-through':'none'}}>{habit.name}</span>
+                  </div>
+                </button>;
+              })}
+          </div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
+            {activeHabits.filter(habit=>habitDraftCompletions[habit.id]).length} of {activeHabits.length} habits completed today
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button style={{...S.btnSolid(C.navy),flex:1}} onClick={()=>saveHabitCompletions(activeDate)}>Save</button>
+            <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowHabitsModal(false)}>Cancel</button>
+          </div>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
-          {weekPlannedWorkouts.slice(0,4).map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 8px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.plannedDayLabel}</div>
-            <div style={{fontSize:12,fontWeight:700,color:C.tx,marginBottom:4}}>{item.plannedName?.replace('Strength — ','')||item.name}</div>
-            <span style={S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk)}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
-          </div>)}
-        </div>
-      </button>
+      </div>}
+
     </div>;
   }
 
@@ -9130,64 +9228,91 @@ function App(){
         </div>
       </div>}
 
-      {/* Morning check-in — sequential 3-step flow */}
-      {showMorningCheckin&&<div style={{position:'fixed',inset:0,background:C.scrimStrong,zIndex:650,display:'flex',alignItems:'flex-end'}}>
-        <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'28px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto'}}>
-          {/* Step indicator */}
-          <div style={{display:'flex',gap:6,justifyContent:'center',marginBottom:20}}>
-            {[1,2,3].map(n=><div key={n} style={{width:n===morningStep?24:8,height:8,borderRadius:4,background:n<=morningStep?C.sage:C.surf,transition:'width 0.2s'}}/>)}
+      {/* Morning check-in */}
+      {showMorningCheckin&&<div
+        style={{position:'fixed',inset:0,background:C.scrimStrong,zIndex:650,display:'flex',alignItems:'flex-end'}}
+        onClick={closeMorningCheckin}
+      >
+        <div
+          style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'20px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto'}}
+          onClick={e=>e.stopPropagation()}
+        >
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:18}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:4}}>Daily Check-In</div>
+              <div style={{fontSize:12,color:C.muted}}>Answer quickly. Don&apos;t overthink.</div>
+            </div>
+            <button
+              onClick={closeMorningCheckin}
+              aria-label="Close daily check-in"
+              style={{width:36,height:36,borderRadius:10,border:`1.5px solid ${C.bd}`,background:'transparent',color:C.tx,fontSize:14,fontWeight:700,cursor:'pointer',flexShrink:0}}
+            >
+              X
+            </button>
           </div>
 
-          {morningStep===1&&<div>
-            <div style={{fontSize:17,fontWeight:700,color:C.tx,marginBottom:6}}>Good morning</div>
-            <div style={{fontSize:13,color:C.muted,marginBottom:20}}>How's your energy today?</div>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:24}}>
-              {[1,2,3,4,5,6,7,8,9,10].map(n=><button key={n} onClick={()=>setEnergyScore(n)} style={{width:42,height:42,borderRadius:10,border:`2px solid ${energyScore===n?C.sage:C.bd}`,background:energyScore===n?C.sage:'transparent',color:energyScore===n?C.white:C.tx,fontSize:14,fontWeight:600,cursor:'pointer'}}>{n}</button>)}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Mood</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,minmax(0,1fr))',gap:8}}>
+              {[
+                {value:1,face:'Awful',emoji:':('},
+                {value:2,face:'Low',emoji:':/'},
+                {value:3,face:'Okay',emoji:':|'},
+                {value:4,face:'Good',emoji:':)'},
+                {value:5,face:'Great',emoji:':D'},
+              ].map(option=><button
+                key={option.value}
+                onClick={()=>setCheckInMood(option.value)}
+                aria-pressed={checkInMood===option.value}
+                style={{padding:'12px 6px',borderRadius:12,border:`2px solid ${checkInMood===option.value?C.amberDk:C.bd}`,background:checkInMood===option.value?C.amberL:C.bg,color:C.tx,cursor:'pointer'}}
+              >
+                <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{option.emoji}</div>
+                <div style={{fontSize:10,fontWeight:600}}>{option.face}</div>
+              </button>)}
             </div>
-            <button style={S.btnSolid(C.sage)} onClick={()=>setMorningStep(2)}>Next</button>
-          </div>}
+          </div>
 
-          {morningStep===2&&<div>
-            <div style={{fontSize:17,fontWeight:700,color:C.tx,marginBottom:6}}>Sleep</div>
-            <div style={{fontSize:13,color:C.muted,marginBottom:20}}>How many hours did you sleep?</div>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:24}}>
-              {[5,5.5,6,6.5,7,7.5,8,8.5,9].map(h=><button key={h} onClick={()=>setSleepHours(h)} style={{padding:'10px 14px',borderRadius:10,border:`2px solid ${sleepHours===h?C.navy:C.bd}`,background:sleepHours===h?C.navy:'transparent',color:sleepHours===h?C.white:C.tx,fontSize:13,cursor:'pointer',fontWeight:sleepHours===h?600:400}}>{h}h</button>)}
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Energy</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(6,minmax(0,1fr))',gap:8}}>
+              {[0,1,2,3,4,5].map(level=><button
+                key={level}
+                onClick={()=>setCheckInEnergy(level)}
+                aria-pressed={checkInEnergy===level}
+                style={{height:44,borderRadius:12,border:`2px solid ${checkInEnergy===level?C.sage:C.bd}`,background:checkInEnergy===level?C.sageL:C.bg,color:checkInEnergy===level?C.sageDk:C.tx,fontSize:15,fontWeight:700,cursor:'pointer'}}
+              >
+                {level}
+              </button>)}
             </div>
-            <div style={{display:'flex',gap:8}}>
-              <button style={{...S.btnGhost,flex:0}} onClick={()=>setMorningStep(1)}>Back</button>
-              <button style={S.btnSolid(C.navy)} onClick={()=>setMorningStep(3)}>Next</button>
-            </div>
-          </div>}
+          </div>
 
-          {morningStep===3&&<div>
-            <div style={{fontSize:17,fontWeight:700,color:C.tx,marginBottom:6}}>Today's priorities</div>
-            <div style={{fontSize:13,color:C.muted,marginBottom:16}}>What are your top 3 for today?</div>
-            {Array.from({length:3},(_,i)=>normalizeDailyExecutionEntry(profile.dailyExecution?.[TODAY],TODAY,top3[TODAY]||[]).priorities[i]||createDailyExecutionTask('',{date:TODAY,id:`morning-${i}`})).map((task,i)=><div key={task.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-              <div style={{width:22,height:22,borderRadius:'50%',background:C.sageL,color:C.sageDk,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</div>
-              <FieldInput defaultValue={task.text||''} onBlur={e=>{
-                const todayKey=getTodayKey();
-                const todayEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[todayKey],todayKey,top3[todayKey]||[]);
-                const nextPriorities=[...todayEntry.priorities];
-                nextPriorities[i]=normalizeDailyExecutionTask({...task,text:e.target.value},todayKey,i);
-                updateDailyExecution(todayKey,{
-                  ...todayEntry,
-                  mode:'planning',
-                  priorities:nextPriorities,
-                });
-              }} placeholder={`Priority ${i+1}...`} style={{...S.inp,padding:'9px 12px'}}/>
-            </div>)}
-            <div style={{display:'flex',gap:8,marginTop:16}}>
-              <button style={{...S.btnGhost,flex:0}} onClick={()=>setMorningStep(2)}>Back</button>
-              <button style={S.btnSolid(C.sage)} onClick={()=>{
-                const todayKey=getTodayKey();
-                const completedTop3=normalizeDailyExecutionEntry(profile.dailyExecution?.[todayKey],todayKey,top3[todayKey]||[]).priorities.slice(0,3).map(task=>task.text||'');
-                const log={...(dailyLogs?.[todayKey]||{}),energyScore,sleepHours,workoutDone:wktDone,proteinMet:totPro>=(proGoal*0.9),hydrationMet:todayH>=(hydGoal*0.9),checkInDone:true};
-                saveDailyCheckin(todayKey,{completed:true,energy:energyScore,sleep:sleepHours,top3:completedTop3});
-                updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[todayKey]:log}}));
-                setShowMorningCheckin(false);setMorningStep(1);
-              }}>Start my day</button>
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Stress / Load</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(6,minmax(0,1fr))',gap:8}}>
+              {[0,1,2,3,4,5].map(level=><button
+                key={level}
+                onClick={()=>setCheckInStress(level)}
+                aria-pressed={checkInStress===level}
+                style={{height:44,borderRadius:12,border:`2px solid ${checkInStress===level?C.red:C.bd}`,background:checkInStress===level?C.redL:C.bg,color:checkInStress===level?C.red:C.tx,fontSize:15,fontWeight:700,cursor:'pointer'}}
+              >
+                {level}
+              </button>)}
             </div>
-          </div>}
+          </div>
+
+          {!showCheckInNote&&<button style={{...S.btnGhost,width:'100%',marginBottom:12}} onClick={()=>setShowCheckInNote(true)}>Add note</button>}
+          {showCheckInNote&&<textarea
+            value={checkInNote}
+            onChange={e=>setCheckInNote(e.target.value)}
+            placeholder="Optional note"
+            rows={3}
+            style={{...S.inp,minHeight:88,resize:'vertical',marginBottom:12}}
+          />}
+
+          <div style={{display:'flex',gap:8}}>
+            <button style={S.btnSolid(C.sage)} onClick={saveMorningCheckin}>Save</button>
+            <button style={{...S.btnGhost,flex:1}} onClick={closeMorningCheckin}>Skip for today</button>
+          </div>
         </div>
       </div>}
 
