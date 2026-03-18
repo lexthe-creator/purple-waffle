@@ -1,4 +1,4 @@
-const CACHE_NAME='app-in-my-life-shell-v8';
+const CACHE_NAME='app-in-my-life-shell-v9';
 const APP_SHELL=[
   './',
   './index.html',

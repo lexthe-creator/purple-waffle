@@ -6,6 +6,18 @@ export default defineConfig(({ command }) => ({
   // correctly, but keep relative asset paths for portable production builds.
   base: command === 'build' ? './' : '/',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('/react-dom/')) return 'react-dom';
+          if (id.includes('/react/')) return 'react';
+          return 'vendor';
+        },
+      },
+    },
+  },
   server: {
     // Allow both localhost and 127.0.0.1 during local QA without custom HMR wiring.
     host: true,
