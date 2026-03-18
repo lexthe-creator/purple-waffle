@@ -7,9 +7,6 @@ const APP_SHELL=[
   './icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './vendor/react.production.min.js',
-  './vendor/react-dom.production.min.js',
-  './vendor/babel.min.js',
 ];
 
 self.addEventListener('install',event=>{

@@ -57,6 +57,7 @@ const DATE_KEY_RE=/^\d{4}-\d{2}-\d{2}$/;
 const APP_TAB_IDS=['home','calendar','tasks','training','meals','finance','habits','health','maintenance','insights','settings','more'];
 const TASK_TAB_IDS=['inbox','scheduled','next','done'];
 const FINANCE_VIEW_IDS=['overview','transactions','categories','recurring','trends'];
+const IMPORT_ACCOUNT_AUTO='__auto__';
 const TRAIN_SECTION_IDS=['today','plan','library','history'];
 const SETTINGS_SECTION_IDS=['app','workcal','finance','google','fitness','goals','meals','notifications','security'];
 const HEALTH_TAB_IDS=['recovery','wellness','body','care'];
@@ -277,12 +278,6 @@ const UNITS={system:'imperial',dist:'mi',weight:'lbs',energy:'kcal',pace:'min/mi
 const fmtPaceMi=secs=>{const m=Math.floor(secs/60),s=Math.round(secs%60);return`${m}:${String(s).padStart(2,'0')} /mi`;};
 const fmtDur=mins=>{if(!mins||mins<=0)return'—';if(mins<60)return`${Math.round(mins)} min`;const h=Math.floor(mins/60),m=Math.round(mins%60);return m>0?`${h}h ${m}m`:`${h}h`;};
 
-const LEGACY_FINANCIAL_ACCOUNTS=[
-  {id:'ally_checking',institution:'Ally',name:'Checking',type:'checking',isActive:true},
-  {id:'ally_savings',institution:'Ally',name:'Savings',type:'savings',isActive:true},
-  {id:'regions_checking',institution:'Regions',name:'Checking',type:'checking',isActive:true},
-  {id:'regions_savings',institution:'Regions',name:'Savings',type:'savings',isActive:true},
-];
 const ACCOUNT_TYPE_OPTIONS=[
   {id:'checking',label:'Checking'},
   {id:'savings',label:'Savings'},
@@ -292,20 +287,28 @@ const ACCOUNT_TYPE_OPTIONS=[
   {id:'loan',label:'Loan'},
   {id:'other',label:'Other'},
 ];
-const LEGACY_ACCOUNT_REFERENCE_MAP=LEGACY_FINANCIAL_ACCOUNTS.reduce((acc,account)=>{
-  const aliases=[
-    account.id,
-    `${account.institution}_${account.name}`,
-    `${account.institution} ${account.name}`,
-    `${account.institution} - ${account.name}`,
-    `${account.institution} — ${account.name}`,
-    `${account.name} (${account.institution})`,
-  ];
-  aliases.forEach(alias=>{
-    acc[alias.toLowerCase()]=account.id;
-  });
-  return acc;
-},{});
+const LEGACY_ACCOUNT_REFERENCE_MAP={
+  ally_checking:'ally_checking',
+  'ally checking':'ally_checking',
+  'ally - checking':'ally_checking',
+  'ally — checking':'ally_checking',
+  'checking (ally)':'ally_checking',
+  ally_savings:'ally_savings',
+  'ally savings':'ally_savings',
+  'ally - savings':'ally_savings',
+  'ally — savings':'ally_savings',
+  'savings (ally)':'ally_savings',
+  regions_checking:'regions_checking',
+  'regions checking':'regions_checking',
+  'regions - checking':'regions_checking',
+  'regions — checking':'regions_checking',
+  'checking (regions)':'regions_checking',
+  regions_savings:'regions_savings',
+  'regions savings':'regions_savings',
+  'regions - savings':'regions_savings',
+  'regions — savings':'regions_savings',
+  'savings (regions)':'regions_savings',
+};
 
 function normalizeAccountType(type){
   const normalized=String(type||'checking').trim().toLowerCase();
@@ -401,7 +404,135 @@ const PLANS=[
 ];
 
 const ALL_STATIONS=['SkiErg','Sled Push','Sled Pull','Burpee Broad Jump','Row','Farmers Carry','Sandbag Lunges','Wall Ball'];
-const DEFAULT_ATHLETE={fiveKTime:null,hyroxFinishTime:null,weakStations:[],strongStations:[],squat5RM:null,deadlift5RM:null,wallBallMaxReps:null,preferredTrainingDays:['Mon','Wed','Fri','Sat'],programType:'4-day'};
+const FITNESS_PROGRAM_OPTIONS=[
+  {id:'hyrox',label:'HYROX'},
+  {id:'strength',label:'Strength'},
+  {id:'pilates',label:'Pilates'},
+  {id:'recovery',label:'Recovery'},
+];
+const FITNESS_PROGRAM_ALIASES={running:'strength',none:'recovery',general:'recovery'};
+const DEFAULT_ATHLETE={fiveKTime:null,hyroxFinishTime:null,weakStations:[],strongStations:[],squat5RM:null,deadlift5RM:null,wallBallMaxReps:null,preferredTrainingDays:['Mon','Wed','Fri','Sun'],programType:'4-day',trainingWeekStart:'Mon'};
+
+function normalizeFitnessProgram(program='hyrox'){
+  const normalized=String(program||'hyrox').trim().toLowerCase();
+  if(FITNESS_PROGRAM_OPTIONS.some(option=>option.id===normalized))return normalized;
+  return FITNESS_PROGRAM_ALIASES[normalized]||'hyrox';
+}
+
+function getAnchoredTrainingDays(programType='4-day',trainingWeekStart='Mon'){
+  const normalizedProgramType=programType==='5-day'?'5-day':'4-day';
+  const startLabel=trainingWeekStart==='Wed'?'Wed':'Mon';
+  const dayIndexToLabel=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const startIdx=dayIndexToLabel.indexOf(startLabel);
+  const offsets=normalizedProgramType==='5-day'?[0,1,2,4,6]:[0,2,4,6];
+  return offsets.map(offset=>dayIndexToLabel[(startIdx+offset)%7]);
+}
+
+const PROGRAM_LIBRARY_META={
+  hyrox:{title:'HYROX race build',detail:'Strength, running, and station simulations with an A/B weekly rotation.'},
+  strength:{title:'Strength building',detail:'Progressive upper, lower, and full-body sessions with optional fifth-day accessories.'},
+  pilates:{title:'Pilates focus',detail:'Core control, posture, glute strength, and low-impact mobility in a structured weekly cadence.'},
+  recovery:{title:'Recovery reset',detail:'Low-intensity mobility, zone-2 cardio, breathwork, and nervous-system downshifting across the week.'},
+};
+
+const PROGRAM_WORKOUT_LIBRARY={
+  strength:{
+    '4-day':{
+      A:{
+        mon:{name:'Upper body strength build',dur:'50–60 min',intensity:'Moderate–Hard',purpose:'Build pressing and pulling strength with crisp volume.',ex:[{n:'Barbell bench press',s:4,r:'6',note:'Leave 1–2 reps in reserve.'},{n:'Weighted pull-up or lat pulldown',s:4,r:'8',note:'Control the eccentric.'},{n:'Incline dumbbell press',s:3,r:'10',note:''},{n:'Single-arm dumbbell row',s:3,r:'10ea',note:'Brace and pause at the top.'},{n:'Face pull',s:3,r:'15',note:'Shoulders stay down.'},{n:'Plank hold',s:3,r:'40s',note:''}]},
+        wed:{name:'Lower body strength build',dur:'55–65 min',intensity:'Moderate–Hard',purpose:'Progress squat, hinge, and unilateral lower-body strength.',ex:[{n:'Barbell back squat',s:4,r:'5',note:'Build across sets.'},{n:'Romanian deadlift',s:4,r:'8',note:'Own the hinge.'},{n:'Bulgarian split squat',s:3,r:'8ea',note:'Full range.'},{n:'Hip thrust',s:3,r:'10',note:'Pause at the top.'},{n:'Calf raise',s:3,r:'15',note:'Slow eccentric.'},{n:'Dead bug',s:3,r:'8ea',note:''}]},
+        fri:{name:'Full body hypertrophy',dur:'50–60 min',intensity:'Moderate',purpose:'Accumulate quality strength volume without max effort fatigue.',ex:[{n:'Trap bar deadlift',s:4,r:'6',note:'Smooth reps.'},{n:'Dumbbell shoulder press',s:3,r:'10',note:''},{n:'Lat pulldown',s:3,r:'10',note:''},{n:'Goblet squat',s:3,r:'12',note:'Stay upright.'},{n:'Farmers carry',s:4,r:'40m',note:'Braced core.'},{n:'Hollow body hold',s:3,r:'30s',note:''}]},
+        sat:{name:'Strength accessories + carries',dur:'40–50 min',intensity:'Moderate',purpose:'Build work capacity and trunk stiffness without a full extra heavy day.',ex:[{n:'Walking lunges',s:3,r:'12ea',note:'Long stride, upright torso.'},{n:'Kettlebell swings',s:4,r:'15',note:'Explode from the hips.'},{n:'Seated cable row',s:3,r:'12',note:''},{n:'Push-up',s:3,r:'12',note:'Leave a rep in reserve.'},{n:'Farmers carry',s:4,r:'50m',note:'Steady breathing.'},{n:'Side plank',s:3,r:'30s ea',note:''}]},
+      },
+      B:{
+        mon:{name:'Upper body strength peak',dur:'50–60 min',intensity:'Hard',purpose:'Drive heavier pressing and pulling with lower total reps.',ex:[{n:'Bench press',s:5,r:'4',note:'Heavy but crisp.'},{n:'Weighted pull-up',s:5,r:'4',note:'No grinding.'},{n:'Bent-over barbell row',s:4,r:'6',note:''},{n:'Arnold press',s:3,r:'8',note:''},{n:'Face pull',s:3,r:'15',note:''},{n:'Pallof press',s:3,r:'10ea',note:''}]},
+        wed:{name:'Lower body strength peak',dur:'55–65 min',intensity:'Hard',purpose:'Push the squat and hinge patterns while keeping movement clean.',ex:[{n:'Barbell back squat',s:5,r:'3',note:'Heavy triples.'},{n:'Romanian deadlift',s:4,r:'6',note:'Own the hinge.'},{n:'Step-up',s:3,r:'8ea',note:'Drive through the whole foot.'},{n:'Hip thrust',s:3,r:'8',note:'Pause hard at the top.'},{n:'Copenhagen plank',s:3,r:'20s ea',note:''},{n:'Calf raise',s:3,r:'12',note:''}]},
+        fri:{name:'Full body power + core',dur:'45–55 min',intensity:'Moderate–Hard',purpose:'Keep strength moving while adding power and loaded carries.',ex:[{n:'Trap bar deadlift',s:4,r:'5',note:'Explosive concentric.'},{n:'Push press',s:4,r:'5',note:'Leg drive then lockout.'},{n:'Single-arm row',s:3,r:'10ea',note:''},{n:'Sandbag lunges',s:3,r:'20m',note:'Short controlled steps.'},{n:'Farmers carry',s:4,r:'60m',note:'Heavy and clean.'},{n:'Dead bug',s:3,r:'10ea',note:''}]},
+        sat:{name:'Movement quality lift day',dur:'35–45 min',intensity:'Moderate',purpose:'Keep momentum with submaximal technique work and trunk training.',ex:[{n:'Goblet squat',s:3,r:'10',note:'Pause in the hole.'},{n:'Dumbbell bench press',s:3,r:'10',note:''},{n:'Cable row',s:3,r:'12',note:''},{n:'Walking lunges',s:2,r:'10ea',note:''},{n:'Suitcase carry',s:3,r:'30m ea',note:'Stay tall.'},{n:'Bird dog',s:3,r:'8ea',note:''}]},
+      },
+    },
+    '5-day':{
+      A:{
+        mon:{name:'Upper body strength build',dur:'50–60 min',intensity:'Moderate–Hard',purpose:'Build pressing and pulling strength with crisp volume.',ex:[{n:'Barbell bench press',s:4,r:'6',note:'Leave 1–2 reps in reserve.'},{n:'Weighted pull-up or lat pulldown',s:4,r:'8',note:'Control the eccentric.'},{n:'Incline dumbbell press',s:3,r:'10',note:''},{n:'Single-arm dumbbell row',s:3,r:'10ea',note:'Brace and pause at the top.'},{n:'Face pull',s:3,r:'15',note:'Shoulders stay down.'},{n:'Plank hold',s:3,r:'40s',note:''}]},
+        tue:{name:'Accessory trunk + carry work',dur:'35–40 min',intensity:'Moderate',purpose:'Add a short fifth day for trunk strength, carries, and shoulder health.',ex:[{n:'Farmers carry',s:4,r:'40m',note:'Controlled pace.'},{n:'Suitcase carry',s:3,r:'25m ea',note:'No leaning.'},{n:'Band pull-apart',s:3,r:'20',note:''},{n:'Dead bug',s:3,r:'10ea',note:''},{n:'Side plank',s:3,r:'30s ea',note:''}]},
+        wed:{name:'Lower body strength build',dur:'55–65 min',intensity:'Moderate–Hard',purpose:'Progress squat, hinge, and unilateral lower-body strength.',ex:[{n:'Barbell back squat',s:4,r:'5',note:'Build across sets.'},{n:'Romanian deadlift',s:4,r:'8',note:'Own the hinge.'},{n:'Bulgarian split squat',s:3,r:'8ea',note:'Full range.'},{n:'Hip thrust',s:3,r:'10',note:'Pause at the top.'},{n:'Calf raise',s:3,r:'15',note:'Slow eccentric.'},{n:'Dead bug',s:3,r:'8ea',note:''}]},
+        thu:{name:'Upper back + shoulder volume',dur:'40–50 min',intensity:'Moderate',purpose:'Round out the week with extra pull volume and scapular control.',ex:[{n:'Lat pulldown',s:4,r:'10',note:''},{n:'Seated cable row',s:4,r:'10',note:''},{n:'Dumbbell shoulder press',s:3,r:'10',note:''},{n:'Face pull',s:3,r:'15',note:''},{n:'Push-up',s:3,r:'10',note:''},{n:'Hollow body hold',s:3,r:'30s',note:''}]},
+        sat:{name:'Strength accessories + carries',dur:'40–50 min',intensity:'Moderate',purpose:'Build work capacity and trunk stiffness without a full extra heavy day.',ex:[{n:'Walking lunges',s:3,r:'12ea',note:'Long stride, upright torso.'},{n:'Kettlebell swings',s:4,r:'15',note:'Explode from the hips.'},{n:'Seated cable row',s:3,r:'12',note:''},{n:'Push-up',s:3,r:'12',note:'Leave a rep in reserve.'},{n:'Farmers carry',s:4,r:'50m',note:'Steady breathing.'},{n:'Side plank',s:3,r:'30s ea',note:''}]},
+      },
+      B:{
+        mon:{name:'Upper body strength peak',dur:'50–60 min',intensity:'Hard',purpose:'Drive heavier pressing and pulling with lower total reps.',ex:[{n:'Bench press',s:5,r:'4',note:'Heavy but crisp.'},{n:'Weighted pull-up',s:5,r:'4',note:'No grinding.'},{n:'Bent-over barbell row',s:4,r:'6',note:''},{n:'Arnold press',s:3,r:'8',note:''},{n:'Face pull',s:3,r:'15',note:''},{n:'Pallof press',s:3,r:'10ea',note:''}]},
+        tue:{name:'Short carry + core primer',dur:'30–35 min',intensity:'Moderate',purpose:'Keep the extra training day productive without stealing recovery.',ex:[{n:'Farmers carry',s:4,r:'30m',note:'Heavy, clean posture.'},{n:'Suitcase carry',s:3,r:'25m ea',note:''},{n:'Bird dog',s:3,r:'8ea',note:''},{n:'Copenhagen plank',s:3,r:'20s ea',note:''}]},
+        wed:{name:'Lower body strength peak',dur:'55–65 min',intensity:'Hard',purpose:'Push the squat and hinge patterns while keeping movement clean.',ex:[{n:'Barbell back squat',s:5,r:'3',note:'Heavy triples.'},{n:'Romanian deadlift',s:4,r:'6',note:'Own the hinge.'},{n:'Step-up',s:3,r:'8ea',note:'Drive through the whole foot.'},{n:'Hip thrust',s:3,r:'8',note:'Pause hard at the top.'},{n:'Copenhagen plank',s:3,r:'20s ea',note:''},{n:'Calf raise',s:3,r:'12',note:''}]},
+        thu:{name:'Upper back density day',dur:'40–45 min',intensity:'Moderate',purpose:'Keep the upper body volume high without another true max-effort session.',ex:[{n:'Lat pulldown',s:4,r:'8',note:''},{n:'Single-arm row',s:3,r:'10ea',note:''},{n:'Push press',s:3,r:'6',note:'Smooth timing.'},{n:'Band pull-apart',s:3,r:'20',note:''},{n:'Plank hold',s:3,r:'40s',note:''}]},
+        sat:{name:'Movement quality lift day',dur:'35–45 min',intensity:'Moderate',purpose:'Keep momentum with submaximal technique work and trunk training.',ex:[{n:'Goblet squat',s:3,r:'10',note:'Pause in the hole.'},{n:'Dumbbell bench press',s:3,r:'10',note:''},{n:'Cable row',s:3,r:'12',note:''},{n:'Walking lunges',s:2,r:'10ea',note:''},{n:'Suitcase carry',s:3,r:'30m ea',note:'Stay tall.'},{n:'Bird dog',s:3,r:'8ea',note:''}]},
+      },
+    },
+  },
+  pilates:{
+    '4-day':{
+      A:{
+        mon:{type:'recovery',name:'Pilates core control',dur:'35–40 min',intensity:'Low–Moderate',purpose:'Build deep-core control, rib positioning, and smooth spinal articulation.',ex:[{n:'Breathing drills',s:1,r:'90s',note:'Ribs down, slow exhale.',exerciseType:'breathing'},{n:'Pelvic tilts',s:2,r:'10',note:'Segment the spine.',exerciseType:'mobility'},{n:'Dead bug',s:3,r:'8ea',note:'Keep low back anchored.',exerciseType:'mobility'},{n:'Glute bridges',s:3,r:'12',note:'Pause at the top.',exerciseType:'mobility'},{n:'Toe taps',s:3,r:'10ea',note:'Move slowly.',exerciseType:'mobility'}]},
+        wed:{type:'recovery',name:'Pilates lower body stability',dur:'35–40 min',intensity:'Low–Moderate',purpose:'Train hip control, glute engagement, and unilateral balance.',ex:[{n:'Bird dog',s:3,r:'8ea',note:'Reach long.',exerciseType:'mobility'},{n:'Side-lying leg lifts',s:3,r:'12ea',note:'No momentum.',exerciseType:'mobility'},{n:'Clamshell',s:3,r:'15ea',note:'Pelvis stays stacked.',exerciseType:'mobility'},{n:'Single-leg glute bridge',s:2,r:'10ea',note:'Drive through full foot.',exerciseType:'mobility'},{n:'Standing calf raise',s:2,r:'15',note:'Smooth tempo.',exerciseType:'mobility'}]},
+        fri:{type:'recovery',name:'Pilates posture + upper body',dur:'30–35 min',intensity:'Low–Moderate',purpose:'Improve scapular control, thoracic mobility, and upright posture.',ex:[{n:'Thoracic rotation',s:2,r:'6ea',note:'Rotate through upper back.',exerciseType:'mobility'},{n:'Band pull-apart',s:3,r:'15',note:'Shoulders down.',exerciseType:'mobility'},{n:'Y-T-W raises',s:2,r:'8 each',note:'Small precise reps.',exerciseType:'mobility'},{n:'Wall slides',s:3,r:'10',note:'Ribs stay tucked.',exerciseType:'mobility'},{n:'Side plank',s:3,r:'25s ea',note:'Long line from heel to head.',exerciseType:'mobility'}]},
+        sat:{type:'recovery',name:'Full-body Pilates flow',dur:'40–45 min',intensity:'Moderate',purpose:'Stitch the week together with a longer, low-impact full-body flow.',ex:[{n:'Cat-cow',s:2,r:'45s',note:'Move with your breath.',exerciseType:'mobility'},{n:'Roll up',s:3,r:'6',note:'One vertebra at a time.',exerciseType:'mobility'},{n:'Glute bridges',s:3,r:'12',note:'Pause on top.',exerciseType:'mobility'},{n:'Bird dog',s:3,r:'8ea',note:'Stay square.',exerciseType:'mobility'},{n:'Side-lying leg lifts',s:3,r:'12ea',note:''},{n:'Breathing drills',s:1,r:'90s',note:'Finish calm.',exerciseType:'breathing'}]},
+      },
+      B:{
+        mon:{type:'recovery',name:'Pilates reset flow',dur:'30–35 min',intensity:'Low',purpose:'Reset the trunk and hips with a slower, breath-led opening session.',ex:[{n:'Breathing drills',s:1,r:'120s',note:'Long exhale.',exerciseType:'breathing'},{n:'Pelvic tilts',s:2,r:'10',note:''},{n:'Cat-cow',s:2,r:'45s',note:''},{n:'Hamstring floss',s:2,r:'8ea',note:'Ease into range.',exerciseType:'mobility'},{n:'Supine twist',s:2,r:'30s ea',note:'Breathe into the floor.',exerciseType:'mobility'}]},
+        wed:{type:'recovery',name:'Pilates glute + trunk strength',dur:'35–40 min',intensity:'Low–Moderate',purpose:'Add a little more challenge through the hips and trunk without impact.',ex:[{n:'Single-leg glute bridge',s:3,r:'8ea',note:''},{n:'Dead bug',s:3,r:'10ea',note:''},{n:'Side plank',s:3,r:'25s ea',note:''},{n:'Clamshell',s:3,r:'15ea',note:''},{n:'Bird dog',s:3,r:'8ea',note:''}]},
+        fri:{type:'recovery',name:'Pilates balance + rotation',dur:'30–35 min',intensity:'Low–Moderate',purpose:'Focus on control through unilateral balance and rotational mobility.',ex:[{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Standing balance reach',s:3,r:'6ea',note:'Slow and steady.',exerciseType:'mobility'},{n:'Lateral lunge',s:2,r:'8ea',note:'Use bodyweight only.',exerciseType:'mobility'},{n:'Pallof press',s:3,r:'8ea',note:'Hold each rep.',exerciseType:'mobility'},{n:'Breathing drills',s:1,r:'90s',note:''}]},
+        sat:{type:'recovery',name:'Long Pilates recovery flow',dur:'40–45 min',intensity:'Low–Moderate',purpose:'Restore range and reinforce smooth movement patterns with a longer mat session.',ex:[{n:'Roll up',s:3,r:'6',note:''},{n:'Glute bridges',s:3,r:'12',note:''},{n:'Bird dog',s:3,r:'8ea',note:''},{n:'Side-lying leg lifts',s:3,r:'12ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Supine twist',s:2,r:'30s ea',note:''}]},
+      },
+    },
+    '5-day':{
+      A:{
+        mon:{type:'recovery',name:'Pilates core control',dur:'35–40 min',intensity:'Low–Moderate',purpose:'Build deep-core control, rib positioning, and smooth spinal articulation.',ex:[{n:'Breathing drills',s:1,r:'90s',note:'Ribs down, slow exhale.',exerciseType:'breathing'},{n:'Pelvic tilts',s:2,r:'10',note:'Segment the spine.',exerciseType:'mobility'},{n:'Dead bug',s:3,r:'8ea',note:'Keep low back anchored.',exerciseType:'mobility'},{n:'Glute bridges',s:3,r:'12',note:'Pause at the top.',exerciseType:'mobility'},{n:'Toe taps',s:3,r:'10ea',note:'Move slowly.',exerciseType:'mobility'}]},
+        tue:{type:'recovery',name:'Pilates breath + mobility',dur:'20–25 min',intensity:'Low',purpose:'Keep the extra day low stress with breath-led trunk and hip mobility.',ex:[{n:'Breathing drills',s:1,r:'120s',note:'Long exhales.',exerciseType:'breathing'},{n:'Cat-cow',s:2,r:'45s',note:''},{n:'Thoracic rotation',s:2,r:'5ea',note:''},{n:'Supine twist',s:2,r:'30s ea',note:''}]},
+        wed:{type:'recovery',name:'Pilates lower body stability',dur:'35–40 min',intensity:'Low–Moderate',purpose:'Train hip control, glute engagement, and unilateral balance.',ex:[{n:'Bird dog',s:3,r:'8ea',note:'Reach long.',exerciseType:'mobility'},{n:'Side-lying leg lifts',s:3,r:'12ea',note:'No momentum.',exerciseType:'mobility'},{n:'Clamshell',s:3,r:'15ea',note:'Pelvis stays stacked.',exerciseType:'mobility'},{n:'Single-leg glute bridge',s:2,r:'10ea',note:'Drive through full foot.',exerciseType:'mobility'},{n:'Standing calf raise',s:2,r:'15',note:'Smooth tempo.',exerciseType:'mobility'}]},
+        thu:{type:'recovery',name:'Pilates posture + upper body',dur:'30–35 min',intensity:'Low–Moderate',purpose:'Improve scapular control, thoracic mobility, and upright posture.',ex:[{n:'Thoracic rotation',s:2,r:'6ea',note:'Rotate through upper back.',exerciseType:'mobility'},{n:'Band pull-apart',s:3,r:'15',note:'Shoulders down.',exerciseType:'mobility'},{n:'Y-T-W raises',s:2,r:'8 each',note:'Small precise reps.',exerciseType:'mobility'},{n:'Wall slides',s:3,r:'10',note:'Ribs stay tucked.',exerciseType:'mobility'},{n:'Side plank',s:3,r:'25s ea',note:'Long line from heel to head.',exerciseType:'mobility'}]},
+        sat:{type:'recovery',name:'Full-body Pilates flow',dur:'40–45 min',intensity:'Moderate',purpose:'Stitch the week together with a longer, low-impact full-body flow.',ex:[{n:'Cat-cow',s:2,r:'45s',note:'Move with your breath.',exerciseType:'mobility'},{n:'Roll up',s:3,r:'6',note:'One vertebra at a time.',exerciseType:'mobility'},{n:'Glute bridges',s:3,r:'12',note:'Pause on top.',exerciseType:'mobility'},{n:'Bird dog',s:3,r:'8ea',note:'Stay square.',exerciseType:'mobility'},{n:'Side-lying leg lifts',s:3,r:'12ea',note:''},{n:'Breathing drills',s:1,r:'90s',note:'Finish calm.',exerciseType:'breathing'}]},
+      },
+      B:{
+        mon:{type:'recovery',name:'Pilates reset flow',dur:'30–35 min',intensity:'Low',purpose:'Reset the trunk and hips with a slower, breath-led opening session.',ex:[{n:'Breathing drills',s:1,r:'120s',note:'Long exhale.',exerciseType:'breathing'},{n:'Pelvic tilts',s:2,r:'10',note:''},{n:'Cat-cow',s:2,r:'45s',note:''},{n:'Hamstring floss',s:2,r:'8ea',note:'Ease into range.',exerciseType:'mobility'},{n:'Supine twist',s:2,r:'30s ea',note:'Breathe into the floor.',exerciseType:'mobility'}]},
+        tue:{type:'recovery',name:'Pilates trunk primer',dur:'20–25 min',intensity:'Low',purpose:'Keep the fifth day productive without adding real fatigue.',ex:[{n:'Dead bug',s:2,r:'8ea',note:''},{n:'Bird dog',s:2,r:'8ea',note:''},{n:'Breathing drills',s:1,r:'90s',note:''}]},
+        wed:{type:'recovery',name:'Pilates glute + trunk strength',dur:'35–40 min',intensity:'Low–Moderate',purpose:'Add a little more challenge through the hips and trunk without impact.',ex:[{n:'Single-leg glute bridge',s:3,r:'8ea',note:''},{n:'Dead bug',s:3,r:'10ea',note:''},{n:'Side plank',s:3,r:'25s ea',note:''},{n:'Clamshell',s:3,r:'15ea',note:''},{n:'Bird dog',s:3,r:'8ea',note:''}]},
+        thu:{type:'recovery',name:'Pilates balance + rotation',dur:'30–35 min',intensity:'Low–Moderate',purpose:'Focus on control through unilateral balance and rotational mobility.',ex:[{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Standing balance reach',s:3,r:'6ea',note:'Slow and steady.',exerciseType:'mobility'},{n:'Lateral lunge',s:2,r:'8ea',note:'Use bodyweight only.',exerciseType:'mobility'},{n:'Pallof press',s:3,r:'8ea',note:'Hold each rep.',exerciseType:'mobility'},{n:'Breathing drills',s:1,r:'90s',note:''}]},
+        sat:{type:'recovery',name:'Long Pilates recovery flow',dur:'40–45 min',intensity:'Low–Moderate',purpose:'Restore range and reinforce smooth movement patterns with a longer mat session.',ex:[{n:'Roll up',s:3,r:'6',note:''},{n:'Glute bridges',s:3,r:'12',note:''},{n:'Bird dog',s:3,r:'8ea',note:''},{n:'Side-lying leg lifts',s:3,r:'12ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Supine twist',s:2,r:'30s ea',note:''}]},
+      },
+    },
+  },
+  recovery:{
+    '4-day':{
+      A:{
+        mon:{type:'recovery',name:'Active recovery cardio',dur:'30–35 min',intensity:'Low',purpose:'Keep blood flow high while stress stays low.',ex:[{n:'Light walk or bike',s:1,r:'20 min',note:'Stay conversational.',exerciseType:'cardio'},{n:'Easy incline treadmill',s:1,r:'10 min',note:'Optional if energy is good.',exerciseType:'cardio'}]},
+        wed:{type:'recovery',name:'Mobility reset',dur:'20–25 min',intensity:'Low',purpose:'Open the hips, ankles, and spine with zero rush.',ex:[{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Hip CARs',s:2,r:'5ea',note:''},{n:'Hamstring floss',s:2,r:'8ea',note:''},{n:'Ankle mobility',s:2,r:'45s ea',note:''}]},
+        fri:{type:'recovery',name:'Recovery Pilates',dur:'25–30 min',intensity:'Low',purpose:'Restore trunk control and hip mobility without adding fatigue.',ex:[{n:'Breathing drills',s:1,r:'90s',note:'Rib cage down.',exerciseType:'breathing'},{n:'Pelvic tilts',s:2,r:'10',note:''},{n:'Glute bridges',s:2,r:'12',note:''},{n:'Bird dog',s:2,r:'8ea',note:''},{n:'Side-lying leg lifts',s:2,r:'12ea',note:''}]},
+        sat:{type:'recovery',name:'Sleepy nervous-system reset',dur:'20–25 min',intensity:'Low',purpose:'Finish the week by downshifting the nervous system and loosening stiff areas.',ex:[{n:'Breathing drills',s:1,r:'120s',note:'Long exhale focus.',exerciseType:'breathing'},{n:'Supine twist',s:2,r:'30s ea',note:''},{n:'Childs pose',s:2,r:'45s',note:''},{n:'Legs up the wall',s:1,r:'3 min',note:'Stay quiet.',exerciseType:'mobility'}]},
+      },
+      B:{
+        mon:{type:'recovery',name:'Easy zone-2 walk',dur:'30–40 min',intensity:'Low',purpose:'Start the week with easy aerobic recovery only.',ex:[{n:'Light walk or bike',s:1,r:'30 min',note:'Nasal breathing.',exerciseType:'cardio'}]},
+        wed:{type:'recovery',name:'Joint care flow',dur:'20–25 min',intensity:'Low',purpose:'Touch the ankles, hips, and thoracic spine with slow range work.',ex:[{n:'Ankle mobility',s:2,r:'45s ea',note:''},{n:'Hip CARs',s:2,r:'5ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Cat-cow',s:2,r:'45s',note:''}]},
+        fri:{type:'recovery',name:'Mat recovery flow',dur:'25–30 min',intensity:'Low',purpose:'Use the mat for glutes, trunk, and spine without accumulating fatigue.',ex:[{n:'Glute bridges',s:2,r:'12',note:''},{n:'Bird dog',s:2,r:'8ea',note:''},{n:'Dead bug',s:2,r:'8ea',note:''},{n:'Supine twist',s:2,r:'30s ea',note:''}]},
+        sat:{type:'recovery',name:'Mobility and breath finish',dur:'20–25 min',intensity:'Low',purpose:'End the week with deliberate mobility and breathing down-regulation.',ex:[{n:'Breathing drills',s:1,r:'120s',note:''},{n:'Hamstring floss',s:2,r:'8ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Legs up the wall',s:1,r:'3 min',note:''}]},
+      },
+    },
+    '5-day':{
+      A:{
+        mon:{type:'recovery',name:'Active recovery cardio',dur:'30–35 min',intensity:'Low',purpose:'Keep blood flow high while stress stays low.',ex:[{n:'Light walk or bike',s:1,r:'20 min',note:'Stay conversational.',exerciseType:'cardio'},{n:'Easy incline treadmill',s:1,r:'10 min',note:'Optional if energy is good.',exerciseType:'cardio'}]},
+        tue:{type:'recovery',name:'Breath + posture reset',dur:'15–20 min',intensity:'Low',purpose:'Add a short extra day that helps you feel better, not more tired.',ex:[{n:'Breathing drills',s:1,r:'120s',note:''},{n:'Wall slides',s:2,r:'10',note:''},{n:'Cat-cow',s:2,r:'45s',note:''}]},
+        wed:{type:'recovery',name:'Mobility reset',dur:'20–25 min',intensity:'Low',purpose:'Open the hips, ankles, and spine with zero rush.',ex:[{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Hip CARs',s:2,r:'5ea',note:''},{n:'Hamstring floss',s:2,r:'8ea',note:''},{n:'Ankle mobility',s:2,r:'45s ea',note:''}]},
+        thu:{type:'recovery',name:'Recovery Pilates',dur:'25–30 min',intensity:'Low',purpose:'Restore trunk control and hip mobility without adding fatigue.',ex:[{n:'Breathing drills',s:1,r:'90s',note:'Rib cage down.',exerciseType:'breathing'},{n:'Pelvic tilts',s:2,r:'10',note:''},{n:'Glute bridges',s:2,r:'12',note:''},{n:'Bird dog',s:2,r:'8ea',note:''},{n:'Side-lying leg lifts',s:2,r:'12ea',note:''}]},
+        sat:{type:'recovery',name:'Sleepy nervous-system reset',dur:'20–25 min',intensity:'Low',purpose:'Finish the week by downshifting the nervous system and loosening stiff areas.',ex:[{n:'Breathing drills',s:1,r:'120s',note:'Long exhale focus.',exerciseType:'breathing'},{n:'Supine twist',s:2,r:'30s ea',note:''},{n:'Childs pose',s:2,r:'45s',note:''},{n:'Legs up the wall',s:1,r:'3 min',note:'Stay quiet.',exerciseType:'mobility'}]},
+      },
+      B:{
+        mon:{type:'recovery',name:'Easy zone-2 walk',dur:'30–40 min',intensity:'Low',purpose:'Start the week with easy aerobic recovery only.',ex:[{n:'Light walk or bike',s:1,r:'30 min',note:'Nasal breathing.',exerciseType:'cardio'}]},
+        tue:{type:'recovery',name:'Joint prep micro-flow',dur:'15–20 min',intensity:'Low',purpose:'Keep joints moving on the extra training day.',ex:[{n:'Ankle mobility',s:2,r:'45s ea',note:''},{n:'Hip CARs',s:2,r:'5ea',note:''},{n:'Thoracic rotation',s:2,r:'5ea',note:''}]},
+        wed:{type:'recovery',name:'Joint care flow',dur:'20–25 min',intensity:'Low',purpose:'Touch the ankles, hips, and thoracic spine with slow range work.',ex:[{n:'Ankle mobility',s:2,r:'45s ea',note:''},{n:'Hip CARs',s:2,r:'5ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Cat-cow',s:2,r:'45s',note:''}]},
+        thu:{type:'recovery',name:'Mat recovery flow',dur:'25–30 min',intensity:'Low',purpose:'Use the mat for glutes, trunk, and spine without accumulating fatigue.',ex:[{n:'Glute bridges',s:2,r:'12',note:''},{n:'Bird dog',s:2,r:'8ea',note:''},{n:'Dead bug',s:2,r:'8ea',note:''},{n:'Supine twist',s:2,r:'30s ea',note:''}]},
+        sat:{type:'recovery',name:'Mobility and breath finish',dur:'20–25 min',intensity:'Low',purpose:'End the week with deliberate mobility and breathing down-regulation.',ex:[{n:'Breathing drills',s:1,r:'120s',note:''},{n:'Hamstring floss',s:2,r:'8ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:''},{n:'Legs up the wall',s:1,r:'3 min',note:''}]},
+      },
+    },
+  },
+};
 const WEEKLY_TEMPLATES={
   '4-day':{
     A:[{type:'run_intervals',label:'Run quality'},{type:'strength_upper',label:'Upper strength'},{type:'run_aerobic',label:'Run aerobic'},{type:'strength_lower',label:'Lower strength'}],
@@ -482,18 +613,19 @@ const WKS={
   run_B_sat:{name:'Long run + station finish',type:'run',purpose:'Extend aerobic base and introduce station work after running.',dur:'60–70 min',intensity:'Easy–Moderate',rd:{label:'Long run + stations',dist:'4–5 mi + carries',effort:'Easy run, then 2×40m farmers carry at the end'}},
 };
 
-function getTrainingDayFlags(dow,programType='4-day',preferredTrainingDays){
+function getTrainingDayFlags(dow,programType='4-day',preferredTrainingDays,trainingWeekStart='Mon'){
   const normalized=programType==='5-day'?'5-day':'4-day';
-  const defaultTrainingDays=normalized==='5-day'?[1,2,3,4,6]:[1,3,5,6];
   const dayIndexToLabel=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const preferredLabels=Array.isArray(preferredTrainingDays)&&preferredTrainingDays.length
     ?preferredTrainingDays
-    :defaultTrainingDays.map(idx=>dayIndexToLabel[idx]);
+    :getAnchoredTrainingDays(normalized,trainingWeekStart);
   const seenTrainingDays=new Set();
   const trainingDays=preferredLabels
     .map(label=>dayIndexToLabel.indexOf(label))
     .filter(idx=>idx>=0&&!seenTrainingDays.has(idx)&&seenTrainingDays.add(idx));
-  const fallbackTrainingDays=trainingDays.length?trainingDays:defaultTrainingDays;
+  const fallbackTrainingDays=trainingDays.length
+    ?trainingDays
+    :getAnchoredTrainingDays(normalized,trainingWeekStart).map(label=>dayIndexToLabel.indexOf(label));
   const canonicalSlots=normalized==='5-day'
     ?['mon','tue','wed','thu','sat']
     :['mon','wed','fri','sat'];
@@ -504,19 +636,32 @@ function getTrainingDayFlags(dow,programType='4-day',preferredTrainingDays){
     trainingDays:fallbackTrainingDays,
     isTrainingDay:fallbackTrainingDays.includes(dow),
     daySlot,
+    programType:normalized,
     isRunDay:daySlot==='tue'||daySlot==='wed',
     isLongDay:daySlot==='sat',
     isThursdayStrengthDay:daySlot==='thu',
   };
 }
 
-function isTrainingDayForDate(dateStr,programType='4-day',preferredTrainingDays){
+function isTrainingDayForDate(dateStr,programType='4-day',preferredTrainingDays,trainingWeekStart='Mon'){
   const dow=new Date(dateStr+'T12:00:00').getDay();
-  return getTrainingDayFlags(dow,programType,preferredTrainingDays).isTrainingDay;
+  return getTrainingDayFlags(dow,programType,preferredTrainingDays,trainingWeekStart).isTrainingDay;
 }
 
-function getTodayWk(wkType,phIdx,flags){
+function getProgramLibraryWorkout(fitnessProgram,programType,wkType,daySlot){
+  const normalizedProgram=normalizeFitnessProgram(fitnessProgram);
+  if(normalizedProgram==='hyrox'||!daySlot)return null;
+  return PROGRAM_WORKOUT_LIBRARY[normalizedProgram]?.[programType]?.[wkType||'A']?.[daySlot]
+    || PROGRAM_WORKOUT_LIBRARY[normalizedProgram]?.[programType]?.A?.[daySlot]
+    || null;
+}
+
+function getTodayWk(wkType,phIdx,flags,fitnessProgram='hyrox'){
   if(!flags?.isTrainingDay)return null;
+  const normalizedProgram=normalizeFitnessProgram(fitnessProgram);
+  if(normalizedProgram!=='hyrox'){
+    return getProgramLibraryWorkout(normalizedProgram,flags.programType||'4-day',wkType,flags.daySlot);
+  }
   const ph=Number.isFinite(phIdx)?phIdx:0,wt=wkType||'A';
   const k=`p${ph}${wt}`;
   if(flags.daySlot==='sat')return WKS[`${k}_sat`]||(wt==='A'?WKS.run_A_sat:WKS.run_B_sat)||WKS.p0A_mon;
@@ -528,10 +673,10 @@ function getTodayWk(wkType,phIdx,flags){
   return null;
 }
 
-function getPlannedWorkoutForDate(dateStr,wkType,phIdx,programType='4-day',preferredTrainingDays){
+function getPlannedWorkoutForDate(dateStr,wkType,phIdx,fitnessProgram='hyrox',programType='4-day',preferredTrainingDays,trainingWeekStart='Mon'){
   const dow=new Date(dateStr+'T12:00:00').getDay();
-  const flags=getTrainingDayFlags(dow,programType,preferredTrainingDays);
-  const sess=getTodayWk(wkType,phIdx,flags);
+  const flags=getTrainingDayFlags(dow,programType,preferredTrainingDays,trainingWeekStart);
+  const sess=getTodayWk(wkType,phIdx,flags,fitnessProgram);
   if(!sess)return null;
   const normalizedExercises=(sess.ex||[]).map(exercise=>{
     const exerciseId=exercise?.exerciseId||resolveExerciseDefinition(exercise?.n||exercise?.name||'').id;
@@ -550,21 +695,21 @@ function getPlannedWorkoutForDate(dateStr,wkType,phIdx,programType='4-day',prefe
 function getWorkoutLogForPlan(plan,history){
   if(!plan)return null;
   return(history||[]).find(entry=>{
-    if(entry.type!=='workout'&&entry.type!=='run')return false;
+    if(entry.type!=='workout'&&entry.type!=='run'&&entry.type!=='recovery')return false;
     const plannedDate=entry.data?.plannedDate||entry.plannedDate;
     if(plannedDate)return plannedDate===plan.plannedDate;
     return entry.date===plan.plannedDate&&entry.name===plan.name;
   })||null;
 }
 
-function resolveWeeklyTrainingPlan(weekStart,wkType,phIdx,programType='4-day',preferredTrainingDays,history,todayStr=getCurrentDate().today){
+function resolveWeeklyTrainingPlan(weekStart,wkType,phIdx,fitnessProgram='hyrox',programType='4-day',preferredTrainingDays,trainingWeekStart='Mon',history,todayStr=getCurrentDate().today){
   const days=Array.from({length:7},(_,i)=>{
     const d=new Date(weekStart);
     d.setDate(d.getDate()+i);
     return formatDateKey(d);
   });
   return days.reduce((acc,dateStr)=>{
-    const planned=getPlannedWorkoutForDate(dateStr,wkType,phIdx,programType,preferredTrainingDays);
+    const planned=getPlannedWorkoutForDate(dateStr,wkType,phIdx,fitnessProgram,programType,preferredTrainingDays,trainingWeekStart);
     if(!planned)return acc;
     const completedLog=getWorkoutLogForPlan(planned,history);
     const status=completedLog
@@ -588,12 +733,51 @@ function resolveWeeklyTrainingPlan(weekStart,wkType,phIdx,programType='4-day',pr
   },[]);
 }
 
+function getWorkoutLibrarySessions(fitnessProgram='hyrox',programType='4-day',wkType='A',phIdx=0){
+  const normalizedProgram=normalizeFitnessProgram(fitnessProgram);
+  if(normalizedProgram==='hyrox'){
+    const altType=wkType==='A'?'B':'A';
+    const keys=['mon','tue','wed','thu','fri','sat'];
+    const seen=new Set();
+    return [wkType,altType].flatMap(type=>{
+      return keys.map(daySlot=>{
+        const session=getTodayWk(type,phIdx,{isTrainingDay:true,daySlot,programType},'hyrox');
+        if(!session)return null;
+        const dedupeKey=`${type}-${daySlot}-${session.name}`;
+        if(seen.has(dedupeKey))return null;
+        seen.add(dedupeKey);
+        return{...session,libraryId:dedupeKey,rotation:type,daySlot};
+      }).filter(Boolean);
+    });
+  }
+  const templates=PROGRAM_WORKOUT_LIBRARY[normalizedProgram]?.[programType]||{};
+  const seen=new Set();
+  return ['A','B'].flatMap(rotation=>{
+    return ['mon','tue','wed','thu','fri','sat'].map(daySlot=>{
+      const session=templates[rotation]?.[daySlot];
+      if(!session)return null;
+      const dedupeKey=`${rotation}-${daySlot}-${session.name}`;
+      if(seen.has(dedupeKey))return null;
+      seen.add(dedupeKey);
+      return{...session,libraryId:dedupeKey,rotation,daySlot};
+    }).filter(Boolean);
+  });
+}
+
 function describeWorkoutAdjustment(sess){
   if(!sess?.adjustmentLabel)return null;
   if(sess.originalName&&sess.adjustmentLabel==='Recovery Replacement'){
     return `${sess.adjustmentLabel} from ${sess.originalName}`;
   }
   return sess.adjustmentLabel;
+}
+
+function getWorkoutPaceLabel(sess,paceProfile){
+  if(!sess||sess.type!=='run'||!paceProfile)return null;
+  const nm=(sess.name||'').toLowerCase();
+  if(nm.includes('interval'))return paceProfile.interval;
+  if(nm.includes('tempo')||nm.includes('threshold')||nm.includes('race'))return paceProfile.threshold;
+  return paceProfile.easy;
 }
 
 const RECOVERY_SESSIONS=[
@@ -1227,6 +1411,7 @@ function getWorkoutExecutionSections(sess){
 }
 function formatWorkoutTypeLabel(sess){
   if(!sess)return'Recovery';
+  if(/pilates/i.test(`${sess.name||''} ${sess.purpose||''}`))return'Pilates / Mobility';
   if(sess.type==='run')return'Run';
   if(sess.type==='recovery')return'Recovery';
   if(/hyrox|simulation|station/i.test(`${sess.name||''} ${sess.purpose||''}`))return'HYROX / Functional';
@@ -1620,16 +1805,6 @@ function normalizeLoadedProfile(data={}){
   normalized.top3=normalized.top3&&typeof normalized.top3==='object'?normalized.top3:{};
   normalized.accounts=normalizeFinancialAccounts(normalized.accounts);
   normalized.categories=resolveCategoryLibrary(normalized.categories);
-  if(normalized.accounts.length===0){
-    const legacyTransactionIds=new Set((Array.isArray(normalized.transactions)?normalized.transactions:[])
-      .map(tx=>LEGACY_ACCOUNT_REFERENCE_MAP[String(tx?.accountId||tx?.accountName||tx?.account||'').trim().toLowerCase()])
-      .filter(Boolean));
-    if(legacyTransactionIds.size>0){
-      normalized.accounts=LEGACY_FINANCIAL_ACCOUNTS
-        .filter(account=>legacyTransactionIds.has(account.id))
-        .map(account=>createFinancialAccount(account));
-    }
-  }
   normalized.lastRolloverDate=normalized.lastRolloverDate?normalizeDateKey(normalized.lastRolloverDate,null):null;
   normalized.lastWeeklyPlanKey=normalized.lastWeeklyPlanKey?normalizeDateKey(normalized.lastWeeklyPlanKey,null):null;
   normalized.lastWeeklySnapshotKey=normalized.lastWeeklySnapshotKey?normalizeDateKey(normalized.lastWeeklySnapshotKey,null):null;
@@ -2166,7 +2341,7 @@ function parseAllyCSV(text){
     const cols=l.match(/(".*?"|[^,]+)(?:,|$)/g)?.map(c=>c.replace(/^"|"$|,$/g,'').trim())||[];
     const [date,,desc,,amount,,balance]=cols;
     const amt=parseFloat((amount||'0').replace(/[$,]/g,''));
-    return{transactionId:`ally-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit:amt>0,accountId:'ally_checking',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:'',_importAccount:{id:'ally_checking',institution:'Ally',name:'Checking',type:'checking',isActive:true}};
+    return{transactionId:`ally-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit:amt>0,accountId:'',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:'',_importAccount:{institution:'Ally',name:'Imported account',type:'checking',isActive:true}};
   }).filter(t=>t.date&&!isNaN(t.amount));
 }
 function parseRegionsCSV(text){
@@ -2179,7 +2354,7 @@ function parseRegionsCSV(text){
     const[date,desc,,debit,credit]=cols;
     const amt=parseFloat((credit||debit||'0').replace(/[$,]/g,''));
     const isCredit=!!credit&&!debit;
-    return{transactionId:`regions-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit,accountId:'regions_checking',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:'',_importAccount:{id:'regions_checking',institution:'Regions',name:'Checking',type:'checking',isActive:true}};
+    return{transactionId:`regions-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit,accountId:'',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:'',_importAccount:{institution:'Regions',name:'Imported account',type:'checking',isActive:true}};
   }).filter(t=>t.date&&!isNaN(t.amount));
 }
 function detectRecurring(transactions){
@@ -2570,6 +2745,7 @@ function App(){
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
   const [morningStep,setMorningStep]=useState(1);
+  const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
   const [energyScore,setEnergyScore]=useState(5);
   const [sleepHours,setSleepHours]=useState(7.5);
   const [tier2Open,setTier2Open]=useState({energy:true,finance:false,habits:false});
@@ -2947,10 +3123,14 @@ function App(){
       else{
         setRecOn(false);
         const sessionDateKey=recSess.dateKey||TODAY;
-        updateProfile(p=>({...p,workoutHistory:[...p.workoutHistory,{date:sessionDateKey,type:'recovery',name:recSess.name,data:{
+        updateProfile(p=>({...p,workouts:[...(p.workouts||p.workoutHistory||[]),{date:sessionDateKey,type:'recovery',name:recSess.name,data:{
           durationMins:parseInt(recSess.dur,10)||Math.round((recSess.moves||[]).reduce((sum,move)=>sum+(move?.d||0)*(move?.side?2:1),0)/60),
           moves:recSess.moves||[],
           recoveryState:recoveryToday.level,
+          plannedDate:recSess.plannedDate||sessionDateKey,
+          plannedDayLabel:recSess.plannedDayLabel||DAY_NAMES[DOW],
+          plannedName:recSess.plannedName||recSess.name,
+          completedOffSchedule:(recSess.plannedDate||sessionDateKey)!==sessionDateKey,
         }}]}));
         setRecSess(s=>({...s,_done:true}));
       }
@@ -2962,7 +3142,8 @@ function App(){
 
   const {days,startDate,raceDate}=trainingPlan;
   const athlete=athleteProfile;
-  const trainingFlags=getTrainingDayFlags(DOW,athlete?.programType||'4-day',athlete?.preferredTrainingDays);
+  const fitnessProgram=normalizeFitnessProgram(profile.fitnessProgram||'hyrox');
+  const trainingFlags=getTrainingDayFlags(DOW,athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon');
 
   const effStart=startDate||DEFAULT_START,effRace=raceDate||DEFAULT_RACE;
   const _start=new Date(effStart+'T00:00:00'),_race=new Date(effRace+'T00:00:00');
@@ -2985,7 +3166,8 @@ function App(){
   const resolvedWkType=WK_TYPE||'A';
   const resolvedPhaseIdx=Number.isFinite(PH_IDX)?PH_IDX:0;
   const TODAY_WK=getTodayWk(resolvedWkType,resolvedPhaseIdx,trainingFlags);
-  const weekPlannedWorkouts=resolveWeeklyTrainingPlan(weekMon,resolvedWkType,resolvedPhaseIdx,athlete?.programType||'4-day',athlete?.preferredTrainingDays,workoutHistory,TODAY);
+  const weekPlannedWorkouts=resolveWeeklyTrainingPlan(weekMon,resolvedWkType,resolvedPhaseIdx,fitnessProgram,athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon',workoutHistory,TODAY);
+  const workoutLibrarySessions=getWorkoutLibrarySessions(fitnessProgram,athlete?.programType||'4-day',resolvedWkType,resolvedPhaseIdx);
   const todayPlannedWorkout=weekPlannedWorkouts.find(item=>item.plannedDate===TODAY)||null;
   const missedPlannedWorkouts=weekPlannedWorkouts.filter(item=>item.status==='missed');
   const suggestedPlanEntry=todayPlannedWorkout&&todayPlannedWorkout.status!=='completed'&&todayPlannedWorkout.status!=='moved'
@@ -3006,13 +3188,13 @@ function App(){
   const todayH=hydr[TODAY]||0;
   const totCal=todayN.reduce((s,m)=>s+(m.cal||0),0);
   const totPro=todayN.reduce((s,m)=>s+(m.pro||0),0);
-  const wktDone=workoutHistory.some(h=>h.date===TODAY&&(h.type==='workout'||h.type==='run'));
+  const wktDone=workoutHistory.some(h=>h.date===TODAY&&(h.type==='workout'||h.type==='run'||h.type==='recovery'));
   const plannerWeekWorkoutGoal=(athlete?.preferredTrainingDays?.length)||((athlete?.programType||'4-day')==='5-day'?5:4);
   const plannerWeekNutrition=weekDatesGlobal.map(ds=>{
     const meals=nutr[ds]||[];
     const protein=meals.reduce((s,m)=>s+(m.pro||0),0);
     const hydration=hydr[ds]||0;
-    const proteinTarget=computeMacroTargets(isTrainingDayForDate(ds,athlete?.programType||'4-day',athlete?.preferredTrainingDays)).protein;
+    const proteinTarget=computeMacroTargets(isTrainingDayForDate(ds,athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon')).protein;
     return{proteinMet:protein>=proteinTarget*0.9,hydrationMet:hydration>=(hydGoal*0.9)};
   });
   const plannerProteinDays=plannerWeekNutrition.filter(d=>d.proteinMet).length;
@@ -3243,7 +3425,7 @@ function App(){
       plannedName:wkSess.plannedName||workoutEntryName,
       completedOffSchedule:(wkSess.plannedDate||sessionDateKey)!==sessionDateKey,
     }};
-    updateProfile(p=>({...p,workoutHistory:[...p.workoutHistory,entry]}));
+    updateProfile(p=>({...p,workouts:[...(p.workouts||p.workoutHistory||[]),entry]}));
     setWkSess(null);setPlayerIdx(0);setTrainView('overview');showNotif(wkSess?.type==='recovery'?'Session complete!':'Workout complete!','success');
   }
   function startRun(sess){setRunSess({...sess,dateKey:sess?.dateKey||TODAY,log:{},startTime:Date.now(),warmup:sess.warmup||getWarmupForCategory('running'),cooldown:sess.cooldown||getCooldownForCategory('running')});setTrainView('run');}
@@ -3260,7 +3442,7 @@ function App(){
       plannedName:runSess?.plannedName||runSess?.name||'Run',
       completedOffSchedule:(runSess?.plannedDate||sessionDateKey)!==sessionDateKey,
     }};
-    updateProfile(p=>({...p,workoutHistory:[...p.workoutHistory,entry]}));
+    updateProfile(p=>({...p,workouts:[...(p.workouts||p.workoutHistory||[]),entry]}));
     setRunSess(null);setTrainView('overview');showNotif('Run logged!','success');
   }
   function toggleSet(exIdx,setIdx){markSetDone(exIdx,setIdx);}
@@ -3464,13 +3646,15 @@ function App(){
   }
 
   // Finance helpers
-  function importTransactions(raw){
+  function importTransactions(raw,targetAccountId=''){
     const parsed=parseAllyCSV(raw)||parseRegionsCSV(raw)||[];
     if(!parsed.length){showNotif('Could not parse CSV — check format','error');return;}
     const accountSeed=parsed[0]?._importAccount||null;
     let nextAccounts=normalizeFinancialAccounts(financialAccounts);
     let importedAccountId=getDefaultAccountId(nextAccounts,true);
-    if(accountSeed){
+    if(targetAccountId&&nextAccounts.some(account=>account.id===targetAccountId)){
+      importedAccountId=targetAccountId;
+    }else if(accountSeed){
       const ensured=ensureImportedAccount(nextAccounts,accountSeed);
       nextAccounts=ensured.accounts;
       importedAccountId=ensured.accountId;
@@ -4022,7 +4206,7 @@ function App(){
         </div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
           <span style={S.pill(C.navyL,C.navyDk)}>{workoutDuration}</span>
-          {getWorkoutPaceLabel(adjustedTodayWorkout)&&<span style={S.pill(C.navyL,C.navyDk)}>{getWorkoutPaceLabel(adjustedTodayWorkout)}</span>}
+          {getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)&&<span style={S.pill(C.navyL,C.navyDk)}>{getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)}</span>}
           {suggestedPlanEntry?.suggestedCarryover&&<span style={S.pill(C.amberL,C.amberDk)}>Carryover</span>}
         </div>
         <div style={{...S.support,marginBottom:10}}>{doneForToday?'Nothing urgent remains. You can stop here.':workoutMeta}</div>
@@ -4184,7 +4368,6 @@ function App(){
         setRunNotes('');
       }
     },[localView,runSess]);
-    const fitnessProgram=profile.fitnessProgram||'hyrox';
     const playerFlow=wkSess?[
       ...(wkSess.warmup||[]).map((item,idx)=>({kind:'warmup',idx,item,title:item.name})),
       ...(wkSess.ex||[]).map((exercise,idx)=>({kind:'exercise',idx,exercise,title:exercise.n})),
@@ -4448,8 +4631,8 @@ function App(){
             {todaysStatus==='training'&&adjustedTodayWorkout&&<div style={{background:C.card,borderRadius:12,padding:'12px 12px 10px',marginBottom:12}}>
               <div style={{fontSize:12,color:C.muted,marginBottom:4}}>{adjustedTodayWorkout.type==='run'?'Run session':adjustedTodayWorkout.type==='recovery'?'Recovery session':'Strength session'}</div>
               <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:4}}>{adjustedTodayWorkout.dur||adjustedTodayWorkout.duration||'45 min'} · {adjustedTodayWorkout.intensity||adjustedTodayWorkout.adjustmentLabel||'Planned'}</div>
-              {getWorkoutPaceLabel(adjustedTodayWorkout)&&<div style={{fontSize:12,color:C.tx2}}>Target pace: <strong style={{color:C.tx}}>{getWorkoutPaceLabel(adjustedTodayWorkout)}</strong></div>}
-              {!getWorkoutPaceLabel(adjustedTodayWorkout)&&<div style={{fontSize:12,color:C.tx2}}>{describeWorkoutAdjustment(adjustedTodayWorkout)||adjustedTodayWorkout.adjustmentReason||adjustedTodayWorkout.purpose}</div>}
+              {getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)&&<div style={{fontSize:12,color:C.tx2}}>Target pace: <strong style={{color:C.tx}}>{getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)}</strong></div>}
+              {!getWorkoutPaceLabel(adjustedTodayWorkout,paceProfile)&&<div style={{fontSize:12,color:C.tx2}}>{describeWorkoutAdjustment(adjustedTodayWorkout)||adjustedTodayWorkout.adjustmentReason||adjustedTodayWorkout.purpose}</div>}
               {hasModifiedSession&&<div style={{fontSize:11,color:C.tx2,marginTop:8}}>This session keeps the planned workout type but trims volume so you can still train without forcing the full load.</div>}
               {modifiedSessionChanges.length>0&&<div style={{background:C.surf,borderRadius:10,padding:'9px 10px',marginTop:8}}>
                 <div style={{fontSize:10,color:C.muted,marginBottom:4}}>Set reductions</div>
@@ -4534,6 +4717,16 @@ function App(){
 
         {trainSection==='plan'&&<>
           <div style={S.card}>
+            <span style={S.lbl}>Program</span>
+            <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:4}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
+            <div style={{fontSize:12,color:C.tx2,marginBottom:10}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.detail||'Structured weekly training.'}</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <span style={S.pill(C.surf,C.tx2)}>{(athlete?.programType||'4-day')==='5-day'?'5 days / week':'4 days / week'}</span>
+              <span style={S.pill(C.surf,C.tx2)}>Starts {athlete?.trainingWeekStart||'Mon'}</span>
+              <span style={S.pill(C.surf,C.tx2)}>Rotation {resolvedWkType}</span>
+            </div>
+          </div>
+          <div style={S.card}>
             <span style={S.lbl}>Weekly Schedule</span>
             {weekPlannedWorkouts.map((item,idx)=><div key={item.plannedDate} style={{...S.row,padding:'10px 0',borderBottom:idx<weekPlannedWorkouts.length-1?`0.5px solid ${C.bd}`:'none',alignItems:'flex-start',gap:10}}>
               <div style={{flex:1}}>
@@ -4569,9 +4762,9 @@ function App(){
             </div>
           </div>}
           <div style={{...S.card,background:fitnessProgram==='hyrox'?PH.lClr:C.card,borderColor:'transparent'}}>
-            <span style={{...S.lbl,color:fitnessProgram==='hyrox'?PH.tClr:C.muted}}>Current Phase</span>
-            <div style={{fontSize:20,fontWeight:700,color:PH.clr,marginBottom:2}}>{PH.name} — Week {CUR_WK}</div>
-            <div style={{fontSize:12,color:PH.tClr}}>{PH.theme}</div>
+            <span style={{...S.lbl,color:fitnessProgram==='hyrox'?PH.tClr:C.muted}}>{fitnessProgram==='hyrox'?'Current Phase':'Current Rotation'}</span>
+            <div style={{fontSize:20,fontWeight:700,color:fitnessProgram==='hyrox'?PH.clr:C.tx,marginBottom:2}}>{fitnessProgram==='hyrox'?`${PH.name} — Week ${CUR_WK}`:`${PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training'} — ${resolvedWkType} week`}</div>
+            <div style={{fontSize:12,color:fitnessProgram==='hyrox'?PH.tClr:C.tx2}}>{fitnessProgram==='hyrox'?PH.theme:'Complete planned sessions on their assigned days or finish them later in the same 7-day cycle.'}</div>
           </div>
           <div style={S.card}>
             <span style={S.lbl}>Training Load</span>
@@ -4607,6 +4800,35 @@ function App(){
             </div>
           </div>;
           })}
+          <div style={S.card}>
+            <button
+              type="button"
+              onClick={()=>setShowPlannedWorkoutLibrary(open=>!open)}
+              style={{...S.row,width:'100%',background:'none',border:'none',padding:0,cursor:'pointer',alignItems:'flex-start',textAlign:'left'}}
+            >
+              <div style={{flex:1}}>
+                <span style={S.lbl}>Planned Workout Library</span>
+                <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:4}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training library'}</div>
+                <div style={{fontSize:12,color:C.tx2}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.detail||'Available workouts for the selected program.'}</div>
+              </div>
+              <span style={{fontSize:16,color:C.muted,marginLeft:12}}>{showPlannedWorkoutLibrary?'−':'+'}</span>
+            </button>
+            {showPlannedWorkoutLibrary&&<div style={{marginTop:10}}>
+              {workoutLibrarySessions.map(session=>{
+                const previewSession=adjustWorkoutForRecovery(session,recoveryToday)||session;
+                return <div key={session.libraryId} style={{padding:'10px 0',borderTop:`0.5px solid ${C.bd}`}}>
+                  <div style={{...S.row,alignItems:'flex-start',gap:10}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{session.name}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:2}}>{session.rotation} week · {session.daySlot.toUpperCase()} · {session.dur||session.duration||'30 min'} · {formatWorkoutTypeLabel(session)}</div>
+                      <div style={{fontSize:11,color:C.tx2,marginTop:4}}>{session.purpose}</div>
+                    </div>
+                    <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px',flexShrink:0}} onClick={()=>launchWorkout(previewSession)}>Start</button>
+                  </div>
+                </div>;
+              })}
+            </div>}
+          </div>
         </div>}
 
         {trainSection==='history'&&<div>
@@ -4849,7 +5071,7 @@ function App(){
     const nextProteinTemplate=mealTemplates.slice().sort((a,b)=>(b.macros?.pro||0)-(a.macros?.pro||0))[0]||null;
     const photoInputRef=useRef(null);
     const weeklyMeals=weekDatesGlobal.flatMap(ds=>nutr[ds]||[]);
-    const weeklyProteinDays=weekDatesGlobal.filter(ds=>(nutr[ds]||[]).reduce((s,m)=>s+(m.pro||0),0)>=computeMacroTargets(isTrainingDayForDate(ds,athlete?.programType||'4-day',athlete?.preferredTrainingDays)).protein*0.9).length;
+    const weeklyProteinDays=weekDatesGlobal.filter(ds=>(nutr[ds]||[]).reduce((s,m)=>s+(m.pro||0),0)>=computeMacroTargets(isTrainingDayForDate(ds,athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon')).protein*0.9).length;
     const weeklyHydrationDays=weekDatesGlobal.filter(ds=>(hydr[ds]||0)>=hydGoal*0.9).length;
     const pantryBaseIdByItemId=Object.fromEntries(pantryItems.map(item=>[item.id,item.baseFoodId||item.foodId||item.id]));
     const usageCountForFood=foodId=>weeklyMeals.filter(m=>m.foodId===foodId||m.foodIds?.includes(foodId)||m.itemIds?.includes(foodId)||pantryBaseIdByItemId[m.pantryItemId]===foodId).length;
@@ -6470,16 +6692,16 @@ function App(){
     };
     const TransactionRow=({transaction,showEditButton=false,isEditing=false,onToggleEdit})=>{
       const cat=financeCategoryMap.get(transaction.category)||{clr:C.muted,label:'Other'};
-      return <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:'4px 12px',alignItems:'start'}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+      return <div style={{display:'flex',flexWrap:'wrap',alignItems:'flex-start',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0,flex:'1 1 180px'}}>
           {!transaction.isReviewed&&<div style={{width:6,height:6,borderRadius:'50%',background:C.amber,flexShrink:0,marginTop:5}}/>}
           <div style={{fontSize:13,color:C.tx,fontWeight:500,lineHeight:1.35,minWidth:0,overflowWrap:'anywhere'}}>{transaction.merchant}</div>
         </div>
-        <div style={{textAlign:'right',minWidth:84}}>
+        <div style={{marginLeft:'auto',textAlign:'right',minWidth:84,flex:'0 0 auto'}}>
           <div style={{fontSize:13,fontWeight:700,color:transaction.isCredit?C.sage:C.tx,whiteSpace:'nowrap'}}>{transaction.isCredit?'+':'-'}{fmtMoneyD(transaction.amount)}</div>
           {showEditButton&&<button onClick={onToggleEdit} style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0,marginTop:2}}>{isEditing?'close':'edit'}</button>}
         </div>
-        <div style={{gridColumn:'1 / -1',fontSize:10,color:C.muted,lineHeight:1.4,paddingLeft:transaction.isReviewed?0:12}}>
+        <div style={{width:'100%',fontSize:10,color:C.muted,lineHeight:1.4,paddingLeft:transaction.isReviewed?0:12,overflowWrap:'anywhere'}}>
           {transaction.date} · <span style={{color:cat.clr}}>{cat.label}</span> · {getTransactionAccountLabel(transaction)}{transaction.isTransfer?' · transfer':''}
         </div>
       </div>;
@@ -6654,7 +6876,7 @@ function App(){
                 <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
                   {financeCategories.map(c=><button key={c.id} onClick={()=>{updateTxCategory(t.transactionId,c.id,true);setEditTxId(null);}} style={{padding:'4px 8px',borderRadius:6,border:`1px solid ${t.category===c.id?c.clr:C.bd}`,background:t.category===c.id?c.clr:'transparent',color:t.category===c.id?C.white:C.tx,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
                 </div>
-                <div style={{display:'flex',gap:6}}>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                   {!t.isReviewed&&<button style={S.btnSmall(C.sage)} onClick={()=>{reviewTx(t.transactionId);setEditTxId(null);}}>Mark reviewed</button>}
                   <button style={{...S.btnGhost,fontSize:11,color:C.red,borderColor:C.red}} onClick={()=>{deleteTx(t.transactionId);setEditTxId(null);}}>Delete</button>
                 </div>
@@ -6806,6 +7028,7 @@ function App(){
   // ── IMPORT CSV MODAL (rendered at App level) ──────────────────────
   function ImportModal(){
     const [csvText,setCsvText]=useState('');
+    const [targetAccountId,setTargetAccountId]=useState(getDefaultAccountId(activeFinancialAccounts,true)||IMPORT_ACCOUNT_AUTO);
     const fileRef=useRef(null);
     const handleFile=e=>{
       const f=e.target.files?.[0];if(!f)return;
@@ -6819,11 +7042,18 @@ function App(){
         <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
           Export CSV from Ally (Account → Transactions → Export) or Regions (Online Banking → Download). Paste the CSV text below or select the file.
         </div>
+        {activeFinancialAccounts.length>0&&<>
+          <span style={S.lbl}>Import Into</span>
+          <FieldSelect value={targetAccountId} onChange={e=>setTargetAccountId(e.target.value)} style={{...S.inp,marginBottom:10}}>
+            <option value={IMPORT_ACCOUNT_AUTO}>Match or create from CSV source</option>
+            {activeFinancialAccounts.map(account=><option key={account.id} value={account.id}>{formatAccountLabel(account)}</option>)}
+          </FieldSelect>
+        </>}
         <FieldInput type="file" accept=".csv,.txt" ref={fileRef} onChange={handleFile} style={{display:'none'}}/>
         <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8}} onClick={()=>fileRef.current?.click()}>Select CSV file</button>
         <FieldTextarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder="Or paste CSV text here..." style={{...S.inp,height:120,resize:'none',fontSize:11,marginBottom:12}}/>
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btnSolid(C.navy)} onClick={()=>importTransactions(csvText)}>Import</button>
+          <button style={S.btnSolid(C.navy)} onClick={()=>importTransactions(csvText,targetAccountId===IMPORT_ACCOUNT_AUTO?'':targetAccountId)}>Import</button>
           <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowImport(false)}>Cancel</button>
         </div>
       </div>
@@ -7077,10 +7307,37 @@ function App(){
           {sec.id==='fitness'&&<div>
                 <span style={S.lbl}>Fitness Program</span>
                 <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
-                  {[{id:'hyrox',label:'HYROX'},{id:'running',label:'Running'},{id:'strength',label:'Strength'},{id:'none',label:'General'}].map(({id,label})=>(
-                    <button key={id} onClick={()=>updateProfile({fitnessProgram:id})} style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${(profile.fitnessProgram||'hyrox')===id?C.sage:C.bd}`,background:(profile.fitnessProgram||'hyrox')===id?C.sageL:'transparent',color:(profile.fitnessProgram||'hyrox')===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(profile.fitnessProgram||'hyrox')===id?600:400}}>{label}</button>
+                  {FITNESS_PROGRAM_OPTIONS.map(({id,label})=>(
+                    <button key={id} onClick={()=>updateProfile({fitnessProgram:id})} style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${fitnessProgram===id?C.sage:C.bd}`,background:fitnessProgram===id?C.sageL:'transparent',color:fitnessProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:fitnessProgram===id?600:400}}>{label}</button>
                   ))}
                 </div>
+            <span style={S.lbl}>Training Days Per Week</span>
+            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
+              {['4-day','5-day'].map(option=>(
+                <button
+                  key={option}
+                  onClick={()=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,programType:option,preferredTrainingDays:getAnchoredTrainingDays(option,p.athleteProfile?.trainingWeekStart||'Mon')}}))}
+                  style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${(athlete.programType||'4-day')===option?C.sage:C.bd}`,background:(athlete.programType||'4-day')===option?C.sageL:'transparent',color:(athlete.programType||'4-day')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.programType||'4-day')===option?600:400}}
+                >
+                  {option==='4-day'?'4 days':'5 days'}
+                </button>
+              ))}
+            </div>
+            <span style={S.lbl}>Plan Starts</span>
+            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
+              {['Mon','Wed'].map(option=>(
+                <button
+                  key={option}
+                  onClick={()=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,trainingWeekStart:option,preferredTrainingDays:getAnchoredTrainingDays(p.athleteProfile?.programType||'4-day',option)}}))}
+                  style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${(athlete.trainingWeekStart||'Mon')===option?C.sage:C.bd}`,background:(athlete.trainingWeekStart||'Mon')===option?C.sageL:'transparent',color:(athlete.trainingWeekStart||'Mon')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.trainingWeekStart||'Mon')===option?600:400}}
+                >
+                  {option==='Mon'?'Monday':'Wednesday'}
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.5}}>
+              Planned sessions anchor to the selected start day. You can still complete them on any of the next 6 days and the planner will mark them as moved.
+            </div>
             <span style={S.lbl}>5K Time (minutes)</span>
             <FieldInput type="number" value={athlete.fiveKTime||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:parseFloat(e.target.value)||null}}))} placeholder="e.g. 28" style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Back Squat 5RM (lbs)</span>
@@ -7157,8 +7414,8 @@ function App(){
       tasks:'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 13h14v-2H7v2zm0-6v2h14V7H7zm0 10h14v-2H7v2z',
       // Inbox tray
       inbox:'M19 3H4.99C3.88 3 3 3.9 3 5l.01 14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H5V5h14v10z',
-      // Simple dumbbell silhouette sized to stay legible in the bottom nav
-      training:'M4.75 8.25h1V5.75h2.5v12.5h-2.5v-2.5h-1A1.75 1.75 0 0 1 3 14V10a1.75 1.75 0 0 1 1.75-1.75zm14.5 0A1.75 1.75 0 0 1 21 10v4a1.75 1.75 0 0 1-1.75 1.75h-1v2.5h-2.5V5.75h2.5v2.5h1zM9.75 10.75h4.5v2.5h-4.5v-2.5z',
+      // Dumbbell / fitness center
+      training:'M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43l-1.29-1.28-2.83 2.83 1.28 1.29-1.43 1.43 1.43 1.43-1.43 1.43 1.43 1.43L4 14l2.83 2.83 2.86-2.86 2.57 2.57-2.86 2.86L12 22l3.57-3.57 1.29 1.28 2.83-2.83-1.28-1.29 1.43-1.43-1.43-1.43 1.43-1.43-1.43-1.43z',
       // Fork and knife / restaurant
       meals:'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
       // Menu / more
