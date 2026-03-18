@@ -55,7 +55,18 @@ const STORAGE_KEYS={
   activeWorkout:'activeWorkoutSession_v1',
   dailyCheckin:'dailyCheckin',
   navigation:'ops_nav_v1',
+  growth:'ops_growth_v1',
+  migration:'ops_storage_migration_v1',
 };
+const APP_DB_NAME='app_in_my_life_v1';
+const APP_DB_VERSION=1;
+const APP_DB_STORE='kv';
+const MAX_GROWTH_EVENTS=200;
+let appDbPromise=null;
+let navigationStateCache=null;
+let dailyCheckinStoreCache={};
+let activeWorkoutStateCache=null;
+let growthStateCache=null;
 const DATE_KEY_RE=/^\d{4}-\d{2}-\d{2}$/;
 const APP_TAB_IDS=['home','calendar','tasks','training','meals','finance','habits','health','maintenance','insights','settings','more'];
 const TASK_TAB_IDS=['inbox','scheduled','next','done','templates'];
@@ -65,11 +76,141 @@ const TRAIN_SECTION_IDS=['today','plan','library','history'];
 const SETTINGS_SECTION_IDS=['app','workcal','finance','google','fitness','goals','meals','notifications','security'];
 const HEALTH_TAB_IDS=['recovery','wellness','body','care','library'];
 const LIFESTYLE_TAB_IDS=['habits','lifestyle','routine'];
+function openAppDb(){
+  if(appDbPromise)return appDbPromise;
+  appDbPromise=new Promise((resolve,reject)=>{
+    if(typeof indexedDB==='undefined'){
+      reject(new Error('IndexedDB unavailable'));
+      return;
+    }
+    const request=indexedDB.open(APP_DB_NAME,APP_DB_VERSION);
+    request.onupgradeneeded=()=>{
+      const db=request.result;
+      if(!db.objectStoreNames.contains(APP_DB_STORE)){
+        db.createObjectStore(APP_DB_STORE,{keyPath:'key'});
+      }
+    };
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error||new Error('Failed to open IndexedDB'));
+  });
+  return appDbPromise;
+}
+
+async function withStore(mode,handler){
+  const db=await openAppDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(APP_DB_STORE,mode);
+    const store=tx.objectStore(APP_DB_STORE);
+    let result;
+    try{
+      result=handler(store,tx);
+    }catch(error){
+      reject(error);
+      return;
+    }
+    tx.oncomplete=()=>resolve(result&&typeof result==='object'&&'result' in result?result.result:result);
+    tx.onerror=()=>reject(tx.error||new Error('IndexedDB transaction failed'));
+    tx.onabort=()=>reject(tx.error||new Error('IndexedDB transaction aborted'));
+  });
+}
+
 const storage={
-  get:async(k)=>{try{const v=localStorage.getItem(k);return v?{value:v}:null;}catch{return null;}},
-  set:async(k,v)=>{try{localStorage.setItem(k,v);return true;}catch{return null;}},
+  async get(key){
+    try{
+      const record=await withStore('readonly',store=>store.get(key));
+      return record?.value!=null?{value:record.value}:null;
+    }catch{
+      return null;
+    }
+  },
+  async set(key,value){
+    try{
+      await withStore('readwrite',store=>store.put({key,value}));
+      return true;
+    }catch{
+      return null;
+    }
+  },
+  async remove(key){
+    try{
+      await withStore('readwrite',store=>store.delete(key));
+      return true;
+    }catch{
+      return null;
+    }
+  },
+  async getJSON(key){
+    const result=await this.get(key);
+    if(!result?.value)return null;
+    try{
+      return JSON.parse(result.value);
+    }catch{
+      return null;
+    }
+  },
+  async setJSON(key,value){
+    return this.set(key,JSON.stringify(value));
+  },
 };
+
+async function migrateLegacyLocalStorage(){
+  const migrated=await storage.getJSON(STORAGE_KEYS.migration);
+  if(migrated?.completedAt)return migrated;
+  const legacyKeys=[
+    STORAGE_KEYS.profile,
+    STORAGE_KEYS.navigation,
+    STORAGE_KEYS.activeWorkout,
+    STORAGE_KEYS.dailyCheckin,
+  ];
+  const importedKeys=[];
+  for(const key of legacyKeys){
+    try{
+      const raw=localStorage.getItem(key);
+      if(raw==null)continue;
+      await storage.set(key,raw);
+      importedKeys.push(key);
+    }catch{}
+  }
+  const receipt={completedAt:new Date().toISOString(),importedKeys};
+  await storage.setJSON(STORAGE_KEYS.migration,receipt);
+  legacyKeys.forEach(key=>{
+    try{localStorage.removeItem(key);}catch{}
+  });
+  return receipt;
+}
+
 const ACTIVE_WORKOUT_STORAGE_KEY=STORAGE_KEYS.activeWorkout;
+
+function normalizeGrowthState(raw={}){
+  const next=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
+  const activationChecklist=next.activationChecklist&&typeof next.activationChecklist==='object'?next.activationChecklist:{};
+  return{
+    firstOpenedAt:typeof next.firstOpenedAt==='string'?next.firstOpenedAt:null,
+    firstValueAt:typeof next.firstValueAt==='string'?next.firstValueAt:null,
+    lastSeenAt:typeof next.lastSeenAt==='string'?next.lastSeenAt:null,
+    installPromptDismissedAt:typeof next.installPromptDismissedAt==='string'?next.installPromptDismissedAt:null,
+    installPromptShownCount:Number.isFinite(next.installPromptShownCount)?next.installPromptShownCount:0,
+    installAcceptedAt:typeof next.installAcceptedAt==='string'?next.installAcceptedAt:null,
+    onboardingDismissed:next.onboardingDismissed===true,
+    activationChecklist:{
+      checkInCompleted:activationChecklist.checkInCompleted===true,
+      prioritiesSet:activationChecklist.prioritiesSet===true,
+      actionCompleted:activationChecklist.actionCompleted===true,
+    },
+    events:Array.isArray(next.events)
+      ?next.events.filter(event=>event&&typeof event==='object'&&typeof event.type==='string').slice(-MAX_GROWTH_EVENTS)
+      :[],
+  };
+}
+
+function getDefaultGrowthState(){
+  return normalizeGrowthState({});
+}
+
+function isIosLikeInstallContext(){
+  const ua=window.navigator.userAgent||'';
+  return /iPad|iPhone|iPod/.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document);
+}
 
 function shouldKeepKeyEventLocal(event){
   if(!event)return false;
@@ -244,13 +385,7 @@ function getCurrentDate(){
   };
 }
 function readNavigationState(today=getTodayKey()){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEYS.navigation);
-    if(!raw)return null;
-    return JSON.parse(raw);
-  }catch{
-    return null;
-  }
+  return normalizeNavigationState(navigationStateCache,today);
 }
 function normalizeNavigationState(raw,today=getTodayKey()){
   const next=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
@@ -270,15 +405,13 @@ function normalizeNavigationState(raw,today=getTodayKey()){
   };
 }
 function getInitialNavigationState(today=getTodayKey()){
-  return normalizeNavigationState(readNavigationState(today),today);
+  return readNavigationState(today);
 }
 function writeNavigationState(state,today=getTodayKey()){
-  try{
-    localStorage.setItem(STORAGE_KEYS.navigation,JSON.stringify(normalizeNavigationState(state,today)));
-    return true;
-  }catch{
-    return false;
-  }
+  const nextState=normalizeNavigationState(state,today);
+  navigationStateCache=nextState;
+  storage.setJSON(STORAGE_KEYS.navigation,nextState);
+  return true;
 }
 
 function createNewTaskDraft(today,overrides={}){
@@ -301,28 +434,16 @@ function getMsUntilNextDay(now=new Date()){
   return Math.max(50,nextMidnight-now);
 }
 function readDailyCheckinStore(){
-  try{
-    const raw=localStorage.getItem(STORAGE_KEYS.dailyCheckin);
-    if(!raw)return{};
-    const parsed=JSON.parse(raw);
-    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return{};
-    return Object.entries(parsed).reduce((acc,[key,value])=>{
-      const normalizedKey=normalizeDateKey(key,null);
-      if(!normalizedKey)return acc;
-      acc[normalizedKey]=value;
-      return acc;
-    },{});
-  }catch{
-    return{};
-  }
+  return dailyCheckinStoreCache;
 }
 function writeDailyCheckinStore(store){
-  try{
-    localStorage.setItem(STORAGE_KEYS.dailyCheckin,JSON.stringify(store));
-    return true;
-  }catch{
-    return false;
-  }
+  dailyCheckinStoreCache=Object.entries(store||{}).reduce((acc,[key,value])=>{
+    const normalizedKey=normalizeDateKey(key,null);
+    if(normalizedKey)acc[normalizedKey]=value;
+    return acc;
+  },{});
+  storage.setJSON(STORAGE_KEYS.dailyCheckin,dailyCheckinStoreCache);
+  return true;
 }
 function getDailyCheckinEntry(dateKey=getTodayKey()){
   const store=readDailyCheckinStore();
@@ -1772,26 +1893,16 @@ function getWorkoutStatusMeta(status){
   return{label:'Planned',bg:C.surf,color:C.muted};
 }
 function readActiveWorkoutState(){
-  try{
-    const raw=localStorage.getItem(ACTIVE_WORKOUT_STORAGE_KEY);
-    if(!raw)return null;
-    const parsed=JSON.parse(raw);
-    return parsed&&typeof parsed==='object'?parsed:null;
-  }catch{
-    return null;
-  }
+  return activeWorkoutStateCache;
 }
 function writeActiveWorkoutState(state){
-  try{
-    if(!state){
-      localStorage.removeItem(ACTIVE_WORKOUT_STORAGE_KEY);
-      return true;
-    }
-    localStorage.setItem(ACTIVE_WORKOUT_STORAGE_KEY,JSON.stringify(state));
+  activeWorkoutStateCache=state&&typeof state==='object'?state:null;
+  if(!activeWorkoutStateCache){
+    storage.remove(ACTIVE_WORKOUT_STORAGE_KEY);
     return true;
-  }catch{
-    return false;
   }
+  storage.setJSON(ACTIVE_WORKOUT_STORAGE_KEY,activeWorkoutStateCache);
+  return true;
 }
 function duplicatePreviousSetValues(setLogs,setIdx){
   if(setIdx<=0)return null;
@@ -3151,6 +3262,7 @@ function App(){
   const [homeCardsOpen,setHomeCardsOpen]=useState({habits:false,alerts:false,weekly:false});
   const [showInsights,setShowInsights]=useState(false);
   const [showReview,setShowReview]=useState(false);
+  const [growthState,setGrowthState]=useState(()=>getDefaultGrowthState());
   const [expandedTasks,setExpandedTasks]=useState({});
   const [showAddTask,setShowAddTask]=useState(false);
   const [newTask,setNewTask]=useState(()=>createNewTaskDraft(TODAY));
@@ -3171,6 +3283,9 @@ function App(){
   const contentRef=useRef(null);
   const restRef=useRef(null),recRef=useRef(null),saveRef=useRef(null);
   const latestProfileRef=useRef(DEFAULT_OPS);
+  const growthStateRef=useRef(getDefaultGrowthState());
+  const appOpenTrackedRef=useRef(false);
+  const growthImpressionRef=useRef({});
   const prevTodayRef=useRef(TODAY);
   const {athleteProfile,accounts,categories,meals,exercises,workouts,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,tasks,taskTemplates,choreHistory,lifestyleItems,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
   const financialAccounts=accounts;
@@ -3179,6 +3294,31 @@ function App(){
   const taskHistory=tasks;
 
   const updateProfile=useCallback(patch=>setProfile(prev=>syncCanonicalProfileState(typeof patch==='function'?patch(prev):{...prev,...patch})),[]);
+  const updateGrowthState=useCallback(updater=>{
+    setGrowthState(prev=>normalizeGrowthState(typeof updater==='function'?updater(prev):updater));
+  },[]);
+  const trackGrowthEvent=useCallback((type,meta={})=>{
+    if(profile.securitySettings?.analyticsEnabled===false)return;
+    const nowIso=new Date().toISOString();
+    updateGrowthState(prev=>{
+      const next=normalizeGrowthState(prev);
+      const events=[...next.events,{id:`growth-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,type,meta,at:nowIso}].slice(-MAX_GROWTH_EVENTS);
+      const activationChecklist={...next.activationChecklist};
+      if(type==='checkin_completed')activationChecklist.checkInCompleted=true;
+      if(type==='first_priority_added')activationChecklist.prioritiesSet=true;
+      if(['execution_started','meal_planned','meal_logged','workout_started','workout_completed','task_completed'].includes(type))activationChecklist.actionCompleted=true;
+      const hasSetupSignal=activationChecklist.checkInCompleted||activationChecklist.prioritiesSet;
+      const hasActionSignal=activationChecklist.actionCompleted;
+      return{
+        ...next,
+        lastSeenAt:nowIso,
+        activationChecklist,
+        firstOpenedAt:next.firstOpenedAt||nowIso,
+        firstValueAt:next.firstValueAt||(hasSetupSignal&&hasActionSignal?nowIso:null),
+        events,
+      };
+    });
+  },[profile.securitySettings?.analyticsEnabled,updateGrowthState]);
   const openCommandBar=()=>{
     setCaptureMode('command');
     setCaptureText('');
@@ -3221,6 +3361,17 @@ function App(){
     setProfile(prev=>syncCanonicalProfileState(updater(prev)));
     showNotif(label,'success',detail||'',{label:'Undo',handler:()=>{setProfile(syncCanonicalProfileState(snapshot));showNotif('Undid last action','success');}});
   };
+  const installEngaged=growthState.activationChecklist.checkInCompleted
+    ||growthState.activationChecklist.prioritiesSet
+    ||growthState.events.some(event=>['meal_planned','meal_logged','workout_started'].includes(event.type));
+  const installDismissCooldownMs=(growthState.installPromptShownCount||0)>=2?14*86400000:3*86400000;
+  const installCooldownActive=!!(growthState.installPromptDismissedAt&&Date.now()-new Date(growthState.installPromptDismissedAt).getTime()<installDismissCooldownMs);
+  const shouldShowInstallCta=installAvailable&&!isInstalled&&installEngaged&&!installCooldownActive;
+  const needsInstallHelp=!installAvailable&&!isInstalled&&installEngaged;
+  const showActivationChecklist=loaded&&!growthState.firstValueAt&&!growthState.onboardingDismissed;
+  const installHelpText=isIosLikeInstallContext()
+    ?'Use Share > Add to Home Screen in Safari to install this app.'
+    :'Install becomes available in supported browsers after the app is served from HTTPS or localhost.';
 
   useEffect(()=>{
     const syncCurrentDate=()=>setCurrentDate(getCurrentDate());
@@ -3248,6 +3399,7 @@ function App(){
   },[TODAY]);
 
   useEffect(()=>{
+    if(!loaded)return;
     writeNavigationState({
       tab,
       calendarFocusDay,
@@ -3261,15 +3413,46 @@ function App(){
       healthTab:healthScreenTab,
       lifestyleTab:lifestyleScreenTab,
     },TODAY);
-  },[tab,calendarFocusDay,calendarViewMode,calendarWeekIndex,calendarMonthIndex,taskScreenTab,finView,trainSection,settingsSection,healthScreenTab,lifestyleScreenTab,TODAY]);
+  },[loaded,tab,calendarFocusDay,calendarViewMode,calendarWeekIndex,calendarMonthIndex,taskScreenTab,finView,trainSection,settingsSection,healthScreenTab,lifestyleScreenTab,TODAY]);
 
   useEffect(()=>{
     (async()=>{
       try{
-        const r=await storage.get(STORAGE_KEYS.profile);
-        if(r){
-          const d=JSON.parse(r.value);
-          const normalizedProfile=normalizeLoadedProfile(d);
+        await migrateLegacyLocalStorage();
+        const [storedProfile,storedNav,storedCheckins,storedActiveWorkout,storedGrowth]=await Promise.all([
+          storage.getJSON(STORAGE_KEYS.profile),
+          storage.getJSON(STORAGE_KEYS.navigation),
+          storage.getJSON(STORAGE_KEYS.dailyCheckin),
+          storage.getJSON(STORAGE_KEYS.activeWorkout),
+          storage.getJSON(STORAGE_KEYS.growth),
+        ]);
+        if(storedNav){
+          navigationStateCache=normalizeNavigationState(storedNav,TODAY);
+          setTab(navigationStateCache.tab);
+          setCalendarFocusDay(navigationStateCache.calendarFocusDay);
+          setCalendarViewMode(navigationStateCache.calendarViewMode);
+          setCalendarWeekIndex(navigationStateCache.calendarWeekIndex);
+          setCalendarMonthIndex(navigationStateCache.calendarMonthIndex);
+          setTaskScreenTab(navigationStateCache.taskScreenTab);
+          setFinView(navigationStateCache.finView);
+          setTrainSection(navigationStateCache.trainSection);
+          setSettingsSection(navigationStateCache.settingsSection);
+          setHealthScreenTab(navigationStateCache.healthTab);
+          setLifestyleScreenTab(navigationStateCache.lifestyleTab);
+        }
+        dailyCheckinStoreCache=storedCheckins&&typeof storedCheckins==='object'&&!Array.isArray(storedCheckins)
+          ?Object.entries(storedCheckins).reduce((acc,[key,value])=>{
+            const normalizedKey=normalizeDateKey(key,null);
+            if(normalizedKey)acc[normalizedKey]=value;
+            return acc;
+          },{})
+          :{};
+        activeWorkoutStateCache=storedActiveWorkout&&typeof storedActiveWorkout==='object'?storedActiveWorkout:null;
+        const nextGrowthState=normalizeGrowthState(storedGrowth||{});
+        growthStateCache=nextGrowthState;
+        setGrowthState(nextGrowthState);
+        if(storedProfile){
+          const normalizedProfile=normalizeLoadedProfile(storedProfile);
           migrateDailyCheckinStore(normalizedProfile);
           setProfile(normalizedProfile);
         }
@@ -3334,6 +3517,11 @@ function App(){
       setIsInstalled(true);
       setInstallAvailable(false);
       setDeferredInstallPrompt(null);
+      updateGrowthState(prev=>({
+        ...prev,
+        installAcceptedAt:new Date().toISOString(),
+      }));
+      trackGrowthEvent('install_accepted',{source:'native'});
       showNotif('App installed','success');
     };
     syncInstalledState();
@@ -3347,19 +3535,59 @@ function App(){
       if(media.removeEventListener)media.removeEventListener('change',syncInstalledState);
       else media.removeListener(syncInstalledState);
     };
-  },[]);
+  },[trackGrowthEvent,updateGrowthState]);
 
   const openInstallPrompt=useCallback(async()=>{
-    if(!deferredInstallPrompt)return;
+    trackGrowthEvent('install_cta_clicked',{nativePrompt:!!deferredInstallPrompt});
+    if(!deferredInstallPrompt){
+      updateGrowthState(prev=>({
+        ...prev,
+        installPromptShownCount:(prev.installPromptShownCount||0)+1,
+        installPromptDismissedAt:new Date().toISOString(),
+      }));
+      return;
+    }
     try{
       await deferredInstallPrompt.prompt();
       const choice=await deferredInstallPrompt.userChoice;
       if(choice?.outcome!=='accepted'){
-        setInstallAvailable(false);
+        updateGrowthState(prev=>({
+          ...prev,
+          installPromptShownCount:(prev.installPromptShownCount||0)+1,
+          installPromptDismissedAt:new Date().toISOString(),
+        }));
+        trackGrowthEvent('install_declined',{outcome:choice?.outcome||'dismissed'});
       }
     }catch(e){}
     setDeferredInstallPrompt(null);
-  },[deferredInstallPrompt]);
+  },[deferredInstallPrompt,trackGrowthEvent,updateGrowthState]);
+
+  useEffect(()=>{
+    if(!loaded||appOpenTrackedRef.current)return;
+    appOpenTrackedRef.current=true;
+    trackGrowthEvent('app_open');
+  },[loaded,trackGrowthEvent]);
+
+  useEffect(()=>{
+    if(!loaded||!showMorningCheckin||growthState.activationChecklist.checkInCompleted)return;
+    if(growthImpressionRef.current.morningCheckin)return;
+    growthImpressionRef.current.morningCheckin=true;
+    trackGrowthEvent('onboarding_shown',{surface:'morning_checkin'});
+  },[loaded,showMorningCheckin,growthState.activationChecklist.checkInCompleted,trackGrowthEvent]);
+
+  useEffect(()=>{
+    if(!loaded||!showActivationChecklist)return;
+    if(growthImpressionRef.current.homeActivation)return;
+    growthImpressionRef.current.homeActivation=true;
+    trackGrowthEvent('onboarding_shown',{surface:'home_activation'});
+  },[loaded,showActivationChecklist,trackGrowthEvent]);
+
+  useEffect(()=>{
+    if(!loaded||!shouldShowInstallCta)return;
+    if(growthImpressionRef.current.installCta)return;
+    growthImpressionRef.current.installCta=true;
+    trackGrowthEvent('install_cta_shown',{surface:'home'});
+  },[loaded,shouldShowInstallCta,trackGrowthEvent]);
 
   // Morning check-in trigger (once per day, 5am–1pm only)
   useEffect(()=>{
@@ -3392,13 +3620,23 @@ function App(){
   useEffect(()=>{
     if(!loaded)return;
     clearTimeout(saveRef.current);
-    saveRef.current=setTimeout(()=>storage.set(STORAGE_KEYS.profile,JSON.stringify(profile)),150);
+    saveRef.current=setTimeout(()=>storage.setJSON(STORAGE_KEYS.profile,profile),150);
     return()=>clearTimeout(saveRef.current);
   },[profile,loaded]);
 
   useEffect(()=>{
     latestProfileRef.current=profile;
   },[profile]);
+
+  useEffect(()=>{
+    growthStateRef.current=growthState;
+    growthStateCache=growthState;
+  },[growthState]);
+
+  useEffect(()=>{
+    if(!loaded)return;
+    storage.setJSON(STORAGE_KEYS.growth,growthState);
+  },[growthState,loaded]);
 
   useEffect(()=>{
     if(!loaded)return;
@@ -3423,30 +3661,19 @@ function App(){
 
   useEffect(()=>{
     const flushProfile=()=>{
-      try{localStorage.setItem(STORAGE_KEYS.profile,JSON.stringify(latestProfileRef.current));}catch(e){}
+      storage.setJSON(STORAGE_KEYS.profile,latestProfileRef.current);
+      storage.setJSON(STORAGE_KEYS.growth,growthStateRef.current);
     };
     const onVisibilityChange=()=>{
       if(document.visibilityState==='hidden')flushProfile();
     };
     const onPageHide=()=>flushProfile();
-    const onStorage=e=>{
-      if(e.key!==STORAGE_KEYS.profile||!e.newValue)return;
-      try{
-        const nextProfile=normalizeLoadedProfile(JSON.parse(e.newValue));
-        latestProfileRef.current=nextProfile;
-        setProfile(nextProfile);
-      }catch(error){
-        console.error('Profile sync failed:',error);
-      }
-    };
     window.addEventListener('beforeunload',flushProfile);
     window.addEventListener('pagehide',onPageHide);
-    window.addEventListener('storage',onStorage);
     document.addEventListener('visibilitychange',onVisibilityChange);
     return()=>{
       window.removeEventListener('beforeunload',flushProfile);
       window.removeEventListener('pagehide',onPageHide);
-      window.removeEventListener('storage',onStorage);
       document.removeEventListener('visibilitychange',onVisibilityChange);
     };
   },[]);
@@ -3732,6 +3959,7 @@ function App(){
   function addMeal(mealObj,slot){
     const entry=normalizeMealEntry({...mealObj,slot:slot||'snack',id:Date.now()},slot||'snack');
     applyUndoableProfileUpdate('Meal logged',p=>({...p,meals:{...p.meals,[TODAY]:[...(p.meals?.[TODAY]||[]),entry]}}),`Added to ${entry.slot}.`);
+    trackGrowthEvent('meal_logged',{slot:entry.slot});
   }
   function logQuickMealTemplate(template,slotOverride,photo){
     if(!template)return;
@@ -3844,6 +4072,7 @@ function App(){
     setWkSess(hydrated);
     setPlayerIdx(hydrated?.currentExerciseIdx||0);
     setTrainView('session');
+    trackGrowthEvent('workout_started',{type:hydrated?.type||'workout'});
   }
   function launchWorkout(sess){
     if(!sess)return;
@@ -3879,9 +4108,10 @@ function App(){
       completedOffSchedule:(wkSess.plannedDate||sessionDateKey)!==sessionDateKey,
     }};
     updateProfile(p=>({...p,workouts:[...(p.workouts||p.workoutHistory||[]),entry]}));
+    trackGrowthEvent('workout_completed',{type:wkSess?.type==='recovery'?'recovery':'workout'});
     setWkSess(null);setPlayerIdx(0);setTrainView('overview');showNotif(wkSess?.type==='recovery'?'Session complete!':'Workout complete!','success');
   }
-  function startRun(sess){setRunSess({...sess,dateKey:sess?.dateKey||TODAY,log:{},startTime:Date.now(),warmup:sess.warmup||getWarmupForCategory('running'),cooldown:sess.cooldown||getCooldownForCategory('running')});setTrainView('run');}
+  function startRun(sess){setRunSess({...sess,dateKey:sess?.dateKey||TODAY,log:{},startTime:Date.now(),warmup:sess.warmup||getWarmupForCategory('running'),cooldown:sess.cooldown||getCooldownForCategory('running')});setTrainView('run');trackGrowthEvent('workout_started',{type:'run'});}
   function finishRun(data){
     const sessionDateKey=runSess?.dateKey||TODAY;
     const entry={date:sessionDateKey,type:'run',name:runSess?.name||'Run',data:{
@@ -3896,6 +4126,7 @@ function App(){
       completedOffSchedule:(runSess?.plannedDate||sessionDateKey)!==sessionDateKey,
     }};
     updateProfile(p=>({...p,workouts:[...(p.workouts||p.workoutHistory||[]),entry]}));
+    trackGrowthEvent('workout_completed',{type:'run'});
     setRunSess(null);setTrainView('overview');showNotif('Run logged!','success');
   }
   function toggleSet(exIdx,setIdx){markSetDone(exIdx,setIdx);}
@@ -4050,11 +4281,14 @@ function App(){
     }));
     setDismissedMorningCheckinDate(todayKey);
     setShowMorningCheckin(false);
+    trackGrowthEvent('checkin_completed');
     showNotif('Check-in saved','success');
   }
   function updateDailyExecution(dateKey,updater){
     const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
     const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
+    const existingCount=existing.priorities.filter(task=>task.text.trim()).length;
+    const nextCount=nextEntry.priorities.filter(task=>task.text.trim()).length;
     const nextTop3=nextEntry.priorities.slice(0,3).map(task=>task.text||'');
     updateProfile(current=>({
       ...current,
@@ -4062,6 +4296,7 @@ function App(){
       top3:{...(current.top3||{}),[dateKey]:nextTop3},
     }));
     syncDailyCheckinTop3(dateKey,nextTop3);
+    if(existingCount===0&&nextCount>0)trackGrowthEvent('first_priority_added',{date:dateKey});
   }
   function updateWorkoutRecommendationForDate(dateKey,action,finalSelection=null){
     const nextSelectedWorkoutId=action==='modify'
@@ -4111,7 +4346,10 @@ function App(){
   }
   // Toggle a task's done state from dashboard or agenda
   function toggleTaskDone(taskId){
+    const targetTask=(taskHistory||[]).find(task=>task.id===taskId);
+    const nextDone=!targetTask?.done;
     updateProfile(p=>({...p,taskHistory:(p.taskHistory||[]).map(t=>t.id===taskId?{...t,done:!t.done,status:!t.done?'done':'active',updatedAt:new Date().toISOString()}:t)}));
+    if(nextDone)trackGrowthEvent('task_completed',{taskId});
   }
   // Add text to Capture Inbox (unclassified, no routing)
   function addToInbox(text){
@@ -4436,6 +4674,7 @@ function App(){
           ?entry.priorities.map(task=>({...task}))
           :entry.agenda,
       }));
+      if(nextMode==='execution')trackGrowthEvent('execution_started',{date:activeDate});
       showNotif(nextMode==='execution'?'Execution mode enabled':'Returned to planning mode','success');
     }
 
@@ -4730,9 +4969,17 @@ function App(){
         S={S}
         FieldInput={FieldInput}
         dailyExecutionEntry={dailyExecutionEntry}
-        installAvailable={installAvailable}
+        installAvailable={shouldShowInstallCta}
+        installHelpVisible={needsInstallHelp}
+        installHelpText={installHelpText}
         isInstalled={isInstalled}
         openInstallPrompt={openInstallPrompt}
+        showActivationChecklist={showActivationChecklist}
+        activationChecklist={growthState.activationChecklist}
+        dismissActivationChecklist={()=>{
+          updateGrowthState(prev=>({...prev,onboardingDismissed:true}));
+          trackGrowthEvent('onboarding_dismissed',{surface:'home_activation'});
+        }}
         openCommandBar={openCommandBar}
         energyFive={energyFive}
         sleepHoursToday={sleepHoursToday}
@@ -4834,7 +5081,7 @@ function App(){
           <div>
             <div style={S.lbl}>Weekly Preview</div>
             <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
-            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{resolvedWkType} week · {weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{Math.min(weekPlannedWorkouts.length,4)} completed</div>
+            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{resolvedWkType} week · {weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{weekPlannedWorkouts.length} completed</div>
           </div>
           <span style={{fontSize:11,color:C.navy,fontWeight:700}}>Open Plan</span>
         </div>
@@ -5894,6 +6141,7 @@ function App(){
         name:template.name,
       };
       saveDailyMealPlan(dateStr,[...current,entry]);
+      trackGrowthEvent('meal_planned',{slot,date:dateStr});
       showNotif(`${template.name} planned for ${(MEAL_SLOTS.find(item=>item.id===slot)||{}).label||slot}`,'success');
     }
 
@@ -5918,6 +6166,7 @@ function App(){
       }
       if(target==='tomorrow'){
         saveDailyMealPlan(addDaysIso(TODAY,1),cloneMealPlanEntries(todaysEntries,addDaysIso(TODAY,1)));
+        trackGrowthEvent('meal_planned',{slot:'multiple',date:addDaysIso(TODAY,1)});
         showNotif('Meal plan copied to tomorrow.','success');
         return;
       }
@@ -5931,6 +6180,7 @@ function App(){
           ...p,
           dailyMealPlans:nextEntries.reduce((acc,item)=>({...acc,[item.dateStr]:item.entries}),{...(p.dailyMealPlans||{})}),
         }));
+        trackGrowthEvent('meal_planned',{slot:'multiple',date:'weekdays'});
         showNotif('Meal plan repeated for upcoming weekdays.','success');
       }
     }
@@ -5941,6 +6191,7 @@ function App(){
         return;
       }
       saveDailyMealPlan(TODAY,cloneMealPlanEntries(yesterdayMealPlan,TODAY));
+      trackGrowthEvent('meal_planned',{slot:'multiple',date:TODAY});
       showNotif('Yesterday’s meal plan copied to today.','success');
     }
 
@@ -8180,7 +8431,7 @@ function App(){
           if(!confirm('Restore this backup and replace current local data?'))return;
           const restored=normalizeLoadedProfile(parsed);
           setProfile(restored);
-          storage.set(STORAGE_KEYS.profile,JSON.stringify(restored));
+          storage.setJSON(STORAGE_KEYS.profile,restored);
           showNotif('Backup restored','success');
         }catch{
           showNotif('Backup restore failed','error');
@@ -8541,7 +8792,16 @@ function App(){
       </div>)}
       <div style={{...S.card,borderColor:C.red}}>
         <span style={{...S.lbl,color:C.red}}>Data</span>
-        <button style={{...S.btnGhost,color:C.red,borderColor:C.red,width:'100%',textAlign:'center',fontSize:12}} onClick={()=>{if(confirm('Clear all data? This cannot be undone.'))storage.set(STORAGE_KEYS.profile,JSON.stringify(DEFAULT_OPS)).then(()=>window.location.reload());}}>Reset All Data</button>
+        <button style={{...S.btnGhost,color:C.red,borderColor:C.red,width:'100%',textAlign:'center',fontSize:12}} onClick={()=>{
+          if(!confirm('Clear all data? This cannot be undone.'))return;
+          Promise.all([
+            storage.setJSON(STORAGE_KEYS.profile,DEFAULT_OPS),
+            storage.remove(STORAGE_KEYS.navigation),
+            storage.remove(STORAGE_KEYS.activeWorkout),
+            storage.remove(STORAGE_KEYS.dailyCheckin),
+            storage.remove(STORAGE_KEYS.growth),
+          ]).then(()=>window.location.reload());
+        }}>Reset All Data</button>
       </div>
       <div style={{textAlign:'center',padding:'16px 0',fontSize:10,color:C.muted}}>Personal Ops Hub · v1.0 · {TODAY}</div>
     </div>;
@@ -8812,6 +9072,15 @@ function App(){
 
   function InsightsScreen(){
     const [weekReviewCard,setWeekReviewCard]=useState(null);
+    const growthEvents=Array.isArray(growthState.events)?growthState.events:[];
+    const growthCount=type=>growthEvents.filter(event=>event.type===type).length;
+    const activationSummary=[
+      {label:'App opens',value:growthCount('app_open')},
+      {label:'Onboarding shown',value:growthCount('onboarding_shown')},
+      {label:'Install CTA shown',value:growthCount('install_cta_shown')},
+      {label:'Installs accepted',value:growthCount('install_accepted')},
+      {label:'First value reached',value:growthState.firstValueAt?1:0},
+    ];
     function generateWeeklyReview(){
       const wkStart=weekKey(NOW);
       const wkEnd=addDaysIso(wkStart,7);
@@ -8882,6 +9151,24 @@ function App(){
       insightItems.push('Log more recovery and workout data to unlock stronger pattern detection.');
     }
     return <div style={S.body}>
+      <div style={S.card}>
+        <span style={S.lbl}>Activation Funnel</span>
+        <div style={{fontSize:15,fontWeight:700,color:C.tx,marginBottom:10}}>Local growth metrics</div>
+        {activationSummary.map((item,idx)=><div key={item.label} style={{...S.row,padding:'7px 0',borderBottom:idx<activationSummary.length-1?`0.5px solid ${C.bd}`:'none'}}>
+          <span style={{fontSize:12,color:C.muted}}>{item.label}</span>
+          <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{item.value}</span>
+        </div>)}
+        <div style={{display:'grid',gap:6,marginTop:12}}>
+          {[
+            {label:'Morning check-in',done:growthState.activationChecklist.checkInCompleted},
+            {label:'Set priorities',done:growthState.activationChecklist.prioritiesSet},
+            {label:'Complete one action',done:growthState.activationChecklist.actionCompleted},
+          ].map(item=><div key={item.label} style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:C.tx2}}>
+            <span style={{width:16,height:16,borderRadius:999,background:item.done?C.sage:C.surf,color:item.done?C.white:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{item.done?'✓':'•'}</span>
+            <span>{item.label}</span>
+          </div>)}
+        </div>
+      </div>
       <div style={S.card}>
         <div style={{...S.row,marginBottom:weekReviewCard?12:0}}>
           <div><span style={S.lbl}>Weekly Review</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>Capture this week's data</div></div>

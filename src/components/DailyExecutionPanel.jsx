@@ -7,8 +7,13 @@ export default function DailyExecutionPanel({
   FieldInput,
   dailyExecutionEntry,
   installAvailable,
+  installHelpVisible,
+  installHelpText,
   isInstalled,
   openInstallPrompt,
+  showActivationChecklist,
+  activationChecklist,
+  dismissActivationChecklist,
   openCommandBar,
   energyFive,
   sleepHoursToday,
@@ -53,6 +58,28 @@ export default function DailyExecutionPanel({
     :dailyExecutionEntry.priorities;
 
   return <section aria-labelledby={headingId} aria-describedby={detailId} style={{...S.card,paddingBottom:14,boxShadow:C.shadowStrong}}>
+    {showActivationChecklist&&<div style={{background:C.navyL,borderRadius:14,padding:'12px 12px',marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start',marginBottom:10}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.navyDk,marginBottom:4}}>Get To First Value</div>
+          <div style={{fontSize:13,fontWeight:700,color:C.tx}}>Finish the setup loop once, then let the day run itself.</div>
+        </div>
+        <button type="button" onClick={dismissActivationChecklist} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}}>Hide</button>
+      </div>
+      <div style={{display:'grid',gap:6}}>
+        {[
+          {id:'checkInCompleted',label:'Morning check-in'},
+          {id:'prioritiesSet',label:'Set today’s priorities'},
+          {id:'actionCompleted',label:'Complete one action'},
+        ].map(item=>{
+          const done=activationChecklist?.[item.id];
+          return <div key={item.id} style={{display:'flex',alignItems:'center',gap:8,background:'rgba(255,255,255,0.6)',borderRadius:10,padding:'8px 10px'}}>
+            <span style={{width:18,height:18,borderRadius:999,display:'inline-flex',alignItems:'center',justifyContent:'center',background:done?C.sage:C.white,color:done?C.white:C.muted,fontSize:10,fontWeight:700,flexShrink:0}}>{done?'✓':'•'}</span>
+            <span style={{fontSize:12,fontWeight:600,color:C.tx,opacity:done?0.72:1,textDecoration:done?'line-through':'none'}}>{item.label}</span>
+          </div>;
+        })}
+      </div>
+    </div>}
     <div style={{...S.row,alignItems:'flex-start',marginBottom:12}}>
       <div>
         <div style={S.lbl}>Daily Execution</div>
@@ -66,6 +93,10 @@ export default function DailyExecutionPanel({
         <button type="button" style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={openCommandBar}>Quick Capture</button>
       </div>
     </div>
+    {installHelpVisible&&!isInstalled&&<div style={{background:C.surf,borderRadius:12,padding:'10px 12px',marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:0.2,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Install Help</div>
+      <div style={{fontSize:11,color:C.tx2,lineHeight:1.45}}>{installHelpText}</div>
+    </div>}
     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
       <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
         <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Energy</div>

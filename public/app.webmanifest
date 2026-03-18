@@ -7,7 +7,7 @@
   "display": "standalone",
   "background_color": "#F6F3EF",
   "theme_color": "#F6F3EF",
-  "description": "A local-first personal daily planning hub for training, nutrition, planning, recovery, and daily execution.",
+  "description": "A local-first personal planner for daily execution, training, meals, and recovery.",
   "icons": [
     {
       "src": "./icons/icon-192.png",
