@@ -2629,7 +2629,7 @@ const G={xs:4,sm:8,md:12,lg:16,xl:24};
 
 const S={
   wrap:{background:C.bg,minHeight:'100vh',maxWidth:430,margin:'0 auto',paddingBottom:64,paddingTop:'env(safe-area-inset-top)',position:'relative'},
-  hdr:{padding:`14px ${G.lg}px 10px`,borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center',position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,zIndex:250,background:C.headerBg,backdropFilter:'blur(18px)'},
+  hdr:{padding:`calc(14px + env(safe-area-inset-top)) ${G.lg}px 10px`,borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center',position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,zIndex:250,background:C.headerBg,backdropFilter:'blur(18px)'},
   body:{padding:`${G.md}px ${G.lg}px ${G.xs}px`},
   card:{background:C.card,border:`1px solid ${C.bd}`,borderRadius:16,padding:G.lg,marginBottom:G.md,boxShadow:C.shadow},
   lbl:{fontSize:T.micro,fontWeight:700,letterSpacing:'0.8px',color:C.muted,textTransform:'uppercase',marginBottom:G.xs,display:'block',lineHeight:1.2},
@@ -8186,7 +8186,7 @@ function App(){
           </button>
         </div>
       </div>
-      <div ref={contentRef} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
+      <div ref={contentRef} style={{overflowY:'auto',height:'calc(100dvh - 64px - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom))',paddingTop:'calc(64px + env(safe-area-inset-top))',paddingBottom:12}}>
         <ScreenErrorBoundary resetKey={tab==='calendar'?`calendar-${calendarFocusDay}`:tab} fallback={screenFallback}>
           <ActiveScreen focusDay={calendarFocusDay}/>
         </ScreenErrorBoundary>
