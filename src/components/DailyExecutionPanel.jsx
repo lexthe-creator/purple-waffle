@@ -34,6 +34,8 @@ export default function DailyExecutionPanel({
   nextTaskItem,
   toggleTaskDone,
   todayLog,
+  selectedDateLabel,
+  isViewingToday,
   setShowMorningCheckin,
   openBrainDump,
   addPriorityTask,
@@ -49,6 +51,7 @@ export default function DailyExecutionPanel({
       <div>
         <div style={S.lbl}>Daily Execution</div>
         <div style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.15}}>Plan first, execute once the list is real</div>
+        <div style={{fontSize:11,color:C.muted,marginTop:4}}>{selectedDateLabel}{!isViewingToday?' · selected date':''}</div>
         <div style={{fontSize:11,color:C.muted,marginTop:4}}>{dailyExecutionEntry.mode==='planning'?'Editable priorities with reorder and cleanup.':'Execution mode keeps the same tasks in one checklist.'}</div>
       </div>
       <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',justifyContent:'flex-end'}}>
@@ -60,7 +63,7 @@ export default function DailyExecutionPanel({
     <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
       <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
         <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Energy</div>
-        <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{energyFive}/5</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{energyFive==null?'—':`${energyFive}/5`}</div>
       </div>
       <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
         <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Sleep</div>

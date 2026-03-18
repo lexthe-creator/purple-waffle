@@ -71,22 +71,55 @@ const storage={
 };
 const ACTIVE_WORKOUT_STORAGE_KEY=STORAGE_KEYS.activeWorkout;
 
+function shouldKeepKeyEventLocal(event){
+  if(!event)return false;
+  return !event.metaKey&&!event.ctrlKey;
+}
+
+function composeFieldKeyHandler(handler){
+  if(!handler)return event=>{
+    if(shouldKeepKeyEventLocal(event))event.stopPropagation();
+  };
+  return event=>{
+    handler(event);
+    if(shouldKeepKeyEventLocal(event)&&!event.isPropagationStopped?.())event.stopPropagation();
+  };
+}
+
 const FieldInput=React.forwardRef(function FieldInput({id,name,...props},ref){
   const generatedId=useId();
   const fieldId=id??name??generatedId;
-  return React.createElement('input',{...props,ref,id:fieldId,name:name??fieldId});
+  return React.createElement('input',{
+    ...props,
+    ref,
+    id:fieldId,
+    name:name??fieldId,
+    onKeyDown:composeFieldKeyHandler(props.onKeyDown),
+  });
 });
 
 const FieldSelect=React.forwardRef(function FieldSelect({id,name,...props},ref){
   const generatedId=useId();
   const fieldId=id??name??generatedId;
-  return React.createElement('select',{...props,ref,id:fieldId,name:name??fieldId});
+  return React.createElement('select',{
+    ...props,
+    ref,
+    id:fieldId,
+    name:name??fieldId,
+    onKeyDown:composeFieldKeyHandler(props.onKeyDown),
+  });
 });
 
 const FieldTextarea=React.forwardRef(function FieldTextarea({id,name,...props},ref){
   const generatedId=useId();
   const fieldId=id??name??generatedId;
-  return React.createElement('textarea',{...props,ref,id:fieldId,name:name??fieldId});
+  return React.createElement('textarea',{
+    ...props,
+    ref,
+    id:fieldId,
+    name:name??fieldId,
+    onKeyDown:composeFieldKeyHandler(props.onKeyDown),
+  });
 });
 
 class ScreenErrorBoundary extends React.Component{
@@ -3479,7 +3512,6 @@ function App(){
   const selectedDateRelation=compareDateKeys(selectedDate,TODAY);
   const selectedDateObj=parseDateKey(selectedDate)||parseDateKey(TODAY);
   const selectedWeekMon=getTrainingWeekAnchorDate(selectedDateObj,athlete?.trainingWeekStart||'Mon');
-  const selectedWeekDates=Array.from({length:7},(_,i)=>formatDateKey(addWeeksToDate(selectedWeekMon,0+0*i)));
   const currentWeekKey=formatDateKey(weekMon);
   const weekDatesGlobal=Array.from({length:7},(_,i)=>{const d=new Date(weekMon);d.setDate(d.getDate()+i);return formatDateKey(d);});
   const weekAnalytics=computeWeeklyAnalytics(workoutHistory,weekMon);
@@ -3887,6 +3919,10 @@ function App(){
     updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[dateKey]:{...(p.dailyLogs?.[dateKey]||{}),date:dateKey,...patch}}}));
   }
   function logEnergyCheckin(){
+    if(compareDateKeys(selectedDate,TODAY)>0){
+      showNotif('Recovery data is unavailable for future dates.','warn');
+      return;
+    }
     saveDailyLog({energyScore,sleepHours,workoutDone:wktDone,proteinMet:totPro>=(proGoal*0.9),hydrationMet:todayH>=(hydGoal*0.9)});
     setShowEnergyIn(false);showNotif('Energy logged','success');
   }
@@ -4171,51 +4207,63 @@ function App(){
   function HomeScreenV2(){
     const [weekAheadOpen,setWeekAheadOpen]=useState(false);
     const agendaTab='today';
-    const dailyExecutionEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[TODAY],TODAY,top3[TODAY]||[]);
-    const todayLog=dailyLogs?.[TODAY]||{};
+    const activeDate=selectedDate;
+    const isViewingToday=activeDate===TODAY;
+    const isPastDate=compareDateKeys(activeDate,TODAY)<0;
+    const isFutureDate=compareDateKeys(activeDate,TODAY)>0;
+    const activeDateParts=getDateParts(activeDate);
+    const dailyExecutionEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[activeDate],activeDate,top3[activeDate]||[]);
+    const todayLog=dailyLogs?.[activeDate]||{};
     const pendingInbox=(inboxItems||[]).filter(x=>x.status==='pending');
     const mealsLogged=todayN.length;
-    const mealsGoal=trainingFlags.isTrainingDay?3:2;
+    const activeTrainingFlags=getTrainingDayFlags(selectedDateObj.getDay(),athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon');
+    const mealsGoal=activeTrainingFlags.isTrainingDay?3:2;
     const weekDates=Array.from({length:7},(_,i)=>{const d=new Date(weekMon);d.setDate(d.getDate()+i);return formatDateKey(d);});
     const mealsBySlot=MEAL_SLOTS.map(slot=>({slot,...MEAL_SLOT_SCHEDULE[slot.id],entries:todayN.filter(m=>m.slot===slot.id)}));
     const missingMealSlots=mealsBySlot.filter(entry=>entry.slot.id!=='snack'&&entry.entries.length===0);
     const homeFoodLibrary=[...DEFAULT_FOOD_LIBRARY,...(foodLibrary||[])];
     const homeMealTemplates=resolveMealTemplates(mealTemplates,homeFoodLibrary);
-    const todayMealPlanEntries=getDailyMealPlanEntries(dailyMealPlans,TODAY);
+    const todayMealPlanEntries=getDailyMealPlanEntries(dailyMealPlans,activeDate);
     const nextPlannedMeal=todayMealPlanEntries.find(entry=>entry.status!=='logged')||null;
     const nextMealTemplate=nextPlannedMeal?homeMealTemplates.find(template=>template.id===nextPlannedMeal.templateId):null;
-    const taskBuckets=getTaskBuckets(taskHistory,TODAY);
+    const taskBuckets=getTaskBuckets(taskHistory,activeDate);
     const nextWeekMon=new Date(weekMon);nextWeekMon.setDate(weekMon.getDate()+7);
     const nextWeekDates=Array.from({length:7},(_,i)=>{const d=new Date(nextWeekMon);d.setDate(nextWeekMon.getDate()+i);return formatDateKey(d);});
     const overdueTasks=taskBuckets.overdue;
-    const carryoverDismissed=!!(dailyLogs?.[TODAY]?.carryoverDismissed);
-    const showCarryoverPrompt=overdueTasks.length>0&&!carryoverDismissed;
+    const carryoverDismissed=!!(dailyLogs?.[activeDate]?.carryoverDismissed);
+    const showCarryoverPrompt=isViewingToday&&overdueTasks.length>0&&!carryoverDismissed;
     const nextTaskItem=taskBuckets.next.slice().sort((a,b)=>{
       if(!!a.scheduledTime!==!!b.scheduledTime)return a.scheduledTime?-1:1;
       if((a.scheduledTime||'')!==(b.scheduledTime||''))return(a.scheduledTime||'').localeCompare(b.scheduledTime||'');
       return (b.priority||1)-(a.priority||1);
     })[0]||taskBuckets.scheduled.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''))[0]||null;
     const urgentMaintenanceItems=maintenanceAttentionItems.slice(0,3);
-    const todayChores=choreHistory[TODAY]||{};
+    const todayChores=choreHistory[activeDate]||{};
     const dueHabits=(habits||[]).filter(h=>habitDueToday(h,dailyLogs));
-    const completedHabitIds=dailyLogs?.[TODAY]?.habitsCompleted||[];
+    const completedHabitIds=dailyLogs?.[activeDate]?.habitsCompleted||[];
     const completedHabits=dueHabits.filter(h=>completedHabitIds.includes(h.id)).length;
     const activeLifestyleItems=(lifestyleItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.order||0)-(b.order||0));
     const dailyDone=activeLifestyleItems.filter(i=>!!todayChores[i.id]).length;
 
-    const energyFive=Math.max(1,Math.min(5,Math.round((recoveryToday.energy||6)/2)));
+    const energyFive=recoveryToday.energy==null?null:Math.max(1,Math.min(5,Math.round((recoveryToday.energy||6)/2)));
     const sleepHoursToday=recoveryToday.sleep||0;
     const sleepWhole=Math.floor(sleepHoursToday||0);
     const sleepMinutes=Math.round(((sleepHoursToday||0)-sleepWhole)*60);
     const recoveryReadiness=recoveryToday.readiness;
-    const recoveryState=recoveryToday.level==='High'
-      ?{label:'Ready',color:C.sage,bg:C.sageL,recommendation:'Good day for intensity.'}
-      :recoveryToday.level==='Moderate'
-        ?{label:'Moderate',color:C.amberDk,bg:C.amberL,recommendation:'Train, but keep volume controlled.'}
-        :{label:'Low',color:C.red,bg:C.redL,recommendation:'Recovery or light session recommended.'};
+    const recoveryState=recoveryToday.level===null
+      ?{label:'No data',color:C.muted,bg:C.surf,recommendation:'Future dates stay in planning mode until recovery data exists.'}
+      :recoveryToday.level==='High'
+        ?{label:'Ready',color:C.sage,bg:C.sageL,recommendation:'Good day for intensity.'}
+        :recoveryToday.level==='Moderate'
+          ?{label:'Moderate',color:C.amberDk,bg:C.amberL,recommendation:'Train, but keep volume controlled.'}
+          :{label:'Low',color:C.red,bg:C.redL,recommendation:'Recovery or light session recommended.'};
     const doneForToday=wktDone&&maintenanceAttentionItems.length===0&&(missingMealSlots.length===0||mealsLogged>=mealsGoal);
     const workoutTitle=selectedTodayWorkout?.name||restDayRecovery.name;
-    const workoutMeta=shouldPromptWorkoutDecision&&!dailyWorkoutRecommendation?.action
+    const workoutMeta=isPastDate
+      ?'Workout history is fixed for past dates.'
+      :isFutureDate
+        ?'Planning only. No recovery prompt for future dates.'
+        :shouldPromptWorkoutDecision&&!dailyWorkoutRecommendation?.action
       ?'Recovery is low. Choose whether to continue or switch.'
       :todaysStatus==='recovery_override'
         ?'Recovery workout selected for today'
@@ -4226,15 +4274,15 @@ function App(){
     useEffect(()=>{
       if(dailyExecutionEntry.mode!=='planning'||dailyExecutionEntry.priorities.length===0)return;
       if(!dailyExecutionEntry.priorities.every(task=>task.completed))return;
-      updateDailyExecution(TODAY,entry=>({
+      updateDailyExecution(activeDate,entry=>({
         ...entry,
         mode:'execution',
         agenda:entry.priorities.map(task=>({...task})),
       }));
-    },[TODAY,dailyExecutionEntry]);
+    },[activeDate,dailyExecutionEntry]);
 
     function setDailyExecutionMode(nextMode){
-      updateDailyExecution(TODAY,entry=>({
+      updateDailyExecution(activeDate,entry=>({
         ...entry,
         mode:nextMode,
         agenda:nextMode==='execution'
@@ -4244,7 +4292,7 @@ function App(){
     }
 
     function updatePriorityTask(taskId,patch){
-      updateDailyExecution(TODAY,entry=>{
+      updateDailyExecution(activeDate,entry=>{
         const priorities=entry.priorities.map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task);
         const agendaSource=entry.mode==='execution'
           ?(entry.agenda.length>0?entry.agenda:entry.priorities).map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task)
@@ -4254,15 +4302,15 @@ function App(){
     }
 
     function addPriorityTask(){
-      updateDailyExecution(TODAY,entry=>({
+      updateDailyExecution(activeDate,entry=>({
         ...entry,
         mode:entry.mode==='execution'?entry.mode:'planning',
-        priorities:[...entry.priorities,createDailyExecutionTask('',{date:TODAY})],
+        priorities:[...entry.priorities,createDailyExecutionTask('',{date:activeDate})],
       }));
     }
 
     function removePriorityTask(taskId){
-      updateDailyExecution(TODAY,entry=>({
+      updateDailyExecution(activeDate,entry=>({
         ...entry,
         priorities:entry.priorities.filter(task=>task.id!==taskId),
         agenda:entry.agenda.filter(task=>task.id!==taskId),
@@ -4270,7 +4318,7 @@ function App(){
     }
 
     function movePriorityTask(taskId,direction){
-      updateDailyExecution(TODAY,entry=>{
+      updateDailyExecution(activeDate,entry=>{
         const priorities=[...entry.priorities];
         const index=priorities.findIndex(task=>task.id===taskId);
         const target=index+direction;
@@ -4285,16 +4333,16 @@ function App(){
 
     function handleWorkoutDecision(action){
       if(action==='modify'){
-        updateWorkoutRecommendationForToday('modify',recoveryWorkoutOption);
+        updateWorkoutRecommendationForDate(activeDate,'modify',recoveryWorkoutOption);
         showNotif('Recovery workout selected','success');
         return;
       }
       if(action==='accept'){
-        updateWorkoutRecommendationForToday('accept',scheduledTodayWorkout);
+        updateWorkoutRecommendationForDate(activeDate,'accept',scheduledTodayWorkout);
         showNotif('Scheduled workout kept','success');
         return;
       }
-      updateWorkoutRecommendationForToday('ignore',scheduledTodayWorkout);
+      updateWorkoutRecommendationForDate(activeDate,'ignore',scheduledTodayWorkout);
     }
 
     const latestRunEntry=[...workoutHistory].reverse().find(entry=>entry.type==='run');
@@ -4338,16 +4386,16 @@ function App(){
     function rollAllOverdue(){
       updateProfile(p=>({
         ...p,
-        taskHistory:p.taskHistory.map(t=>(!t.done&&t.status==='active'&&t.date<TODAY)?{...t,date:TODAY,bucket:'next',rolledFrom:t.rolledFrom||t.id,updatedAt:new Date().toISOString()}:t),
-        dailyLogs:{...p.dailyLogs,[TODAY]:{...(p.dailyLogs[TODAY]||{}),carryoverDismissed:true}},
+        taskHistory:p.taskHistory.map(t=>(!t.done&&t.status==='active'&&t.date<activeDate)?{...t,date:activeDate,bucket:'next',rolledFrom:t.rolledFrom||t.id,updatedAt:new Date().toISOString()}:t),
+        dailyLogs:{...p.dailyLogs,[activeDate]:{...(p.dailyLogs[activeDate]||{}),carryoverDismissed:true}},
       }));
-      showNotif(`${overdueTasks.length} task${overdueTasks.length!==1?'s':''} rolled to today`,'success');
+      showNotif(`${overdueTasks.length} task${overdueTasks.length!==1?'s':''} rolled to ${formatDate(activeDate,'monthDayLong')}`,'success');
     }
     function dismissCarryover(){
-      updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[TODAY]:{...(p.dailyLogs[TODAY]||{}),carryoverDismissed:true}}}));
+      updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[activeDate]:{...(p.dailyLogs[activeDate]||{}),carryoverDismissed:true}}}));
     }
     function openComposerForDate(dateStr){
-      setNewTask(createNewTaskDraft(TODAY,{date:dateStr,bucket:'scheduled'}));
+      setNewTask(createNewTaskDraft(activeDate,{date:dateStr,bucket:'scheduled'}));
       setTaskDraftText('');
       setShowAddTask(true);
       openTab('tasks',{taskTab:'scheduled'});
@@ -4380,6 +4428,10 @@ function App(){
     }
 
     function openTodayWorkoutAction(){
+      if(isPastDate&&!wktDone){
+        showNotif('Past workouts are locked and cannot be started retroactively.','warn');
+        return;
+      }
       if(selectedTodayWorkout){
         launchWorkout(selectedTodayWorkout);
         return;
@@ -4435,7 +4487,7 @@ function App(){
         meta:task.priority===3?'High priority':task.priority===2?'Medium priority':'Task',
         taskId:task.id,
       })));
-      const plannedWorkout=weekPlannedWorkouts.find(item=>item.plannedDate===dateStr);
+      const plannedWorkout=selectedWeekPlannedWorkouts.find(item=>item.plannedDate===dateStr);
       if(plannedWorkout){
         scheduledItems.push({
         id:`workout-${plannedWorkout.plannedDate}`,
@@ -4446,7 +4498,7 @@ function App(){
         meta:plannedWorkout.status==='completed'?'Completed':plannedWorkout.status==='moved'?'Moved':plannedWorkout.status==='missed'?'Open':'Planned',
       });
       }
-      const suggestionItems=(dateStr===TODAY
+      const suggestionItems=(dateStr===activeDate
         ?missingMealSlots
         :MEAL_SLOTS.filter(slot=>slot.id!=='snack').map(slot=>({slot,entries:(nutr[dateStr]||[]).filter(m=>m.slot===slot.id)})).filter(entry=>entry.entries.length===0)
       ).map(entry=>({
@@ -4455,10 +4507,10 @@ function App(){
         sortMins:timeToMins((MEAL_SLOT_SCHEDULE[entry.slot.id]||{}).start||'12:00'),
         timeLabel:'Meal',
         title:`${entry.slot.label} window`,
-        meta:dateStr===TODAY?'Log or prep':'Plan meal',
+        meta:dateStr===activeDate?'Log or prep':'Plan meal',
       }));
       suggestionItems.push(...[
-        ...(dateStr===TODAY&&pendingInbox.length>0?[{
+        ...(dateStr===activeDate&&pendingInbox.length>0?[{
           id:'inbox-review',
           kind:'reminder',
           sortMins:18*60,
@@ -4466,7 +4518,7 @@ function App(){
           title:`Review ${pendingInbox.length} inbox item${pendingInbox.length!==1?'s':''}`,
           meta:'Process quick captures',
         }]:[]),
-        ...(dateStr===TODAY?urgentMaintenanceItems.map(item=>({
+        ...(dateStr===activeDate?urgentMaintenanceItems.map(item=>({
           id:`maintenance-${item.id}`,
           kind:'alert',
           sortMins:17*60,
@@ -4484,14 +4536,14 @@ function App(){
 
     const agendaGroups=(function(){
       if(agendaTab==='today'){
-        const groups=buildAgendaItemsForDate(TODAY);
+        const groups=buildAgendaItemsForDate(activeDate);
         return{
-          scheduled:groups.scheduled.map(item=>({...item,dayLabel:'Today'})),
-          suggestions:groups.suggestions.map(item=>({...item,dayLabel:'Today'})),
+          scheduled:groups.scheduled.map(item=>({...item,dayLabel:isViewingToday?'Today':formatDate(activeDate,'weekdayShort')})),
+          suggestions:groups.suggestions.map(item=>({...item,dayLabel:isViewingToday?'Today':formatDate(activeDate,'weekdayShort')})),
         };
       }
       if(agendaTab==='tomorrow'){
-        const groups=buildAgendaItemsForDate(addDaysIso(TODAY,1));
+        const groups=buildAgendaItemsForDate(addDaysIso(activeDate,1));
         return{
           scheduled:groups.scheduled.map(item=>({...item,dayLabel:'Tomorrow'})),
           suggestions:groups.suggestions.map(item=>({...item,dayLabel:'Tomorrow'})),
@@ -4554,11 +4606,13 @@ function App(){
         nextTaskItem={nextTaskItem}
         toggleTaskDone={toggleTaskDone}
         todayLog={todayLog}
+        selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):''}
+        isViewingToday={isViewingToday}
         setShowMorningCheckin={setShowMorningCheckin}
         openBrainDump={openBrainDump}
         addPriorityTask={addPriorityTask}
         setDailyExecutionMode={setDailyExecutionMode}
-        openCalendar={()=>openTab('calendar',{calendarFocusDay:TODAY})}
+        openCalendar={()=>openTab('calendar',{calendarFocusDay:activeDate,calendarViewMode:'week',calendarWeekIndex:getWeekIndexForDate(activeDate,TODAY),calendarMonthIndex:getMonthIndexForDate(activeDate,TODAY)})}
       />
 
       <div style={S.card}>
@@ -7062,27 +7116,82 @@ function App(){
   }
 
   function CalendarScreen({focusDay,onSelectDay=()=>{}}){
-    const weekStart=new Date(weekMon);weekStart.setDate(weekStart.getDate()+calOffset*7);
-    const weekDays=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return d;});
     const selDay=normalizeDateKey(focusDay,TODAY);
-
-    useEffect(()=>{
-      if(!selDay)return;
-      const focusDate=new Date(selDay+'T12:00:00');
-      const focusWeekMon=new Date(focusDate);
-      focusWeekMon.setDate(focusDate.getDate()-((focusDate.getDay()+6)%7));
-      focusWeekMon.setHours(0,0,0,0);
-      const baseWeekMon=new Date(weekMon);
-      baseWeekMon.setHours(0,0,0,0);
-      const diffWeeks=Math.round((focusWeekMon-baseWeekMon)/(7*86400000));
-      setCalOffset(diffWeeks);
-    },[selDay,weekMon]);
+    const gestureRef=useRef({x:0,y:0});
+    const displayedWeekStart=addWeeksToDate(getWeekStartDate(TODAY),calendarWeekIndex);
+    const displayedWeekDays=Array.from({length:7},(_,i)=>addDaysIso(formatDateKey(displayedWeekStart),i)).map(parseDateKey);
+    const displayedMonthStart=addMonthsToDate(getMonthStartDate(TODAY),calendarMonthIndex);
+    const monthGridStart=getWeekStartDate(displayedMonthStart);
+    const monthGridDays=Array.from({length:42},(_,i)=>parseDateKey(addDaysIso(formatDateKey(monthGridStart),i)));
+    const activeRangeStart=calendarViewMode==='month'?monthGridStart:displayedWeekStart;
+    const activeRangeEnd=calendarViewMode==='month'?monthGridDays[monthGridDays.length-1]:displayedWeekDays[6];
+    const weekReferenceMonth=displayedWeekDays[3]?.getMonth();
+    const monthHeaderLabel=formatDate(displayedMonthStart,'monthYear');
 
     function getDayEvents(dateStr){
       return (calendarCache[dateStr]||[]).sort((a,b)=>(a.startHour||0)-(b.startHour||0));
     }
     function getTasksForDay(dateStr){
       return taskHistory.filter(t=>t.date===dateStr&&!t.parentId&&(t.status||'active')!=='dismissed');
+    }
+    function getCalendarDay(dateStr){
+      const parts=getDateParts(dateStr);
+      const executionEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateStr],dateStr,top3?.[dateStr]||[]);
+      const executionTasks=executionEntry.priorities.filter(task=>task.text.trim());
+      const explicitTasks=getTasksForDay(dateStr).filter(task=>!task.done);
+      const completedTasks=executionTasks.filter(task=>task.completed).length+getTasksForDay(dateStr).filter(task=>task.done).length;
+      const totalTasks=executionTasks.length+getTasksForDay(dateStr).length;
+      const completionRate=totalTasks>0?Math.round((completedTasks/totalTasks)*100):0;
+      const workoutLogged=workoutHistory.some(entry=>entry.date===dateStr&&(entry.type==='workout'||entry.type==='run'||entry.type==='recovery'));
+      const recoveryEntry=compareDateKeys(dateStr,TODAY)>0?null:computeRecoveryState(dailyLogs?.[dateStr],dailyLogs?.[dateStr]?.energyScore??energyScore,dailyLogs?.[dateStr]?.sleepHours??sleepHours);
+      return{
+        date:dateStr,
+        dayOfWeek:parts?.dayOfWeek||'',
+        month:parts?.monthName||'',
+        dayNumber:parts?.day||0,
+        year:parts?.year||new Date().getFullYear(),
+        hasTasks:executionTasks.length>0||explicitTasks.length>0,
+        hasWorkout:workoutLogged,
+        recoveryStatus:recoveryEntry?.level==='Low'?'low':recoveryEntry?'ok':null,
+        completionRate,
+      };
+    }
+    function selectCalendarDate(dateStr){
+      onSelectDay(dateStr);
+      setCalendarWeekIndex(getWeekIndexForDate(dateStr,TODAY));
+      setCalendarMonthIndex(getMonthIndexForDate(dateStr,TODAY));
+      setCalendarViewMode('week');
+      openTab('home',{calendarFocusDay:dateStr});
+    }
+    function moveCalendar(delta){
+      if(calendarViewMode==='month'){
+        setCalendarMonthIndex(index=>index+delta);
+        return;
+      }
+      setCalendarWeekIndex(index=>index+delta);
+    }
+    function resetCalendarToToday(){
+      onSelectDay(TODAY);
+      setCalendarViewMode('week');
+      setCalendarWeekIndex(0);
+      setCalendarMonthIndex(0);
+    }
+    function handleCalendarTouchStart(event){
+      const touch=event.touches?.[0];
+      if(!touch)return;
+      gestureRef.current={x:touch.clientX,y:touch.clientY};
+    }
+    function handleCalendarTouchEnd(event){
+      const touch=event.changedTouches?.[0];
+      if(!touch)return;
+      const dx=touch.clientX-gestureRef.current.x;
+      const dy=touch.clientY-gestureRef.current.y;
+      if(calendarViewMode==='week'&&Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)){
+        moveCalendar(dx<0?1:-1);
+      }
+      if(calendarViewMode==='month'&&Math.abs(dy)>50&&Math.abs(dy)>Math.abs(dx)){
+        moveCalendar(dy<0?1:-1);
+      }
     }
     function createLocalEvent(){
       if(!calForm.title.trim())return;
@@ -7096,8 +7205,8 @@ function App(){
     async function syncGoogleCal(){
       if(!googleConnected){showNotif('Connect Google in Settings first');return;}
       try{
-        const start=new Date(weekStart);start.setHours(0,0,0,0);
-        const end=new Date(weekStart);end.setDate(end.getDate()+7);end.setHours(23,59,59,999);
+        const start=new Date(activeRangeStart);start.setHours(0,0,0,0);
+        const end=new Date(activeRangeEnd);end.setHours(23,59,59,999);
         const resp=await GoogleAPI.listEvents(start.toISOString(),end.toISOString());
         const newCache={...calendarCache};
         for(const ev of resp.items||[]){
@@ -7123,6 +7232,15 @@ function App(){
     const selBusy=getBusyForDay(selDay);
     const selTasks=getTasksForDay(selDay);
     const catClr=id=>(BUSY_CATEGORIES.find(c=>c.id===id)||{clr:C.muted}).clr;
+    const selectedCalendarDay=getCalendarDay(selDay);
+    const renderDots=(calendarDay,maxDots=3)=>{
+      const dots=[];
+      if(calendarDay.hasTasks)dots.push({id:'tasks',color:C.amber});
+      if(calendarDay.recoveryStatus==='low')dots.push({id:'recovery',color:C.red});
+      if(calendarDay.completionRate>=80)dots.push({id:'completion',color:C.sage});
+      if(calendarDay.hasWorkout)dots.push({id:'workout',color:'#4D7EA8'});
+      return dots.slice(0,maxDots);
+    };
 
     // Merge events + busy blocks + tasks into a single time-sorted list
     // Tasks float to the top (sortMins=-1) since they typically have no time
@@ -7134,39 +7252,70 @@ function App(){
     ].sort((a,b)=>a.sortMins-b.sortMins);
 
     return <div style={S.body}>
-      {/* Week nav */}
-      <div style={{...S.row,marginBottom:10}}>
-        <button style={S.btnGhost} onClick={()=>setCalOffset(o=>o-1)}>Prev</button>
-        <span style={{fontSize:12,color:C.tx,fontWeight:500}}>
-          {formatDateRange(weekStart,weekDays[6],'monthDayShort')}
-        </span>
-        <button style={S.btnGhost} onClick={()=>setCalOffset(o=>o+1)}>Next</button>
-      </div>
-      {/* Day strip */}
-      <div style={{display:'flex',gap:4,marginBottom:12,overflowX:'auto'}}>
-        {weekDays.map(d=>{
-          const ds=formatDateKey(d);
-          const isToday=ds===TODAY,isSel=ds===selDay;
-          const hasBusy=getBusyForDay(ds).length>0;
-          const hasEvt=(calendarCache[ds]||[]).length>0;
-          const hasTasks=taskHistory.some(t=>t.date===ds&&(t.status||'active')!=='dismissed');
-          return <button key={ds} onClick={()=>onSelectDay(ds)} style={{minWidth:44,padding:'6px 4px',borderRadius:10,border:`0.5px solid ${isSel?C.navy:C.bd}`,background:isSel?C.navyL:isToday?C.surf:'transparent',color:isSel?C.navy:isToday?C.navy:C.muted,cursor:'pointer',flexShrink:0,position:'relative'}}>
-            <div style={{fontSize:8,marginBottom:2}}>{'SMTWTFS'[d.getDay()]}</div>
-            <div style={{fontSize:13,fontWeight:isSel||isToday?700:400}}>{d.getDate()}</div>
-            <div style={{display:'flex',gap:2,justifyContent:'center',marginTop:3,minHeight:5}}>
-              {hasBusy&&<div style={{width:4,height:4,borderRadius:'50%',background:isSel?C.whiteSoft5:C.navy}}/>}
-              {hasEvt&&<div style={{width:4,height:4,borderRadius:'50%',background:isSel?C.whiteSoft5:C.sage}}/>}
-              {hasTasks&&<div style={{width:4,height:4,borderRadius:'50%',background:isSel?C.whiteSoft5:C.amber}}/>}
-            </div>
-          </button>;
-        })}
+      <div style={{...S.card,marginBottom:10,padding:'14px 14px 12px'}}>
+        <div style={{...S.row,marginBottom:10,alignItems:'center'}}>
+          <button style={S.btnGhost} onClick={()=>moveCalendar(-1)}>Prev</button>
+          <button style={{background:'none',border:'none',color:C.tx,fontSize:15,fontWeight:700,cursor:'pointer'}} onClick={()=>setCalendarViewMode(mode=>mode==='week'?'month':'week')}>
+            {monthHeaderLabel} {calendarViewMode==='month'?'▲':'▼'}
+          </button>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={resetCalendarToToday}>Today</button>
+            <button style={S.btnGhost} onClick={()=>moveCalendar(1)}>Next</button>
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6,marginBottom:8}}>
+          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(label=><div key={label} style={{fontSize:10,color:C.muted,textAlign:'center',fontWeight:600}}>{label}</div>)}
+        </div>
+        <div onTouchStart={handleCalendarTouchStart} onTouchEnd={handleCalendarTouchEnd} style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
+          {(calendarViewMode==='month'?monthGridDays:displayedWeekDays).map(dayDate=>{
+            const dateStr=formatDateKey(dayDate);
+            const calendarDay=getCalendarDay(dateStr);
+            const isSelected=dateStr===selDay;
+            const isToday=dateStr===TODAY;
+            const isOutsideMonth=calendarViewMode==='month'
+              ?dayDate.getMonth()!==displayedMonthStart.getMonth()
+              :dayDate.getMonth()!==weekReferenceMonth;
+            const dots=renderDots(calendarDay,calendarViewMode==='month'?2:4);
+            return <button
+              key={dateStr}
+              onClick={()=>selectCalendarDate(dateStr)}
+              style={{
+                minHeight:calendarViewMode==='month'?74:86,
+                borderRadius:14,
+                border:`1px solid ${isSelected?C.navy:isToday?C.sage:C.bd}`,
+                background:isSelected?C.navyL:C.card,
+                color:isOutsideMonth?C.muted:C.tx,
+                cursor:'pointer',
+                padding:calendarViewMode==='month'?'8px 6px':'10px 6px',
+                opacity:isOutsideMonth?0.7:1,
+                display:'flex',
+                flexDirection:'column',
+                alignItems:'center',
+                justifyContent:'space-between',
+              }}>
+              <div style={{fontSize:calendarViewMode==='month'?20:11,fontWeight:calendarViewMode==='month'?700:600}}>
+                {calendarViewMode==='month'?calendarDay.dayNumber:formatDate(dateStr,'weekdayShort')}
+              </div>
+              {calendarViewMode==='week'&&<div style={{fontSize:24,fontWeight:800,lineHeight:1}}>{calendarDay.dayNumber}</div>}
+              <div style={{display:'flex',gap:4,justifyContent:'center',minHeight:8,flexWrap:'wrap'}}>
+                {dots.map(dot=><span key={dot.id} style={{width:6,height:6,borderRadius:'50%',background:dot.color,display:'inline-block'}} />)}
+              </div>
+            </button>;
+          })}
+        </div>
       </div>
       {/* Day header + actions */}
       <div style={{...S.row,marginBottom:10}}>
-        <span style={{fontSize:14,fontWeight:600,color:C.tx}}>
-          {formatDate(selDay,'primary')}
-        </span>
+        <div>
+          <div style={{fontSize:14,fontWeight:600,color:C.tx}}>{formatDate(selDay,'primary')}</div>
+          <div style={{fontSize:10,color:C.muted,marginTop:2}}>
+            {selectedCalendarDay.completionRate}% complete
+            {selectedCalendarDay.recoveryStatus==='low'?' · recovery low':''}
+            {selectedCalendarDay.hasWorkout?' · workout logged':''}
+          </div>
+        </div>
         <div style={{display:'flex',gap:5}}>
+          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('home',{calendarFocusDay:selDay})}>Open Daily</button>
           {googleConnected&&<button style={S.btnSmall(C.navy)} onClick={syncGoogleCal}>Sync</button>}
           <button style={S.btnSmall(C.amber)} onClick={()=>{setBusyForm(f=>({...f,date:selDay}));setBusyModal('new');}}>+ Busy</button>
           <button style={S.btnSmall(C.sage)} onClick={()=>setCalModal('new')}>+ Event</button>
