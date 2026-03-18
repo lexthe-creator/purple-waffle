@@ -4003,10 +4003,11 @@ function App(){
       const scheduledItems=(calendarCache[dateStr]||[]).map(event=>({
         id:`event-${dateStr}-${event.id}`,
         kind:'calendar',
-        sortMins:(event.startHour||8)*60,
-        timeLabel:formatHourLabel(event.startHour),
+        sortMins:event.allDay?-999:(event.startHour||8)*60,
+        timeLabel:event.allDay?'All day':formatHourLabel(event.startHour),
         title:event.title||'Calendar event',
-        meta:event.durationMins?`${event.durationMins} min`:'Calendar',
+        meta:event.allDay?'All day':event.durationMins?`${event.durationMins} min`:'Calendar',
+        allDay:event.allDay||false,
       }));
       scheduledItems.push(...getBusyForDay(dateStr).map(block=>({
         id:`busy-${dateStr}-${block.id}`,
