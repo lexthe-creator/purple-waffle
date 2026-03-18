@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -58,6 +58,30 @@ const storage={
   set:async(k,v)=>{try{localStorage.setItem(k,v);return true;}catch{return null;}},
 };
 const ACTIVE_WORKOUT_STORAGE_KEY=STORAGE_KEYS.activeWorkout;
+
+const FieldInput=React.forwardRef(function FieldInput({id,name,...props},ref){
+  const generatedId=useId();
+  const fieldId=id??name??generatedId;
+  return React.createElement('input',{...props,ref,id:fieldId,name:name??fieldId});
+});
+
+const FieldSelect=React.forwardRef(function FieldSelect({id,name,...props},ref){
+  const generatedId=useId();
+  const fieldId=id??name??generatedId;
+  return React.createElement('select',{...props,ref,id:fieldId,name:name??fieldId});
+});
+
+const FieldTextarea=React.forwardRef(function FieldTextarea({id,name,...props},ref){
+  const generatedId=useId();
+  const fieldId=id??name??generatedId;
+  return React.createElement('textarea',{...props,ref,id:fieldId,name:name??fieldId});
+});
+
+function isTypingTarget(target){
+  if(!(target instanceof HTMLElement))return false;
+  const tagName=target.tagName.toLowerCase();
+  return tagName==='input'||tagName==='textarea'||tagName==='select'||target.isContentEditable;
+}
 
 const C={bg:'var(--bg)',card:'var(--card)',surf:'var(--surface)',sage:'var(--success)',sageL:'var(--surface)',sageDk:'var(--success)',navy:'var(--primary)',navyL:'var(--primary-weak)',navyDk:'var(--primary)',amber:'var(--warning)',amberL:'var(--surface)',amberDk:'var(--warning)',muted:'var(--text-secondary)',bd:'var(--border)',tx:'var(--text-primary)',tx2:'var(--text-secondary)',red:'var(--danger)',redL:'var(--surface)',white:'var(--white)',shadow:'var(--shadow)',shadowStrong:'var(--shadow-strong)',shadowNav:'var(--shadow-nav)',focusRing:'var(--focus-ring)',focusRingInverse:'var(--focus-ring-inverse)',scrim:'var(--scrim)',scrimStrong:'var(--scrim-strong)',headerBg:'var(--header-bg)',navBg:'var(--nav-bg)',whiteSoft:'var(--white-soft)',whiteSoftBorder:'var(--white-soft-border)',whiteSoft2:'var(--white-soft-2)',whiteSoft3:'var(--white-soft-3)',whiteSoft4:'var(--white-soft-4)',whiteSoft5:'var(--white-soft-5)'};
 
@@ -2719,6 +2743,7 @@ function App(){
 
   useEffect(()=>{
     const onKeyDown=e=>{
+      if(isTypingTarget(e.target))return;
       const meta=e.metaKey||e.ctrlKey;
       if(!meta)return;
       const key=e.key.toLowerCase();
@@ -3749,7 +3774,7 @@ function App(){
           </div>
         </div>
         <div style={{display:'grid',gap:8,marginBottom:12}}>
-          {[0,1,2].map(idx=><input
+          {[0,1,2].map(idx=><FieldInput
             key={idx}
             value={t3[idx]||''}
             placeholder={`Priority ${idx+1}`}
@@ -4187,10 +4212,10 @@ function App(){
       const visibleFields=getVisibleLogFields(exercise);
       const showField=field=>visibleFields.includes(field);
       const editorFields=[
-        showField('weight')&&<input key="weight" value={set.weight||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{weight:e.target.value})} placeholder="Weight" style={inputStyle}/>,
-        showField('reps')&&<input key="reps" value={set.reps||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{reps:e.target.value})} placeholder={recoveryStyle?'Reps or breaths':'Reps'} style={inputStyle}/>,
-        showField('duration')&&<input key="duration" value={set.duration||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{duration:e.target.value})} placeholder={exercise.exerciseType==='breathing'?'Time':'Duration'} style={inputStyle}/>,
-        showField('distance')&&<input key="distance" value={set.distance||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{distance:e.target.value})} placeholder="Distance" style={inputStyle}/>,
+        showField('weight')&&<FieldInput key="weight" value={set.weight||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{weight:e.target.value})} placeholder="Weight" style={inputStyle}/>,
+        showField('reps')&&<FieldInput key="reps" value={set.reps||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{reps:e.target.value})} placeholder={recoveryStyle?'Reps or breaths':'Reps'} style={inputStyle}/>,
+        showField('duration')&&<FieldInput key="duration" value={set.duration||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{duration:e.target.value})} placeholder={exercise.exerciseType==='breathing'?'Time':'Duration'} style={inputStyle}/>,
+        showField('distance')&&<FieldInput key="distance" value={set.distance||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{distance:e.target.value})} placeholder="Distance" style={inputStyle}/>,
       ].filter(Boolean);
       return <div style={{background:C.surf,borderRadius:10,padding:compact?7:8,marginBottom:6,border:`1px solid ${set.done?(recoveryStyle?C.sage:C.navyL):'transparent'}`}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:editorFields.length||showField('notes')?6:0,gap:8}}>
@@ -4205,7 +4230,7 @@ function App(){
         {!recoveryStyle&&showField('weight')&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
           {[-10,-5,2.5,5].map(delta=><button key={delta} style={{...S.btnGhost,fontSize:10,padding:'4px 8px'}} onClick={()=>adjustSetWeight(exerciseIndex,setIndex,delta)}>{delta>0?`+${delta}`:delta} lb</button>)}
         </div>}
-        {showField('notes')&&<input value={set.notes||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{notes:e.target.value})} placeholder={recoveryStyle?'Optional note':'Set notes'} style={{...inputStyle,marginTop:6}}/>}
+        {showField('notes')&&<FieldInput value={set.notes||''} onChange={e=>updateExerciseSet(exerciseIndex,setIndex,{notes:e.target.value})} placeholder={recoveryStyle?'Optional note':'Set notes'} style={{...inputStyle,marginTop:6}}/>}
         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
           {setIndex>0&&<button style={{...S.btnGhost,fontSize:10,padding:'4px 8px'}} onClick={()=>duplicatePreviousSet(exerciseIndex,setIndex)}>Copy Prev</button>}
           {!recoveryStyle&&<>
@@ -4647,9 +4672,9 @@ function App(){
         </div>}
         <div style={S.card}>
           <span style={S.lbl}>Log completion</span>
-          <input value={runDist} onChange={e=>setRunDist(e.target.value)} placeholder="Distance (miles)" style={{...S.inp,marginBottom:8}}/>
-          <input value={runDuration} onChange={e=>setRunDuration(e.target.value)} placeholder="Duration (minutes)" style={{...S.inp,marginBottom:8}}/>
-          <input value={runNotes} onChange={e=>setRunNotes(e.target.value)} placeholder="Notes (optional)" style={S.inp}/>
+          <FieldInput value={runDist} onChange={e=>setRunDist(e.target.value)} placeholder="Distance (miles)" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={runDuration} onChange={e=>setRunDuration(e.target.value)} placeholder="Duration (minutes)" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={runNotes} onChange={e=>setRunNotes(e.target.value)} placeholder="Notes (optional)" style={S.inp}/>
         </div>
         {(runSess.cooldown||[]).length>0&&<div style={S.card}>
           <span style={S.lbl}>Cooldown</span>
@@ -5320,12 +5345,12 @@ function App(){
           </div>}
           {pantryItems.length>0&&<>
           <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Your foods</div>
-          <select value={pantryForm.itemId} onChange={e=>setPantryForm(f=>({...f,itemId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+          <FieldSelect value={pantryForm.itemId} onChange={e=>setPantryForm(f=>({...f,itemId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
             {pantryItems.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-          <select value={pantryForm.slot} onChange={e=>setPantryForm(f=>({...f,slot:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+          </FieldSelect>
+          <FieldSelect value={pantryForm.slot} onChange={e=>setPantryForm(f=>({...f,slot:e.target.value}))} style={{...S.inp,marginBottom:8}}>
             {MEAL_SLOTS.map(slot=><option key={slot.id} value={slot.id}>{slot.label}</option>)}
-          </select>
+          </FieldSelect>
           <button style={S.btnSolid(C.sage)} onClick={logPantryFood}>Log from Pantry</button>
           </>}
         </div>}
@@ -5336,16 +5361,16 @@ function App(){
               {recentFoods.map(item=><button key={item.food.id} style={{...S.btnGhost,flexShrink:0,fontSize:10,padding:'5px 8px'}} onClick={()=>setIngredientForm(f=>({...f,foodId:item.food.id}))}>{item.food.name}</button>)}
             </div>
           </div>}
-          <select value={ingredientForm.foodId} onChange={e=>setIngredientForm(f=>({...f,foodId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+          <FieldSelect value={ingredientForm.foodId} onChange={e=>setIngredientForm(f=>({...f,foodId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
             {foods.map(food=><option key={food.id} value={food.id}>{food.name}</option>)}
-          </select>
+          </FieldSelect>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <input value={ingredientForm.grams} onChange={e=>setIngredientForm(f=>({...f,grams:e.target.value}))} placeholder="Grams" style={S.inp} type="number"/>
-            <input value={ingredientForm.units} onChange={e=>setIngredientForm(f=>({...f,units:e.target.value}))} placeholder={selectedFood?.unitLabel?`${selectedFood.unitLabel}s`:'Units'} style={S.inp} type="number"/>
+            <FieldInput value={ingredientForm.grams} onChange={e=>setIngredientForm(f=>({...f,grams:e.target.value}))} placeholder="Grams" style={S.inp} type="number"/>
+            <FieldInput value={ingredientForm.units} onChange={e=>setIngredientForm(f=>({...f,units:e.target.value}))} placeholder={selectedFood?.unitLabel?`${selectedFood.unitLabel}s`:'Units'} style={S.inp} type="number"/>
           </div>
-          <select value={ingredientForm.slot} onChange={e=>setIngredientForm(f=>({...f,slot:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+          <FieldSelect value={ingredientForm.slot} onChange={e=>setIngredientForm(f=>({...f,slot:e.target.value}))} style={{...S.inp,marginBottom:8}}>
             {MEAL_SLOTS.map(slot=><option key={slot.id} value={slot.id}>{slot.label}</option>)}
-          </select>
+          </FieldSelect>
           {selectedFood&&<div style={{background:C.surf,borderRadius:12,padding:'10px 12px',marginBottom:8}}>
             <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{selectedFood.name}</div>
             <div style={{fontSize:10,color:C.muted,marginTop:3}}>Per 100g · {selectedFood.calories} kcal · {selectedFood.protein}P · {selectedFood.carbohydrates}C · {selectedFood.fat}F</div>
@@ -5366,17 +5391,17 @@ function App(){
               </button>)}
             </div>
           </div>
-          <input value={quickMeal.name} onChange={e=>setQuickMeal(q=>({...q,name:e.target.value}))} placeholder="Meal name" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={quickMeal.name} onChange={e=>setQuickMeal(q=>({...q,name:e.target.value}))} placeholder="Meal name" style={{...S.inp,marginBottom:8}}/>
           {quickMeal.items.map((item,idx)=><div key={idx} style={{display:'grid',gridTemplateColumns:'1.4fr 0.8fr',gap:8,marginBottom:8}}>
-            <select value={item.foodId} onChange={e=>setQuickMeal(q=>({...q,items:q.items.map((entry,i)=>i===idx?{...entry,foodId:e.target.value}:entry)}))} style={S.inp}>
+            <FieldSelect value={item.foodId} onChange={e=>setQuickMeal(q=>({...q,items:q.items.map((entry,i)=>i===idx?{...entry,foodId:e.target.value}:entry)}))} style={S.inp}>
               {foods.map(food=><option key={food.id} value={food.id}>{food.name}</option>)}
-            </select>
-            <input value={item.grams} onChange={e=>setQuickMeal(q=>({...q,items:q.items.map((entry,i)=>i===idx?{...entry,grams:e.target.value}:entry)}))} placeholder="Grams" style={S.inp} type="number"/>
+            </FieldSelect>
+            <FieldInput value={item.grams} onChange={e=>setQuickMeal(q=>({...q,items:q.items.map((entry,i)=>i===idx?{...entry,grams:e.target.value}:entry)}))} placeholder="Grams" style={S.inp} type="number"/>
           </div>)}
           <div style={{display:'flex',gap:6,marginBottom:8}}>
-            <select value={quickMeal.slot} onChange={e=>setQuickMeal(q=>({...q,slot:e.target.value}))} style={{...S.inp,flex:1}}>
+            <FieldSelect value={quickMeal.slot} onChange={e=>setQuickMeal(q=>({...q,slot:e.target.value}))} style={{...S.inp,flex:1}}>
               {MEAL_SLOTS.map(slot=><option key={slot.id} value={slot.id}>{slot.label}</option>)}
-            </select>
+            </FieldSelect>
             <button style={{...S.btnGhost,flexShrink:0}} onClick={()=>setQuickMeal(q=>q.items.length>=4?q:{...q,items:[...q.items,{foodId:foods[0]?.id||'',grams:'100'}]})}>+ Food</button>
           </div>
           <div style={{display:'flex',gap:6,marginBottom:8}}>
@@ -5386,12 +5411,12 @@ function App(){
           <button style={S.btnSolid(C.amber)} onClick={logQuickMeal}>Log Meal</button>
         </div>}
           {mealMode==='recipe'&&selectedRecipe&&selectedRecipeNutrition&&<div>
-          <select value={recipeState.recipeId} onChange={e=>setRecipeState(r=>({...r,recipeId:e.target.value,grams:'',servings:'1'}))} style={{...S.inp,marginBottom:8}}>
+          <FieldSelect value={recipeState.recipeId} onChange={e=>setRecipeState(r=>({...r,recipeId:e.target.value,grams:'',servings:'1'}))} style={{...S.inp,marginBottom:8}}>
             {sortedRecipes.map(recipe=>{
               const coverage=pantryCoverage(recipe,pantryItems);
               return <option key={recipe.id} value={recipe.id}>{recipe.name}{coverage.ready?' · Pantry ready':''}</option>;
             })}
-          </select>
+          </FieldSelect>
           <div style={{background:C.surf,borderRadius:12,padding:'10px 12px',marginBottom:8}}>
             <div style={{...S.row,marginBottom:4}}>
               <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{selectedRecipe.name}</div>
@@ -5405,11 +5430,11 @@ function App(){
             </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-            <select value={recipeState.slot} onChange={e=>setRecipeState(r=>({...r,slot:e.target.value}))} style={S.inp}>
+            <FieldSelect value={recipeState.slot} onChange={e=>setRecipeState(r=>({...r,slot:e.target.value}))} style={S.inp}>
               {MEAL_SLOTS.map(slot=><option key={slot.id} value={slot.id}>{slot.label}</option>)}
-            </select>
-            <input value={recipeState.servings} onChange={e=>setRecipeState(r=>({...r,servings:e.target.value}))} placeholder="Servings" style={S.inp} type="number"/>
-            <input value={recipeState.grams} onChange={e=>setRecipeState(r=>({...r,grams:e.target.value}))} placeholder="Or grams" style={S.inp} type="number"/>
+            </FieldSelect>
+            <FieldInput value={recipeState.servings} onChange={e=>setRecipeState(r=>({...r,servings:e.target.value}))} placeholder="Servings" style={S.inp} type="number"/>
+            <FieldInput value={recipeState.grams} onChange={e=>setRecipeState(r=>({...r,grams:e.target.value}))} placeholder="Or grams" style={S.inp} type="number"/>
           </div>
           <div style={{display:'flex',gap:6,marginBottom:8}}>
             <button style={{...S.btnGhost,flex:1,fontSize:11}} onClick={()=>photoInputRef.current?.click()}>{mealPhoto?'Photo attached':'Attach Photo'}</button>
@@ -5510,7 +5535,7 @@ function App(){
           {pantryItems.slice(0,3).map(item=><span key={item.id} style={S.pill(C.sageL,C.sageDk)}>{item.name}</span>)}
         </div>}
       >
-        <input value={pantrySearch} onChange={e=>setPantrySearch(e.target.value)} placeholder="Search saved foods" style={{...S.inp,marginBottom:10}}/>
+        <FieldInput value={pantrySearch} onChange={e=>setPantrySearch(e.target.value)} placeholder="Search saved foods" style={{...S.inp,marginBottom:10}}/>
         {filteredPantryItems.length===0&&<div style={{fontSize:11,color:C.muted}}>No saved foods yet. Add one below or create a custom food.</div>}
         {filteredPantryItems.map(item=>{
           const pantryFood=buildPantryFood(item);
@@ -5537,7 +5562,7 @@ function App(){
         preview={<div style={{fontSize:10,color:C.muted}}>Add foods to Pantry or create foods you own.</div>}
         actions={<button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={addCustomFood}>+ Add Custom Food</button>}
       >
-        <input value={librarySearch} onChange={e=>setLibrarySearch(e.target.value)} placeholder="Search foods to add" style={{...S.inp,marginBottom:10}}/>
+        <FieldInput value={librarySearch} onChange={e=>setLibrarySearch(e.target.value)} placeholder="Search foods to add" style={{...S.inp,marginBottom:10}}/>
         <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Base foods are standardized and read-only. Add them to Pantry to personalize serving sizes and notes.</div>
         {filteredLibraryFoods.slice(0,20).map(food=>{
           const inPantry=pantryItems.some(item=>(item.baseFoodId||item.foodId)===food.id);
@@ -5580,27 +5605,27 @@ function App(){
         })}
         {showRecipeBuilder&&<div style={{background:C.surf,borderRadius:14,padding:'12px'}}>
           <span style={S.lbl}>Simple Recipe Template</span>
-          <input value={recipeDraft.name} onChange={e=>setRecipeDraft(r=>({...r,name:e.target.value}))} placeholder="Recipe name" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={recipeDraft.name} onChange={e=>setRecipeDraft(r=>({...r,name:e.target.value}))} placeholder="Recipe name" style={{...S.inp,marginBottom:8}}/>
           {recipeDraft.ingredients.map((item,idx)=><div key={idx} style={{display:'grid',gridTemplateColumns:'1.4fr 0.8fr',gap:8,marginBottom:8}}>
-            <select value={item.foodId} onChange={e=>setRecipeDraft(r=>({...r,ingredients:r.ingredients.map((entry,i)=>i===idx?{...entry,foodId:e.target.value}:entry)}))} style={S.inp}>
+            <FieldSelect value={item.foodId} onChange={e=>setRecipeDraft(r=>({...r,ingredients:r.ingredients.map((entry,i)=>i===idx?{...entry,foodId:e.target.value}:entry)}))} style={S.inp}>
               {foods.map(food=><option key={food.id} value={food.id}>{food.name}</option>)}
-            </select>
-            <input value={item.grams} onChange={e=>setRecipeDraft(r=>({...r,ingredients:r.ingredients.map((entry,i)=>i===idx?{...entry,grams:e.target.value}:entry)}))} placeholder="Grams" style={S.inp} type="number"/>
+            </FieldSelect>
+            <FieldInput value={item.grams} onChange={e=>setRecipeDraft(r=>({...r,ingredients:r.ingredients.map((entry,i)=>i===idx?{...entry,grams:e.target.value}:entry)}))} placeholder="Grams" style={S.inp} type="number"/>
           </div>)}
           <div style={{display:'flex',gap:6,marginBottom:8}}>
             <button style={{...S.btnGhost,flex:1}} onClick={()=>setRecipeDraft(r=>r.ingredients.length>=5?r:{...r,ingredients:[...r.ingredients,{foodId:foods[0]?.id||'',grams:'100'}]})}>+ Ingredient</button>
             <button style={{...S.btnGhost,flex:1}} onClick={()=>setRecipeDraft(r=>({...r,isMealPrep:!r.isMealPrep}))}>{recipeDraft.isMealPrep?'Meal Prep':'Quick Recipe'}</button>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
-            <input value={recipeDraft.prepTime} onChange={e=>setRecipeDraft(r=>({...r,prepTime:e.target.value}))} placeholder="Prep min" style={S.inp} type="number"/>
-            <input value={recipeDraft.servings} onChange={e=>setRecipeDraft(r=>({...r,servings:e.target.value}))} placeholder="Servings" style={S.inp} type="number"/>
-            <input value={recipeDraft.totalCookedWeight} onChange={e=>setRecipeDraft(r=>({...r,totalCookedWeight:e.target.value}))} placeholder="Cooked g" style={S.inp} type="number"/>
+            <FieldInput value={recipeDraft.prepTime} onChange={e=>setRecipeDraft(r=>({...r,prepTime:e.target.value}))} placeholder="Prep min" style={S.inp} type="number"/>
+            <FieldInput value={recipeDraft.servings} onChange={e=>setRecipeDraft(r=>({...r,servings:e.target.value}))} placeholder="Servings" style={S.inp} type="number"/>
+            <FieldInput value={recipeDraft.totalCookedWeight} onChange={e=>setRecipeDraft(r=>({...r,totalCookedWeight:e.target.value}))} placeholder="Cooked g" style={S.inp} type="number"/>
           </div>
-          <textarea value={recipeDraft.instructions} onChange={e=>setRecipeDraft(r=>({...r,instructions:e.target.value}))} placeholder="One step per line, up to five." rows="4" style={{...S.inp,marginBottom:8,resize:'none'}}/>
+          <FieldTextarea value={recipeDraft.instructions} onChange={e=>setRecipeDraft(r=>({...r,instructions:e.target.value}))} placeholder="One step per line, up to five." rows="4" style={{...S.inp,marginBottom:8,resize:'none'}}/>
           <button style={S.btnSolid(C.navy)} onClick={saveRecipeTemplate}>Save Recipe</button>
         </div>}
       </SectionCard>
-      <input ref={photoInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={readMealPhoto}/>
+      <FieldInput ref={photoInputRef} type="file" accept="image/*" style={{display:'none'}} onChange={readMealPhoto}/>
     </div>;
   }
 
@@ -5994,12 +6019,23 @@ function App(){
           </div>
         </div>}
         {showAddTask&&<div style={{...S.card,marginBottom:12}}>
-          <input value={newTask.text} onChange={e=>setNewTask(n=>({...n,text:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&addTask()} placeholder="Task name..." style={{...S.inp,marginBottom:8}} autoFocus/>
+          <FieldInput
+            value={newTask.text}
+            onChange={e=>setNewTask(n=>({...n,text:e.target.value}))}
+            onKeyDown={e=>{
+              if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing)return;
+              e.preventDefault();
+              addTask();
+            }}
+            placeholder="Task name..."
+            style={{...S.inp,marginBottom:8}}
+            autoFocus
+          />
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <input type="date" value={newTask.date||TODAY} onChange={e=>setNewTask(n=>({...n,date:e.target.value}))} style={S.inp}/>
-            <input type="time" value={newTask.scheduledTime||''} onChange={e=>setNewTask(n=>({...n,scheduledTime:e.target.value,bucket:e.target.value?'scheduled':n.bucket}))} placeholder="Time (optional)" style={S.inp}/>
+            <FieldInput type="date" value={newTask.date||TODAY} onChange={e=>setNewTask(n=>({...n,date:e.target.value}))} style={S.inp}/>
+            <FieldInput type="time" value={newTask.scheduledTime||''} onChange={e=>setNewTask(n=>({...n,scheduledTime:e.target.value,bucket:e.target.value?'scheduled':n.bucket}))} placeholder="Time (optional)" style={S.inp}/>
           </div>
-          <input value={newTask.contextTags||''} onChange={e=>setNewTask(n=>({...n,contextTags:e.target.value}))} placeholder="Context tags (comma separated)" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={newTask.contextTags||''} onChange={e=>setNewTask(n=>({...n,contextTags:e.target.value}))} placeholder="Context tags (comma separated)" style={{...S.inp,marginBottom:8}}/>
           <div style={{...S.row,marginBottom:8}}>
             <span style={{fontSize:11,color:C.muted}}>Priority:</span>
             <div style={{display:'flex',gap:4}}>
@@ -6243,7 +6279,7 @@ function App(){
       <div style={{...S.card,marginTop:4,padding:'10px 14px'}}>
         <div style={{fontSize:11,fontWeight:500,color:C.tx,marginBottom:8}}>Save this week as a pattern</div>
         <div style={{display:'flex',gap:6}}>
-          <input value={patternName} onChange={e=>setPatternName(e.target.value)} placeholder="Pattern name (e.g. Typical Mon)" style={{...S.inp,flex:1,padding:'7px 10px'}}/>
+          <FieldInput value={patternName} onChange={e=>setPatternName(e.target.value)} placeholder="Pattern name (e.g. Typical Mon)" style={{...S.inp,flex:1,padding:'7px 10px'}}/>
           <button style={S.btnSmall(C.navy)} onClick={()=>saveWeekPattern(selDay)}>Save</button>
         </div>
       </div>
@@ -6253,13 +6289,13 @@ function App(){
         <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'85vh',overflowY:'auto'}}>
           <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>Add Busy Block</div>
           <span style={S.lbl}>Title</span>
-          <input value={busyForm.title} onChange={e=>setBusyForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Team standup" style={{...S.inp,marginBottom:8}} autoFocus/>
+          <FieldInput value={busyForm.title} onChange={e=>setBusyForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Team standup" style={{...S.inp,marginBottom:8}} autoFocus/>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
             <div><span style={S.lbl}>Start time</span>
-              <input type="time" value={busyForm.startTime} onChange={e=>setBusyForm(f=>({...f,startTime:e.target.value}))} style={S.inp}/>
+              <FieldInput type="time" value={busyForm.startTime} onChange={e=>setBusyForm(f=>({...f,startTime:e.target.value}))} style={S.inp}/>
             </div>
             <div><span style={S.lbl}>End time</span>
-              <input type="time" value={busyForm.endTime} onChange={e=>setBusyForm(f=>({...f,endTime:e.target.value}))} style={S.inp}/>
+              <FieldInput type="time" value={busyForm.endTime} onChange={e=>setBusyForm(f=>({...f,endTime:e.target.value}))} style={S.inp}/>
             </div>
           </div>
           <span style={S.lbl}>Category</span>
@@ -6274,7 +6310,7 @@ function App(){
           </div>
           {!busyForm.recurring&&<>
             <span style={S.lbl}>Date</span>
-            <input type="date" value={busyForm.date} onChange={e=>setBusyForm(f=>({...f,date:e.target.value}))} style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="date" value={busyForm.date} onChange={e=>setBusyForm(f=>({...f,date:e.target.value}))} style={{...S.inp,marginBottom:8}}/>
           </>}
           {busyForm.recurring&&<>
             <span style={S.lbl}>Day of week</span>
@@ -6283,7 +6319,7 @@ function App(){
             </div>
           </>}
           <span style={S.lbl}>Notes (optional)</span>
-          <input value={busyForm.notes} onChange={e=>setBusyForm(f=>({...f,notes:e.target.value}))} placeholder="Optional context..." style={{...S.inp,marginBottom:14}}/>
+          <FieldInput value={busyForm.notes} onChange={e=>setBusyForm(f=>({...f,notes:e.target.value}))} placeholder="Optional context..." style={{...S.inp,marginBottom:14}}/>
           <div style={{display:'flex',gap:8}}>
             <button style={S.btnSolid(C.amber)} onClick={addBusyBlock}>Add Block</button>
             <button style={{...S.btnGhost,flex:1}} onClick={()=>setBusyModal(null)}>Cancel</button>
@@ -6295,13 +6331,13 @@ function App(){
       {calModal==='new'&&<div style={{position:'fixed',inset:0,background:C.scrim,zIndex:500,display:'flex',alignItems:'flex-end'}}>
         <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto'}}>
           <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>New Event — {selDay}</div>
-          <input value={calForm.title} onChange={e=>setCalForm(f=>({...f,title:e.target.value}))} placeholder="Event title" style={{...S.inp,marginBottom:8}} autoFocus/>
+          <FieldInput value={calForm.title} onChange={e=>setCalForm(f=>({...f,title:e.target.value}))} placeholder="Event title" style={{...S.inp,marginBottom:8}} autoFocus/>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
             <div><span style={S.lbl}>Start hour</span>
-              <input type="number" min={0} max={23} value={calForm.hour} onChange={e=>setCalForm(f=>({...f,hour:parseInt(e.target.value)||9}))} style={S.inp}/>
+              <FieldInput type="number" min={0} max={23} value={calForm.hour} onChange={e=>setCalForm(f=>({...f,hour:parseInt(e.target.value)||9}))} style={S.inp}/>
             </div>
             <div><span style={S.lbl}>Duration (min)</span>
-              <input type="number" min={15} step={15} value={calForm.dur} onChange={e=>setCalForm(f=>({...f,dur:parseInt(e.target.value)||60}))} style={S.inp}/>
+              <FieldInput type="number" min={15} step={15} value={calForm.dur} onChange={e=>setCalForm(f=>({...f,dur:parseInt(e.target.value)||60}))} style={S.inp}/>
             </div>
           </div>
           <div style={{display:'flex',gap:8}}>
@@ -6491,7 +6527,7 @@ function App(){
           {addBtn}
         </div>
         <div style={{...S.row,marginBottom:8,gap:6}}>
-          <input value={finSearch} onChange={e=>setFinSearch(e.target.value)} placeholder="Search transactions..." style={{...S.inp,flex:1,padding:'7px 10px'}}/>
+          <FieldInput value={finSearch} onChange={e=>setFinSearch(e.target.value)} placeholder="Search transactions..." style={{...S.inp,flex:1,padding:'7px 10px'}}/>
           <button style={S.btnSmall(C.navy)} onClick={()=>setShowImport(true)}>Import CSV</button>
         </div>
         {/* Category filter chips */}
@@ -6668,9 +6704,9 @@ function App(){
         <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
           Export CSV from Ally (Account → Transactions → Export) or Regions (Online Banking → Download). Paste the CSV text below or select the file.
         </div>
-        <input type="file" accept=".csv,.txt" ref={fileRef} onChange={handleFile} style={{display:'none'}}/>
+        <FieldInput type="file" accept=".csv,.txt" ref={fileRef} onChange={handleFile} style={{display:'none'}}/>
         <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8}} onClick={()=>fileRef.current?.click()}>Select CSV file</button>
-        <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder="Or paste CSV text here..." style={{...S.inp,height:120,resize:'none',fontSize:11,marginBottom:12}}/>
+        <FieldTextarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder="Or paste CSV text here..." style={{...S.inp,height:120,resize:'none',fontSize:11,marginBottom:12}}/>
         <div style={{display:'flex',gap:8}}>
           <button style={S.btnSolid(C.navy)} onClick={()=>importTransactions(csvText)}>Import</button>
           <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowImport(false)}>Cancel</button>
@@ -6701,26 +6737,26 @@ function App(){
 
         {/* Merchant */}
         <span style={S.lbl}>Merchant</span>
-        <input value={txForm.merchant} onChange={e=>setTxForm(f=>({...f,merchant:e.target.value}))} placeholder="e.g. Aldi" style={{...S.inp,marginBottom:8}} autoFocus/>
+        <FieldInput value={txForm.merchant} onChange={e=>setTxForm(f=>({...f,merchant:e.target.value}))} placeholder="e.g. Aldi" style={{...S.inp,marginBottom:8}} autoFocus/>
 
         {/* Amount + Date */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
           <div>
             <span style={S.lbl}>Amount ($)</span>
-            <input type="number" inputMode="decimal" value={txForm.amount} onChange={e=>setTxForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" style={S.inp}/>
+            <FieldInput type="number" inputMode="decimal" value={txForm.amount} onChange={e=>setTxForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" style={S.inp}/>
           </div>
           <div>
             <span style={S.lbl}>Date</span>
-            <input type="date" value={txForm.date} onChange={e=>setTxForm(f=>({...f,date:e.target.value}))} style={S.inp}/>
+            <FieldInput type="date" value={txForm.date} onChange={e=>setTxForm(f=>({...f,date:e.target.value}))} style={S.inp}/>
           </div>
         </div>
 
         {/* Account */}
         <span style={S.lbl}>Account</span>
         {activeFinancialAccounts.length>0
-          ?<select value={txForm.accountId} onChange={e=>setTxForm(f=>({...f,accountId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+          ?<FieldSelect value={txForm.accountId} onChange={e=>setTxForm(f=>({...f,accountId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
             {activeFinancialAccounts.map(a=><option key={a.id} value={a.id}>{formatAccountLabel(a)}</option>)}
-          </select>
+          </FieldSelect>
           :<div style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'12px',marginBottom:8}}>
             <div style={{fontSize:12,color:C.tx,marginBottom:8}}>Add an account before saving transactions.</div>
             <button style={S.btnSmall(C.navy)} onClick={()=>{setShowAddTx(false);openAddAccount();}}>+ Add account</button>
@@ -6738,7 +6774,7 @@ function App(){
         <Toggle label="Transfer between accounts (excluded from spend totals)" on={txForm.isTransfer} onToggle={()=>setTxForm(f=>({...f,isTransfer:!f.isTransfer,category:!f.isTransfer?'transfer':f.category}))} activeColor={C.amber}/>
 
         {/* Notes */}
-        <input value={txForm.notes} onChange={e=>setTxForm(f=>({...f,notes:e.target.value}))} placeholder="Note (optional)..." style={{...S.inp,marginBottom:16}}/>
+        <FieldInput value={txForm.notes} onChange={e=>setTxForm(f=>({...f,notes:e.target.value}))} placeholder="Note (optional)..." style={{...S.inp,marginBottom:16}}/>
 
         {/* Actions */}
         <div style={{display:'flex',gap:8}}>
@@ -6755,15 +6791,15 @@ function App(){
       <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'88vh',overflowY:'auto'}}>
         <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>{isEdit?'Edit Account':'Add Account'}</div>
         <span style={S.lbl}>Account Name</span>
-        <input value={accountForm.name} onChange={e=>setAccountForm(form=>({...form,name:e.target.value}))} placeholder="Checking" style={{...S.inp,marginBottom:8}} autoFocus/>
+        <FieldInput value={accountForm.name} onChange={e=>setAccountForm(form=>({...form,name:e.target.value}))} placeholder="Checking" style={{...S.inp,marginBottom:8}} autoFocus/>
         <span style={S.lbl}>Institution</span>
-        <input value={accountForm.institution} onChange={e=>setAccountForm(form=>({...form,institution:e.target.value}))} placeholder="Ally" style={{...S.inp,marginBottom:8}}/>
+        <FieldInput value={accountForm.institution} onChange={e=>setAccountForm(form=>({...form,institution:e.target.value}))} placeholder="Ally" style={{...S.inp,marginBottom:8}}/>
         <span style={S.lbl}>Type</span>
-        <select value={accountForm.type} onChange={e=>setAccountForm(form=>({...form,type:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+        <FieldSelect value={accountForm.type} onChange={e=>setAccountForm(form=>({...form,type:e.target.value}))} style={{...S.inp,marginBottom:8}}>
           {ACCOUNT_TYPE_OPTIONS.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
-        </select>
+        </FieldSelect>
         <span style={S.lbl}>Starting Balance (optional)</span>
-        <input type="number" inputMode="decimal" value={accountForm.startingBalance} onChange={e=>setAccountForm(form=>({...form,startingBalance:e.target.value}))} placeholder="0.00" style={{...S.inp,marginBottom:12}}/>
+        <FieldInput type="number" inputMode="decimal" value={accountForm.startingBalance} onChange={e=>setAccountForm(form=>({...form,startingBalance:e.target.value}))} placeholder="0.00" style={{...S.inp,marginBottom:12}}/>
         <div style={{...S.row,paddingBottom:10,borderBottom:`0.5px solid ${C.bd}`,marginBottom:16}}>
           <span style={{fontSize:13,color:C.tx}}>Active for new transactions</span>
           <button onClick={()=>setAccountForm(form=>({...form,isActive:!form.isActive}))} style={{width:44,height:26,borderRadius:13,background:accountForm.isActive?C.sage:C.surf,border:`1px solid ${C.bd}`,cursor:'pointer',position:'relative',flexShrink:0}}>
@@ -6856,8 +6892,8 @@ function App(){
                 {a.currentBalance!=null&&<div style={{fontSize:15,fontWeight:700,color:C.sage}}>{fmtMoney(a.currentBalance)}</div>}
               </div>
               <div style={{display:'flex',gap:6}}>
-                <input placeholder="Balance" type="number" defaultValue={a.currentBalance??''} style={{...S.inp,flex:1,padding:'6px 8px',fontSize:12}} onBlur={e=>updateAccountBalance(a.id,e.target.value,a.maskedNumber)}/>
-                <input placeholder="••••" style={{...S.inp,width:60,padding:'6px 8px',fontSize:12}} defaultValue={a.maskedNumber} onBlur={e=>updateAccountBalance(a.id,a.currentBalance,e.target.value)}/>
+                <FieldInput placeholder="Balance" type="number" defaultValue={a.currentBalance??''} style={{...S.inp,flex:1,padding:'6px 8px',fontSize:12}} onBlur={e=>updateAccountBalance(a.id,e.target.value,a.maskedNumber)}/>
+                <FieldInput placeholder="••••" style={{...S.inp,width:60,padding:'6px 8px',fontSize:12}} defaultValue={a.maskedNumber} onBlur={e=>updateAccountBalance(a.id,a.currentBalance,e.target.value)}/>
               </div>
             </div>)}
             <div style={{height:8}}/>
@@ -6912,7 +6948,7 @@ function App(){
               Enter your Google OAuth Client ID to enable Calendar + Tasks sync. Serve this file via python3 -m http.server 8080 and add http://localhost:8080 to your GCP authorized origins.
             </div>
             <span style={S.lbl}>Google Client ID</span>
-            <input value={clientIdInput} onChange={e=>setClientIdInput(e.target.value)} placeholder="123456789.apps.googleusercontent.com" style={{...S.inp,marginBottom:8}}/>
+            <FieldInput value={clientIdInput} onChange={e=>setClientIdInput(e.target.value)} placeholder="123456789.apps.googleusercontent.com" style={{...S.inp,marginBottom:8}}/>
             <button style={S.btnSolid(C.navy)} onClick={()=>{updateProfile({googleClientId:clientIdInput});GoogleAPI.init(clientIdInput);showNotif('Client ID saved','success');}}>Save Client ID</button>
             <div style={{height:8}}/>
             {googleConnected
@@ -6931,23 +6967,23 @@ function App(){
                   ))}
                 </div>
             <span style={S.lbl}>5K Time (minutes)</span>
-            <input type="number" value={athlete.fiveKTime||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:parseFloat(e.target.value)||null}}))} placeholder="e.g. 28" style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="number" value={athlete.fiveKTime||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:parseFloat(e.target.value)||null}}))} placeholder="e.g. 28" style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Back Squat 5RM (lbs)</span>
-            <input type="number" value={athlete.squat5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,squat5RM:parseInt(e.target.value)||null}}))} placeholder="e.g. 185" style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="number" value={athlete.squat5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,squat5RM:parseInt(e.target.value)||null}}))} placeholder="e.g. 185" style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Deadlift 5RM (lbs)</span>
-            <input type="number" value={athlete.deadlift5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,deadlift5RM:parseInt(e.target.value)||null}}))} placeholder="e.g. 225" style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="number" value={athlete.deadlift5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,deadlift5RM:parseInt(e.target.value)||null}}))} placeholder="e.g. 225" style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Race Date</span>
-            <input type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,raceDate:e.target.value}}))} style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,raceDate:e.target.value}}))} style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Plan Start Date</span>
-            <input type="date" value={startDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,startDate:e.target.value}}))} style={S.inp}/>
+            <FieldInput type="date" value={startDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,startDate:e.target.value}}))} style={S.inp}/>
           </div>}
           {sec.id==='goals'&&<div>
             <span style={S.lbl}>Daily Calorie Goal (kcal)</span>
-            <input type="number" value={calGoal} onChange={e=>updateProfile({calGoal:parseInt(e.target.value)||2000})} style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="number" value={calGoal} onChange={e=>updateProfile({calGoal:parseInt(e.target.value)||2000})} style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Daily Protein Goal (g)</span>
-            <input type="number" value={proGoal} onChange={e=>updateProfile({proGoal:parseInt(e.target.value)||140})} style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="number" value={proGoal} onChange={e=>updateProfile({proGoal:parseInt(e.target.value)||140})} style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Daily Water Goal (oz)</span>
-            <input type="number" value={hydGoal} onChange={e=>updateProfile({hydGoal:parseInt(e.target.value)||72})} style={S.inp}/>
+            <FieldInput type="number" value={hydGoal} onChange={e=>updateProfile({hydGoal:parseInt(e.target.value)||72})} style={S.inp}/>
           </div>}
           {sec.id==='meals'&&<div>
             <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Training day macros: {MACROS.protein}g protein · {MACROS.carbsTraining}g carbs · {MACROS.fat}g fat</div>
@@ -6955,9 +6991,9 @@ function App(){
           </div>}
           {sec.id==='notifications'&&<div>
             <span style={S.lbl}>Morning Reminder</span>
-            <input type="time" value={profile.notifications?.morningTime||'07:00'} onChange={e=>updateProfile(p=>({...p,notifications:{...p.notifications,morningTime:e.target.value}}))} style={{...S.inp,marginBottom:8}}/>
+            <FieldInput type="time" value={profile.notifications?.morningTime||'07:00'} onChange={e=>updateProfile(p=>({...p,notifications:{...p.notifications,morningTime:e.target.value}}))} style={{...S.inp,marginBottom:8}}/>
             <span style={S.lbl}>Evening Reminder</span>
-            <input type="time" value={profile.notifications?.eveningTime||'21:00'} onChange={e=>updateProfile(p=>({...p,notifications:{...p.notifications,eveningTime:e.target.value}}))} style={S.inp}/>
+            <FieldInput type="time" value={profile.notifications?.eveningTime||'21:00'} onChange={e=>updateProfile(p=>({...p,notifications:{...p.notifications,eveningTime:e.target.value}}))} style={S.inp}/>
           </div>}
           {sec.id==='security'&&<div>
             <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>All data is stored locally on this device. Nothing is transmitted except optional Google OAuth tokens (session-only) and Plaid connections when configured.</div>
@@ -6979,7 +7015,7 @@ function App(){
               <div style={{fontSize:12,color:C.tx}}>Financial data</div>
               <button style={{...S.btnSmall(C.amber)}} onClick={()=>{if(confirm('Delete all transaction data?'))updateProfile(p=>({...p,transactions:[],recurringExpenses:[],merchantRules:{}}));}}>Clear</button>
             </div>
-            <input ref={restoreFileRef} type="file" accept=".json,application/json" onChange={restoreAllData} style={{display:'none'}}/>
+            <FieldInput ref={restoreFileRef} type="file" accept=".json,application/json" onChange={restoreAllData} style={{display:'none'}}/>
             <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8,fontSize:12}} onClick={exportAllData}>Export all data (JSON)</button>
             <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8,fontSize:12}} onClick={()=>restoreFileRef.current?.click()}>Restore backup (JSON)</button>
             {(securitySettings?.dataExportHistory||[]).length>0&&<div style={{fontSize:10,color:C.muted,textAlign:'center'}}>Last export: {securitySettings.dataExportHistory.slice(-1)[0]}</div>}
@@ -7633,7 +7669,7 @@ function App(){
             <div style={{fontSize:13,color:C.muted,marginBottom:16}}>What are your top 3 for today?</div>
             {(top3[TODAY]||['','','']).map((v,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <div style={{width:22,height:22,borderRadius:'50%',background:C.sageL,color:C.sageDk,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</div>
-              <input defaultValue={v} onBlur={e=>{
+              <FieldInput defaultValue={v} onBlur={e=>{
                 const todayKey=getTodayKey();
                 const n=[...(top3[todayKey]||['','',''])];
                 n[i]=e.target.value;
@@ -7688,7 +7724,18 @@ function App(){
                 ?'Capture a note without routing it anywhere else.'
                 :'Try: “Log chicken 120g”, “Start today’s workout”, “Add 5K time 24:10”, or “Add grocery item bananas”.'}
             </div>
-            <input value={captureText} onChange={e=>setCaptureText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&routed&&confirmCapture(routed)} placeholder={captureMode==='note'?'Type your note...':'Type a command or capture...'} style={{...S.inp,marginBottom:10,fontSize:15}} autoFocus/>
+            <FieldInput
+              value={captureText}
+              onChange={e=>setCaptureText(e.target.value)}
+              onKeyDown={e=>{
+                if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing||!routed)return;
+                e.preventDefault();
+                confirmCapture(routed);
+              }}
+              placeholder={captureMode==='note'?'Type your note...':'Type a command or capture...'}
+              style={{...S.inp,marginBottom:10,fontSize:15}}
+              autoFocus
+            />
             {routed&&<div style={{...S.card,padding:'10px 12px',marginBottom:12,background:C.surf}}>
               <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Routing as</div>
               <div style={{display:'flex',gap:6,alignItems:'center'}}>
