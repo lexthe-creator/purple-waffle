@@ -579,6 +579,13 @@ function getTrainingWeekAnchorDate(dateLike,trainingWeekStart='Mon'){
   return anchored;
 }
 
+function getMondayWeekStartDate(dateLike){
+  const anchored=dateLike instanceof Date?new Date(dateLike.getTime()):parseDateKey(normalizeDateKey(dateLike));
+  anchored.setHours(0,0,0,0);
+  anchored.setDate(anchored.getDate()-((anchored.getDay()+6)%7));
+  return anchored;
+}
+
 function getTrainingCycleState(planStartDate=DEFAULT_START,raceDate=DEFAULT_RACE,referenceDate=getCurrentDate().today){
   const resolvedStart=normalizeDateKey(planStartDate,DEFAULT_START)||DEFAULT_START;
   const resolvedRace=normalizeDateKey(raceDate,DEFAULT_RACE)||DEFAULT_RACE;
@@ -2599,7 +2606,7 @@ const MAINTENANCE_TASKS=[
   {id:'foundation',label:'Foundation drainage',frequency:'annual',dueMonth:11,dueDay:1,leadDays:30,category:'Yearly'},
 ];
 
-function weekKey(date){const d=new Date(date);d.setDate(d.getDate()-((d.getDay()+6)%7));return formatDateKey(d);}
+function weekKey(date){return formatDateKey(getMondayWeekStartDate(date));}
 
 const BUSY_CATEGORIES=[
   {id:'meeting',   label:'Meeting',         clr:C.navy},
@@ -3005,13 +3012,13 @@ function ConnectGoogle({onConnect}){
 function NotificationBanner({message,type='info',detail,actionLabel,onAction,onDismiss}){
   if(!message)return null;
   const bg=type==='error'?C.red:type==='success'?C.sage:C.navy;
-  return <div style={{position:'fixed',top:60,left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:398,background:bg,color:C.white,borderRadius:12,padding:'12px 16px',zIndex:999,display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,fontSize:13,fontWeight:500}}>
+  return <div role="status" aria-live="polite" aria-atomic="true" style={{position:'fixed',top:60,left:'50%',transform:'translateX(-50%)',width:'calc(100% - 32px)',maxWidth:398,background:bg,color:C.white,borderRadius:12,padding:'12px 16px',zIndex:999,display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,fontSize:13,fontWeight:500}}>
     <div style={{minWidth:0,flex:1}}>
       <div>{message}</div>
       {detail&&<div style={{fontSize:11,opacity:0.88,marginTop:4,fontWeight:400}}>{detail}</div>}
-      {actionLabel&&onAction&&<button onClick={onAction} style={{marginTop:8,background:C.whiteSoft,border:`1px solid ${C.whiteSoftBorder}`,color:C.white,fontSize:11,cursor:'pointer',padding:'5px 9px',borderRadius:8}}> {actionLabel} </button>}
+      {actionLabel&&onAction&&<button type="button" onClick={onAction} style={{marginTop:8,background:C.whiteSoft,border:`1px solid ${C.whiteSoftBorder}`,color:C.white,fontSize:11,cursor:'pointer',padding:'5px 9px',borderRadius:8}}> {actionLabel} </button>}
     </div>
-    <button onClick={onDismiss} style={{background:'none',border:'none',color:C.white,fontSize:16,cursor:'pointer',padding:0,flexShrink:0}}>x</button>
+    <button type="button" onClick={onDismiss} style={{background:'none',border:'none',color:C.white,fontSize:16,cursor:'pointer',padding:0,flexShrink:0}}>x</button>
   </div>;
 }
 function ExerciseDemoModal({exercise,onClose}){
@@ -3579,6 +3586,7 @@ function App(){
   const phCode=trainingCycle.phaseCode;
   const paceProfile=computePaces(athlete.fiveKTime);
   const weekMon=getTrainingWeekAnchorDate(NOW,athlete?.trainingWeekStart||'Mon');
+  const calendarWeekMon=getMondayWeekStartDate(NOW);
   const selectedDate=normalizeDateKey(calendarFocusDay,TODAY);
   const selectedDateRelation=compareDateKeys(selectedDate,TODAY);
   const selectedDateObj=parseDateKey(selectedDate)||parseDateKey(TODAY);
@@ -4341,6 +4349,7 @@ function App(){
   }
 
   function HomeScreenV2(){
+    const weekAheadPanelId=useId();
     const [weekAheadOpen,setWeekAheadOpen]=useState(false);
     const agendaTab='today';
     const activeDate=selectedDate;
@@ -4363,7 +4372,7 @@ function App(){
     const nextPlannedMeal=todayMealPlanEntries.find(entry=>entry.status!=='logged')||null;
     const nextMealTemplate=nextPlannedMeal?homeMealTemplates.find(template=>template.id===nextPlannedMeal.templateId):null;
     const taskBuckets=getTaskBuckets(taskHistory,activeDate);
-    const nextWeekMon=new Date(weekMon);nextWeekMon.setDate(weekMon.getDate()+7);
+    const nextWeekMon=new Date(calendarWeekMon);nextWeekMon.setDate(calendarWeekMon.getDate()+7);
     const nextWeekDates=Array.from({length:7},(_,i)=>{const d=new Date(nextWeekMon);d.setDate(nextWeekMon.getDate()+i);return formatDateKey(d);});
     const overdueTasks=taskBuckets.overdue;
     const carryoverDismissed=!!(dailyLogs?.[activeDate]?.carryoverDismissed);
@@ -4415,16 +4424,6 @@ function App(){
     const workoutDuration=selectedTodayWorkout?.dur||selectedTodayWorkout?.duration||restDayRecovery.dur||'25 min';
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
-    useEffect(()=>{
-      if(dailyExecutionEntry.mode!=='planning'||dailyExecutionEntry.priorities.length===0)return;
-      if(!dailyExecutionEntry.priorities.every(task=>task.completed))return;
-      updateDailyExecution(activeDate,entry=>({
-        ...entry,
-        mode:'execution',
-        agenda:entry.priorities.map(task=>({...task})),
-      }));
-    },[activeDate,dailyExecutionEntry]);
-
     function setDailyExecutionMode(nextMode){
       if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>task.text.trim())){
         showNotif('Add at least one priority before moving to execution.','warn');
@@ -4434,7 +4433,7 @@ function App(){
         ...entry,
         mode:nextMode,
         agenda:nextMode==='execution'
-          ?(entry.agenda.length>0?entry.agenda:entry.priorities.map(task=>({...task})))
+          ?entry.priorities.map(task=>({...task}))
           :entry.agenda,
       }));
       showNotif(nextMode==='execution'?'Execution mode enabled':'Returned to planning mode','success');
@@ -4451,11 +4450,15 @@ function App(){
     }
 
     function addPriorityTask(){
-      updateDailyExecution(activeDate,entry=>({
-        ...entry,
-        mode:entry.mode==='execution'?entry.mode:'planning',
-        priorities:[...entry.priorities,createDailyExecutionTask('',{date:activeDate})],
-      }));
+      updateDailyExecution(activeDate,entry=>{
+        const nextTask=createDailyExecutionTask('',{date:activeDate});
+        return{
+          ...entry,
+          mode:entry.mode==='execution'?entry.mode:'planning',
+          priorities:[...entry.priorities,nextTask],
+          agenda:entry.mode==='execution'?[...entry.agenda,nextTask]:entry.agenda,
+        };
+      });
     }
 
     function removePriorityTask(taskId){
@@ -4821,7 +4824,12 @@ function App(){
         </div>
       </div>
 
-      <button style={{...S.card,width:'100%',textAlign:'left',cursor:'pointer',background:C.surf}} onClick={()=>openTab('training',{trainSection:'plan'})}>
+      <button
+        type="button"
+        style={{...S.card,width:'100%',textAlign:'left',cursor:'pointer',background:C.surf}}
+        aria-label={`Open weekly preview for the ${PROGRAM_LIBRARY_META[fitnessProgram]?.title||'training plan'}`}
+        onClick={()=>openTab('training',{trainSection:'plan'})}
+      >
         <div style={{...S.row,marginBottom:10,alignItems:'flex-start'}}>
           <div>
             <div style={S.lbl}>Weekly Preview</div>
@@ -4840,13 +4848,19 @@ function App(){
       </button>
 
       <div style={S.card}>
-        <button style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}} onClick={()=>setWeekAheadOpen(o=>!o)}>
+        <button
+          type="button"
+          style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}}
+          aria-expanded={weekAheadOpen}
+          aria-controls={weekAheadPanelId}
+          onClick={()=>setWeekAheadOpen(o=>!o)}
+        >
           <div style={S.row}>
             <div><span style={S.lbl}>Week Ahead</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>{formatDateRange(nextWeekDates[0],nextWeekDates[6],'monthDayShort')}</div></div>
             <span style={{fontSize:13,color:C.muted}}>{weekAheadOpen?'▲':'▼'}</span>
           </div>
         </button>
-        {weekAheadOpen&&<div style={{marginTop:12,display:'grid',gap:8}}>
+        {weekAheadOpen&&<div id={weekAheadPanelId} style={{marginTop:12,display:'grid',gap:8}}>
           {nextWeekDates.map(dateStr=>{
             const dayLabel=formatDate(dateStr,'primary');
             const scheduledCount=taskBuckets.scheduled.filter(t=>t.date===dateStr).length;
@@ -4855,7 +4869,7 @@ function App(){
                 <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{dayLabel}</div>
                 <div style={{fontSize:10,color:C.muted}}>{scheduledCount>0?`${scheduledCount} task${scheduledCount!==1?'s':''}`:'Nothing scheduled'}</div>
               </div>
-              <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>openComposerForDate(dateStr)}>+ task</button>
+              <button type="button" style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>openComposerForDate(dateStr)}>+ task</button>
             </div>;
           })}
         </div>}
@@ -8360,7 +8374,7 @@ function App(){
                   <div style={{marginBottom:12}}>
                     <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Primary Program</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {['hyrox','strength','pilates','recovery'].map(id=><button key={id} onClick={()=>setPrimaryProgram(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${primaryProgram===id?C.sage:C.bd}`,background:primaryProgram===id?C.sageL:'transparent',color:primaryProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:primaryProgram===id?600:400}}>{FITNESS_PROGRAM_OPTIONS.find(option=>option.id===id)?.label||id}</button>)}
+                      {['hyrox','running','strength','pilates','recovery'].map(id=><button key={id} type="button" onClick={()=>setPrimaryProgram(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${primaryProgram===id?C.sage:C.bd}`,background:primaryProgram===id?C.sageL:'transparent',color:primaryProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:primaryProgram===id?600:400}}>{FITNESS_PROGRAM_OPTIONS.find(option=>option.id===id)?.label||id}</button>)}
                     </div>
                   </div>
                   <div>
@@ -9121,6 +9135,7 @@ function App(){
 
   return (
     <div style={S.wrap}>
+      <a href="#app-main" className="skip-link">Skip to content</a>
       <NotificationBanner
         message={notif}
         type={notifType}
@@ -9163,11 +9178,11 @@ function App(){
           </button>
         </div>
       </div>
-      <div ref={contentRef} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
+      <main id="app-main" ref={contentRef} tabIndex={-1} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
         <ScreenErrorBoundary resetKey={tab} fallback={screenFallback}>
           <ActiveScreen focusDay={calendarFocusDay}/>
         </ScreenErrorBoundary>
-      </div>
+      </main>
       <nav aria-label="Primary" style={S.nav}>
         {NAV_ITEMS.map(({id,label})=>(
           <button
