@@ -2291,9 +2291,10 @@ const BUSY_PRESETS=[
   {label:'Afternoon block',  startTime:'13:00',endTime:'17:00',category:'meeting'},
   {label:'All-day hold',     startTime:'08:00',endTime:'18:00',category:'unavailable'},
 ];
-function timeToMins(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
+function timeToMins(t){if(typeof t!=='string'||!t.includes(':'))return 0;const[h,m]=t.split(':').map(Number);return(h||0)*60+(m||0);}
 function minsToTime(m){return`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;}
 function fmtTimeRange(s,e){
+  if(typeof s!=='string'||typeof e!=='string')return'–';
   const fmt=t=>{const[h,m]=t.split(':').map(Number);const ampm=h>=12?'pm':'am';const hh=h>12?h-12:h||12;return m?`${hh}:${String(m).padStart(2,'0')}${ampm}`:`${hh}${ampm}`;};
   return`${fmt(s)} – ${fmt(e)}`;
 }
@@ -3540,7 +3541,7 @@ function App(){
   }
   function getBusyForDay(dateStr){
     const d=new Date(dateStr+'T12:00:00');const dow=d.getDay();
-    return (busyBlocks||[]).filter(b=>b.recurring?b.dow===dow:b.date===dateStr)
+    return (busyBlocks||[]).filter(b=>(b.recurring?b.dow===dow:b.date===dateStr)&&b.startTime&&b.endTime)
       .sort((a,b)=>timeToMins(a.startTime)-timeToMins(b.startTime));
   }
 
