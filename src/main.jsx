@@ -55,12 +55,12 @@ const STORAGE_KEYS={
 };
 const DATE_KEY_RE=/^\d{4}-\d{2}-\d{2}$/;
 const APP_TAB_IDS=['home','calendar','tasks','training','meals','finance','habits','health','maintenance','insights','settings','more'];
-const TASK_TAB_IDS=['inbox','scheduled','next','done'];
+const TASK_TAB_IDS=['inbox','scheduled','next','done','templates'];
 const FINANCE_VIEW_IDS=['overview','transactions','categories','recurring','trends'];
 const IMPORT_ACCOUNT_AUTO='__auto__';
 const TRAIN_SECTION_IDS=['today','plan','library','history'];
 const SETTINGS_SECTION_IDS=['app','workcal','finance','google','fitness','goals','meals','notifications','security'];
-const HEALTH_TAB_IDS=['recovery','wellness','body','care'];
+const HEALTH_TAB_IDS=['recovery','wellness','body','care','library'];
 const LIFESTYLE_TAB_IDS=['habits','lifestyle','routine'];
 const storage={
   get:async(k)=>{try{const v=localStorage.getItem(k);return v?{value:v}:null;}catch{return null;}},
@@ -193,6 +193,8 @@ function createNewTaskDraft(today,overrides={}){
     bucket:'next',
     contextTags:'',
     scheduledTime:'',
+    endTime:'',
+    energyLevel:null,
     ...overrides,
   };
 }
@@ -446,6 +448,13 @@ const PROGRAM_LIBRARY_META={
   strength:{title:'Strength building',detail:'Progressive upper, lower, and full-body sessions with optional fifth-day accessories.'},
   pilates:{title:'Pilates focus',detail:'Core control, posture, glute strength, and low-impact mobility in a structured weekly cadence.'},
   recovery:{title:'Recovery reset',detail:'Low-intensity mobility, zone-2 cardio, breathwork, and nervous-system downshifting across the week.'},
+};
+const PROGRAM_DETAIL_CARDS={
+  hyrox:{sessions:['HYROX station simulation','Strength + carries','Tempo or long run','Full sim or race prep'],duration:'45–70 min',structure:'4 days / week · A/B rotation',note:'Best for intermediate fitness training toward a HYROX event.'},
+  running:{sessions:['Easy aerobic run','Interval or hill session','Tempo run','Long run'],duration:'35–75 min',structure:'4–5 days / week · A/B rotation',note:'Best for building run performance with structured weekly distribution.'},
+  strength:{sessions:['Upper body press + pull','Lower body squat + hinge','Full-body hypertrophy','Accessories + carries'],duration:'40–65 min',structure:'4–5 days / week · A/B rotation',note:'Best for gym-access training with a progressive strength focus.'},
+  pilates:{sessions:['Core control','Lower body stability','Posture + upper body','Full-body flow'],duration:'30–45 min',structure:'4–5 days / week · A/B rotation',note:'Low-impact and sustainable. Best for core, posture, and recovery-phase training.'},
+  recovery:{sessions:['Active recovery cardio','Mobility reset','Recovery Pilates','Nervous system reset'],duration:'20–35 min',structure:'4–5 days / week · A/B rotation',note:'Minimal-stress structure. Best during high life-load or injury prevention periods.'},
 };
 
 const PROGRAM_WORKOUT_LIBRARY={
@@ -1237,6 +1246,17 @@ const RECOVERY_WORKOUT_LIBRARY=[
     ex:[{n:'Light walk or bike',s:1,r:'20 min',note:'Stay fully conversational.',exerciseType:'cardio'},{n:'Easy incline treadmill',s:1,r:'10 min',note:'Optional second block if energy improves.',exerciseType:'cardio'}]},
 ];
 
+const RECOVERY_LIBRARY_SESSIONS=[
+  {...RECOVERY_WORKOUT_LIBRARY[0],libraryCategory:'Pilates'},
+  {...PROGRAM_WORKOUT_LIBRARY.pilates['4-day'].A.mon,id:'lib_pilates_core',libraryId:'lib_pilates_core',libraryCategory:'Pilates'},
+  {...PROGRAM_WORKOUT_LIBRARY.pilates['4-day'].A.sat,id:'lib_pilates_flow',libraryId:'lib_pilates_flow',libraryCategory:'Pilates'},
+  {...RECOVERY_WORKOUT_LIBRARY[1],libraryCategory:'Mobility'},
+  {...PROGRAM_WORKOUT_LIBRARY.recovery['4-day'].B.wed,id:'lib_joint_care',libraryId:'lib_joint_care',libraryCategory:'Mobility'},
+  {...RECOVERY_WORKOUT_LIBRARY[2],libraryCategory:'Recovery'},
+  {...PROGRAM_WORKOUT_LIBRARY.recovery['4-day'].A.mon,id:'lib_active_rec',libraryId:'lib_active_rec',libraryCategory:'Recovery'},
+  {...PROGRAM_WORKOUT_LIBRARY.recovery['4-day'].A.sat,id:'lib_ns_reset',libraryId:'lib_ns_reset',libraryCategory:'Stretching'},
+];
+
 function deriveWorkoutCategory(sess){
   if(!sess)return'mobility';
   if(sess.type==='run'||(sess.name||'').toLowerCase().includes('run'))return'running';
@@ -1760,6 +1780,7 @@ const DEFAULT_OPS={
   taskHistory:[],
   taskTemplates:[],
   choreHistory:{},
+  lifestyleItems:null,
   maintenanceHistory:{},
   calendarCache:{},
   busyBlocks:[],
@@ -2122,6 +2143,8 @@ function normalizeTaskEntry(task,todayStr=getCurrentDate().today){
     status,
     contextTags:Array.isArray(task?.contextTags)?task.contextTags:[],
     scheduledTime:task?.scheduledTime||'',
+    endTime:task?.endTime||'',
+    energyLevel:task?.energyLevel||null,
     done,
     parentId:task?.parentId||null,
   };
@@ -2659,6 +2682,18 @@ function TrafficLight({pct}){
   const clr=pct>=90?C.sage:pct>=60?C.amber:C.red;
   return <div style={{width:10,height:10,borderRadius:'50%',background:clr,display:'inline-block'}}/>;
 }
+function CollapsibleCard({title,summary,open,onToggle,accent,children,cardStyle={}}){
+  return <div style={{background:C.card,borderRadius:16,padding:'14px 16px',border:`1px solid ${accent||C.bd}`,marginBottom:10,...cardStyle}}>
+    <div onClick={onToggle} style={{display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer',userSelect:'none',WebkitUserSelect:'none'}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:14,fontWeight:600,color:C.tx,lineHeight:1.3}}>{title}</div>
+        {!open&&summary&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{summary}</div>}
+      </div>
+      <div style={{fontSize:16,color:C.muted,flexShrink:0,marginLeft:8,fontWeight:400,lineHeight:1}}>{open?'▾':'▸'}</div>
+    </div>
+    {open&&<div style={{marginTop:10}}>{children}</div>}
+  </div>;
+}
 function ConnectGoogle({onConnect}){
   return <div style={{...S.card,borderColor:C.navy,textAlign:'center'}}>
     <div style={{fontSize:13,color:C.tx,marginBottom:8,fontWeight:500}}>Connect Google to sync</div>
@@ -2791,9 +2826,11 @@ function App(){
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
   const [morningStep,setMorningStep]=useState(1);
   const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
+  const [showProgramPicker,setShowProgramPicker]=useState(false);
   const [energyScore,setEnergyScore]=useState(5);
   const [sleepHours,setSleepHours]=useState(7.5);
   const [tier2Open,setTier2Open]=useState({energy:true,finance:false,habits:false});
+  const [homeCardsOpen,setHomeCardsOpen]=useState({habits:false,alerts:false,weekly:false});
   const [showInsights,setShowInsights]=useState(false);
   const [showReview,setShowReview]=useState(false);
   const [expandedTasks,setExpandedTasks]=useState({});
@@ -2809,12 +2846,15 @@ function App(){
   const [notifType,setNotifType]=useState('info');
   const [notifDetail,setNotifDetail]=useState('');
   const [notifAction,setNotifAction]=useState(null);
+  const [focusTaskId,setFocusTaskId]=useState(null);
+  const [focusTmrSec,setFocusTmrSec]=useState(null);
+  const [focusTmrRunning,setFocusTmrRunning]=useState(false);
   const [googleConnected,setGoogleConnected]=useState(false);
   const contentRef=useRef(null);
   const restRef=useRef(null),recRef=useRef(null),saveRef=useRef(null);
   const latestProfileRef=useRef(DEFAULT_OPS);
   const prevTodayRef=useRef(TODAY);
-  const {trainingPlan,athleteProfile,accounts,categories,meals,exercises,workouts,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,tasks,taskTemplates,choreHistory,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
+  const {trainingPlan,athleteProfile,accounts,categories,meals,exercises,workouts,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,tasks,taskTemplates,choreHistory,lifestyleItems,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
   const financialAccounts=accounts;
   const nutr=meals;
   const workoutHistory=workouts;
@@ -3156,6 +3196,12 @@ function App(){
     restRef.current=setTimeout(()=>setRestTmr(t=>t-1),1000);
     return()=>clearTimeout(restRef.current);
   },[restTmr]);
+  useEffect(()=>{
+    if(!focusTmrRunning||focusTmrSec===null)return;
+    if(focusTmrSec<=0){setFocusTmrRunning(false);showNotif('Timer complete!','success');return;}
+    const id=setTimeout(()=>setFocusTmrSec(s=>s-1),1000);
+    return()=>clearTimeout(id);
+  },[focusTmrRunning,focusTmrSec]);
 
   useEffect(()=>{
     if(!recOn||!recSess)return;
@@ -3311,6 +3357,11 @@ function App(){
     );
     updateProfile({lastMaintenancePromptDate:TODAY});
   },[loaded,maintenanceAttentionItems.length,lastMaintenancePromptDate,TODAY,updateProfile]);
+
+  useEffect(()=>{
+    if(!loaded||lifestyleItems!==null)return;
+    updateProfile(p=>({...p,lifestyleItems:DAILY_CHORES.map((c,i)=>({id:c.id,title:c.label,notes:'',order:i,archived:false}))}));
+  },[loaded,lifestyleItems,updateProfile]);
 
   useEffect(()=>{
     const validIds=new Set(activeFinancialAccounts.map(account=>account.id));
@@ -3875,6 +3926,12 @@ function App(){
     const nextPlannedMeal=todayMealPlanEntries.find(entry=>entry.status!=='logged')||null;
     const nextMealTemplate=nextPlannedMeal?homeMealTemplates.find(template=>template.id===nextPlannedMeal.templateId):null;
     const taskBuckets=getTaskBuckets(taskHistory,TODAY);
+    const nextWeekMon=new Date(weekMon);nextWeekMon.setDate(weekMon.getDate()+7);
+    const nextWeekDates=Array.from({length:7},(_,i)=>{const d=new Date(nextWeekMon);d.setDate(nextWeekMon.getDate()+i);return formatDateKey(d);});
+    const [weekAheadOpen,setWeekAheadOpen]=useState(false);
+    const overdueTasks=taskBuckets.overdue;
+    const carryoverDismissed=!!(dailyLogs?.[TODAY]?.carryoverDismissed);
+    const showCarryoverPrompt=overdueTasks.length>0&&!carryoverDismissed;
     const nextTaskItem=taskBuckets.next.slice().sort((a,b)=>{
       if(!!a.scheduledTime!==!!b.scheduledTime)return a.scheduledTime?-1:1;
       if((a.scheduledTime||'')!==(b.scheduledTime||''))return(a.scheduledTime||'').localeCompare(b.scheduledTime||'');
@@ -3885,7 +3942,8 @@ function App(){
     const dueHabits=(habits||[]).filter(h=>habitDueToday(h,dailyLogs));
     const completedHabitIds=dailyLogs?.[TODAY]?.habitsCompleted||[];
     const completedHabits=dueHabits.filter(h=>completedHabitIds.includes(h.id)).length;
-    const dailyDone=DAILY_CHORES.filter(c=>todayChores[c.id]).length;
+    const activeLifestyleItems=(lifestyleItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.order||0)-(b.order||0));
+    const dailyDone=activeLifestyleItems.filter(i=>!!todayChores[i.id]).length;
 
     const energyFive=Math.max(1,Math.min(5,Math.round((recoveryToday.energy||6)/2)));
     const sleepHoursToday=recoveryToday.sleep||0;
@@ -3943,6 +4001,23 @@ function App(){
         ?`${missingMealSlots[0].slot.label} still open`
         :'Meals logged';
 
+    function rollAllOverdue(){
+      updateProfile(p=>({
+        ...p,
+        taskHistory:p.taskHistory.map(t=>(!t.done&&t.status==='active'&&t.date<TODAY)?{...t,date:TODAY,bucket:'next',rolledFrom:t.rolledFrom||t.id,updatedAt:new Date().toISOString()}:t),
+        dailyLogs:{...p.dailyLogs,[TODAY]:{...(p.dailyLogs[TODAY]||{}),carryoverDismissed:true}},
+      }));
+      showNotif(`${overdueTasks.length} task${overdueTasks.length!==1?'s':''} rolled to today`,'success');
+    }
+    function dismissCarryover(){
+      updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[TODAY]:{...(p.dailyLogs[TODAY]||{}),carryoverDismissed:true}}}));
+    }
+    function openComposerForDate(dateStr){
+      setNewTask(createNewTaskDraft(TODAY,{date:dateStr,bucket:'scheduled'}));
+      setTaskDraftText('');
+      setShowAddTask(true);
+      openTab('tasks',{taskTab:'scheduled'});
+    }
     function getWorkoutPaceLabel(sess){
       if(!sess||sess.type!=='run'||!paceProfile)return null;
       const nm=(sess.name||'').toLowerCase();
@@ -4101,6 +4176,17 @@ function App(){
     const hasAgendaContent=visibleScheduledItems.length>0||visibleSuggestionItems.length>0;
 
     return <div style={S.body}>
+      {showCarryoverPrompt&&<div style={{...S.card,borderColor:C.amber,background:C.amberL,marginBottom:0}}>
+        <div style={{...S.row,marginBottom:6}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.amberDk}}>{overdueTasks.length} unfinished task{overdueTasks.length!==1?'s':''} from earlier</div>
+          <button style={{background:'none',border:'none',color:C.amberDk,cursor:'pointer',fontSize:14,padding:0,lineHeight:1}} onClick={dismissCarryover}>×</button>
+        </div>
+        <div style={{fontSize:11,color:C.amberDk,marginBottom:8}}>Roll all to today, or review them in Tasks.</div>
+        <div style={{display:'flex',gap:8}}>
+          <button style={{...S.btnGhost,flex:1,fontSize:11,borderColor:C.amber,color:C.amberDk}} onClick={rollAllOverdue}>Roll all to today</button>
+          <button style={{...S.btnGhost,flex:1,fontSize:11}} onClick={()=>{dismissCarryover();openTab('tasks',{taskTab:'next'});}}>Review</button>
+        </div>
+      </div>}
       <div style={{...S.card,paddingBottom:14}}>
         <div style={{...S.row,alignItems:'flex-start',marginBottom:10}}>
           <div>
@@ -4243,6 +4329,28 @@ function App(){
         </div>
       </div>
 
+      <div style={S.card}>
+        <button style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}} onClick={()=>setWeekAheadOpen(o=>!o)}>
+          <div style={S.row}>
+            <div><span style={S.lbl}>Week Ahead</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>{nextWeekDates[0]} – {nextWeekDates[6]}</div></div>
+            <span style={{fontSize:13,color:C.muted}}>{weekAheadOpen?'▲':'▼'}</span>
+          </div>
+        </button>
+        {weekAheadOpen&&<div style={{marginTop:12,display:'grid',gap:8}}>
+          {nextWeekDates.map(dateStr=>{
+            const dayLabel=new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            const scheduledCount=taskBuckets.scheduled.filter(t=>t.date===dateStr).length;
+            return <div key={dateStr} style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{dayLabel}</div>
+                <div style={{fontSize:10,color:C.muted}}>{scheduledCount>0?`${scheduledCount} task${scheduledCount!==1?'s':''}`:'Nothing scheduled'}</div>
+              </div>
+              <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>openComposerForDate(dateStr)}>+ task</button>
+            </div>;
+          })}
+        </div>}
+      </div>
+
       {annualHoldingItems.length>0&&<div style={{...S.card,padding:'16px 16px 12px'}}>
         <div style={{...S.row,marginBottom:10}}>
           <div>
@@ -4357,13 +4465,14 @@ function App(){
         </div>
       </div>
 
-      <div style={S.card}>
+      <CollapsibleCard
+        title="Habits Today"
+        summary={`${completedHabits}/${dueHabits.length||0} habits · ${dailyDone}/${activeLifestyleItems.length} routines`}
+        open={homeCardsOpen.habits}
+        onToggle={()=>setHomeCardsOpen(s=>({...s,habits:!s.habits}))}>
         <div style={{...S.row,marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Habits Today</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{completedHabits}/{dueHabits.length||0} habits · {dailyDone}/{DAILY_CHORES.length} routines</div>
-          </div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('habits')}>Open Lifestyle</button>
+          <div style={{fontSize:11,color:C.muted}}>{completedHabits}/{dueHabits.length||0} habits · {dailyDone}/{activeLifestyleItems.length} routines</div>
+          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={e=>{e.stopPropagation();openTab('habits');}}>Open Lifestyle</button>
         </div>
         {dueHabits.length===0
           ?<div style={{fontSize:12,color:C.muted}}>No habits due today.</div>
@@ -4379,14 +4488,16 @@ function App(){
               </div>;
             })}
           </div>}
-      </div>
+      </CollapsibleCard>
 
-      {alertsVisible&&<div style={{...S.card,borderColor:C.amber}}>
+      {alertsVisible&&<CollapsibleCard
+        title="Alerts"
+        summary={[urgentMaintenanceItems.length>0&&`${urgentMaintenanceItems.length} maintenance`,pendingInbox.length>0&&`${pendingInbox.length} inbox`].filter(Boolean).join(' · ')||'No active alerts'}
+        open={homeCardsOpen.alerts}
+        onToggle={()=>setHomeCardsOpen(s=>({...s,alerts:!s.alerts}))}
+        accent={C.amber}>
         <div style={{...S.row,marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Alerts</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{urgentMaintenanceItems.length>0?`${urgentMaintenanceItems.length} active item${urgentMaintenanceItems.length!==1?'s':''}`:`${pendingInbox.length} inbox item${pendingInbox.length!==1?'s':''}`}</div>
-          </div>
+          <div style={{fontSize:11,color:C.muted}}>{urgentMaintenanceItems.length>0?`${urgentMaintenanceItems.length} active item${urgentMaintenanceItems.length!==1?'s':''}`:`${pendingInbox.length} inbox item${pendingInbox.length!==1?'s':''}`}</div>
           <span style={S.pill(C.amberL,C.amberDk)}>{urgentMaintenanceItems.length>0?'Needs attention':'Review later'}</span>
         </div>
         <div style={{display:'grid',gap:8,marginBottom:10}}>
@@ -4403,15 +4514,17 @@ function App(){
           <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('maintenance')}>Open Maintenance</button>
           <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('tasks',{taskTab:'inbox'})}>Review Inbox</button>
         </div>
-      </div>}
+      </CollapsibleCard>}
 
-      <div style={{...S.card,background:C.surf,boxShadow:'none'}}>
+      <CollapsibleCard
+        title="Weekly Preview"
+        summary={`${weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/${Math.min(weekPlannedWorkouts.length,4)} workouts done this week`}
+        open={homeCardsOpen.weekly}
+        onToggle={()=>setHomeCardsOpen(s=>({...s,weekly:!s.weekly}))}
+        cardStyle={{background:C.surf,boxShadow:'none'}}>
         <div style={{...S.row,marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Weekly Preview</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>Lighter than today, still visible</div>
-          </div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('calendar',{calendarFocusDay:TODAY})}>Open week</button>
+          <div style={{fontSize:11,color:C.muted}}>{weekPlannedWorkouts.filter(w=>w.status==='completed'||w.status==='moved').length}/{Math.min(weekPlannedWorkouts.length,4)} done this week</div>
+          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={e=>{e.stopPropagation();openTab('calendar',{calendarFocusDay:TODAY});}}>Open week</button>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
           {weekPlannedWorkouts.slice(0,4).map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 8px'}}>
@@ -4420,7 +4533,7 @@ function App(){
             <span style={S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk)}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
           </div>)}
         </div>
-      </div>
+      </CollapsibleCard>
     </div>;
   }
 
@@ -4786,14 +4899,47 @@ function App(){
 
         {trainSection==='plan'&&<>
           <div style={S.card}>
-            <span style={S.lbl}>Program</span>
-            <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:4}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
-            <div style={{fontSize:12,color:C.tx2,marginBottom:10}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.detail||'Structured weekly training.'}</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              <span style={S.pill(C.surf,C.tx2)}>{(athlete?.programType||'4-day')==='5-day'?'5 days / week':'4 days / week'}</span>
-              <span style={S.pill(C.surf,C.tx2)}>Starts {athlete?.trainingWeekStart||'Mon'}</span>
-              <span style={S.pill(C.surf,C.tx2)}>Rotation {resolvedWkType}</span>
+            <div style={{...S.row,marginBottom:8,alignItems:'flex-start'}}>
+              <div style={{flex:1}}>
+                <span style={S.lbl}>Program</span>
+                <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:2}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.title||'Training plan'}</div>
+                <div style={{fontSize:12,color:C.tx2,marginBottom:8}}>{PROGRAM_LIBRARY_META[fitnessProgram]?.detail||'Structured weekly training.'}</div>
+              </div>
+              <button style={{...S.btnGhost,fontSize:11,flexShrink:0}} onClick={()=>setShowProgramPicker(p=>!p)}>{showProgramPicker?'Close':'Change'}</button>
             </div>
+            {!showProgramPicker&&<>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
+                {(PROGRAM_DETAIL_CARDS[fitnessProgram]?.sessions||[]).map((s,i)=><span key={i} style={{...S.pill(C.surf,C.tx2),fontWeight:400}}>{s}</span>)}
+              </div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                <span style={S.pill(C.surf,C.tx2)}>{PROGRAM_DETAIL_CARDS[fitnessProgram]?.duration||'30–60 min'}</span>
+                <span style={S.pill(C.surf,C.tx2)}>{PROGRAM_DETAIL_CARDS[fitnessProgram]?.structure||((athlete?.programType||'4-day')==='5-day'?'5 days / week':'4 days / week')}</span>
+                <span style={S.pill(C.surf,C.tx2)}>Rotation {resolvedWkType}</span>
+              </div>
+            </>}
+            {showProgramPicker&&<div style={{marginTop:4}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:500,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Select program</div>
+              {['hyrox','strength','pilates','recovery'].map(id=>{
+                const meta=PROGRAM_LIBRARY_META[id]||{};
+                const detail=PROGRAM_DETAIL_CARDS[id]||{};
+                const isActive=fitnessProgram===id;
+                return <div key={id} style={{borderRadius:12,border:`1.5px solid ${isActive?C.sage:C.bd}`,background:isActive?C.sageL:C.card,padding:'10px 12px',marginBottom:6}}>
+                  <div style={{...S.row,alignItems:'flex-start',gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:isActive?C.sageDk:C.tx}}>{meta.title||id}</div>
+                      <div style={{fontSize:10,color:C.muted,marginTop:2,marginBottom:5}}>{detail.duration} · {detail.structure}</div>
+                      <div style={{fontSize:11,color:C.tx2,marginBottom:5}}>{detail.note}</div>
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                        {(detail.sessions||[]).map((s,i)=><span key={i} style={{...S.pill(isActive?C.card:C.surf,C.muted),fontSize:9,padding:'2px 7px'}}>{s}</span>)}
+                      </div>
+                    </div>
+                    <button style={{...S.btnSmall(isActive?C.sage:C.navy),flexShrink:0}} onClick={()=>{updateProfile(p=>({...p,fitnessProgram:id,athleteProfile:{...p.athleteProfile,primaryProgram:id}}));setShowProgramPicker(false);}}>
+                      {isActive?'Active':'Select'}
+                    </button>
+                  </div>
+                </div>;
+              })}
+            </div>}
           </div>
           <div style={S.card}>
             <span style={S.lbl}>Weekly Schedule</span>
@@ -5000,22 +5146,43 @@ function App(){
       }
       const history=getExerciseHistorySummary(workoutHistory,currentExercise.n);
       const playerRecoveryStyle=isRecoveryStyleExercise(currentExercise)||wkSess?.type==='recovery';
+      const playerAccent=playerRecoveryStyle?C.sage:C.navy;
+      const playerAccentL=playerRecoveryStyle?C.sageL:C.navyL;
+      const playerAccentDk=playerRecoveryStyle?C.sageDk:C.navyDk;
+      const hasDemo=hasExerciseDemo(resolveExerciseDefinition(currentExercise.exerciseId||currentExercise.n).media);
       return <div style={S.body}>
-        <div style={{...S.row,marginBottom:12}}>
+        <div style={{...S.row,marginBottom:10}}>
           <button style={{...S.btnGhost,fontSize:11}} onClick={()=>setTrainView('session')}>Back</button>
-          <div style={{fontSize:10,color:C.muted}}>Exercise {currentFlowItem.idx+1} / {(wkSess.ex||[]).length}{wkSess.dateKey&&wkSess.dateKey!==TODAY?` · ${wkSess.dateKey}`:''}</div>
+          <div style={{fontSize:10,color:C.muted}}>{wkSess.name}{wkSess.dateKey&&wkSess.dateKey!==TODAY?` · ${wkSess.dateKey}`:''}</div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{...S.row,marginBottom:6}}>
+            <span style={{fontSize:13,fontWeight:700,color:C.tx}}>Exercise {currentFlowItem.idx+1} of {(wkSess.ex||[]).length}</span>
+            <span style={{fontSize:11,color:C.muted}}>{activeWorkoutProgress.doneSets}/{activeWorkoutProgress.totalSets||0} sets done</span>
+          </div>
+          <ProgressBar value={currentFlowItem.idx} max={Math.max(1,(wkSess.ex||[]).length)} color={playerAccent}/>
         </div>
         <WorkoutFlowRail label="Workout Flow" currentIndex={playerIdx}/>
+        {restTmr!==null&&<div style={{...S.card,textAlign:'center',padding:'12px',background:playerAccentL,borderColor:playerAccent,marginBottom:10}}>
+          <div style={{fontSize:10,color:playerAccentDk,marginBottom:4}}>{restLabel||'Rest Timer'}</div>
+          <div style={{fontSize:32,fontWeight:700,color:playerAccentDk}}>{restTmr}s</div>
+          <div style={{display:'flex',gap:6,marginTop:8}}>
+            <button style={{...S.btnSmall(playerAccent),flex:1}} onClick={()=>setRestTmr(t=>Math.max((t||0)+30,30))}>+30s</button>
+            <button style={{...S.btnGhost,flex:1}} onClick={()=>{setRestTmr(null);setRestLabel('');}}>Skip</button>
+          </div>
+        </div>}
         <div style={{...S.card,padding:'14px'}}>
-          <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{playerRecoveryStyle?'Session Detail':'Workout Player'}</div>
-          <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:10}}>{currentExercise.n}</div>
+          <div style={{fontSize:18,fontWeight:700,color:C.tx,marginBottom:4}}>{currentExercise.n}</div>
+          <div style={{fontSize:12,color:C.tx2,marginBottom:10}}>{formatExercisePrescription(currentExercise)}</div>
           <div style={{marginBottom:10}}>
             <ExerciseThumbnail exercise={currentExercise} size={'100%'} height={180} radius={14}/>
           </div>
-          <div style={{fontSize:11,color:C.tx2,marginBottom:8}}>{formatExercisePrescription(currentExercise)}</div>
-          <div style={{fontSize:12,color:C.tx2,marginBottom:8}}>{currentExercise.coachingNotes||currentExercise.instructions}</div>
-          {hasExerciseDemo(resolveExerciseDefinition(currentExercise.exerciseId||currentExercise.n).media)
-            ?<button style={{...S.btnGhost,display:'inline-flex',fontSize:11,padding:'5px 10px',marginBottom:12}} onClick={()=>setDemoExercise({exerciseId:currentExercise.exerciseId,n:currentExercise.n})}>Open Demo</button>
+          {(currentExercise.coachingNotes||currentExercise.instructions)&&<div style={{background:C.surf,borderRadius:10,padding:'9px 12px',marginBottom:10}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,marginBottom:3}}>Coaching cue</div>
+            <div style={{fontSize:12,color:C.tx,lineHeight:1.5}}>{currentExercise.coachingNotes||currentExercise.instructions}</div>
+          </div>}
+          {hasDemo
+            ?<button style={{...S.btnSmall(playerAccent),marginBottom:12,display:'inline-flex'}} onClick={()=>setDemoExercise({exerciseId:currentExercise.exerciseId,n:currentExercise.n})}>Open Demo</button>
             :<div style={{fontSize:11,color:C.muted,marginBottom:12}}>No demo available</div>}
           {history&&<div style={{background:C.surf,borderRadius:12,padding:'10px',marginBottom:12}}>
             <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{playerRecoveryStyle?'Recent completion':'Progression memory'}</div>
@@ -5612,7 +5779,40 @@ function App(){
       </div>;
     }
 
+    const suggestedSlotMeta=MEAL_SLOTS.find(s=>s.id===suggestedQuickLogSlot)||MEAL_SLOTS[0];
     return <div style={S.body}>
+      <div style={{...S.card,marginBottom:8}}>
+        <div style={{...S.row,marginBottom:8,alignItems:'flex-start'}}>
+          <div>
+            <div style={S.lbl}>Protein Today</div>
+            <div style={{fontSize:22,fontWeight:700,color:todayPro>=targets.protein?C.sageDk:todayPro>=targets.protein*0.5?C.amberDk:C.red,lineHeight:1.1}}>
+              {Math.round(todayPro)}<span style={{fontSize:13,fontWeight:400,color:C.muted}}>g / {targets.protein}g</span>
+            </div>
+          </div>
+          <span style={{...S.pill(todayPro>=targets.protein?C.sageL:todayPro>=targets.protein*0.5?C.amberL:C.redL,todayPro>=targets.protein?C.sageDk:todayPro>=targets.protein*0.5?C.amberDk:C.red),marginRight:0,marginBottom:0}}>
+            {proteinRemaining>0?`${Math.round(proteinRemaining)}g left`:'Goal met'}
+          </span>
+        </div>
+        <ProgressBar value={todayPro} max={targets.protein} color={todayPro>=targets.protein?C.sage:todayPro>=targets.protein*0.5?C.amber:C.red}/>
+        {nextProteinTemplate&&proteinRemaining>0&&<div style={{background:C.surf,borderRadius:10,padding:'8px 10px',marginTop:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:9,color:C.muted,marginBottom:2}}>High-protein option</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{nextProteinTemplate.name}</div>
+          </div>
+          <span style={S.pill(C.sageL,C.sageDk)}>+{Math.round(nextProteinTemplate.macros?.pro||0)}g</span>
+        </div>}
+      </div>
+      <div style={{...S.card,marginBottom:8}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Next Meal</div>
+        <div style={{...S.row}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{suggestedSlotMeta.label}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>{suggestedSlotMeta.window}</div>
+            {nextProteinTemplate&&<div style={{fontSize:11,color:C.tx2,marginTop:3}}>Suggested: {nextProteinTemplate.name} · +{Math.round(nextProteinTemplate.macros?.pro||0)}g protein</div>}
+          </div>
+          <button style={S.btnSmall(C.sage)} onClick={()=>{setPantryForm(f=>({...f,slot:suggestedQuickLogSlot}));setIngredientForm(f=>({...f,slot:suggestedQuickLogSlot}));}}>Log</button>
+        </div>
+      </div>
       <SectionCard
         id="today"
         title="Daily Meal Plan"
@@ -5771,9 +5971,15 @@ function App(){
             {MEAL_SLOTS.map(slot=><option key={slot.id} value={slot.id}>{slot.label}</option>)}
           </FieldSelect>
           {selectedFood&&<div style={{background:C.surf,borderRadius:12,padding:'10px 12px',marginBottom:8}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{selectedFood.name}</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>Per 100g · {selectedFood.calories} kcal · {selectedFood.protein}P · {selectedFood.carbohydrates}C · {selectedFood.fat}F</div>
-            <div style={{fontSize:10,color:C.muted,marginTop:3}}>{selectedFood.householdMeasure}</div>
+            <div style={{fontSize:12,fontWeight:600,color:C.tx,marginBottom:3}}>{selectedFood.name}</div>
+            <div style={{fontSize:10,color:C.muted}}>Per 100g · {selectedFood.calories} kcal · {selectedFood.protein}P · {selectedFood.carbohydrates}C · {selectedFood.fat}F</div>
+            {selectedFood.householdMeasure&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{selectedFood.householdMeasure}</div>}
+            {ingredientForm.grams&&(()=>{const g=gramsFromFoodInput(selectedFood,ingredientForm.grams,ingredientForm.units)||0;if(!g)return null;const m=scaleFoodMacros(selectedFood,g);return <div style={{marginTop:6,paddingTop:6,borderTop:`0.5px solid ${C.bd}`,display:'flex',gap:10}}>
+              <div style={{flex:1}}><div style={{fontSize:9,color:C.muted}}>Protein</div><div style={{fontSize:13,fontWeight:700,color:C.sageDk}}>{Math.round(m.pro)}g</div></div>
+              <div style={{flex:1}}><div style={{fontSize:9,color:C.muted}}>Calories</div><div style={{fontSize:13,fontWeight:700,color:C.tx}}>{Math.round(m.cal)}</div></div>
+              <div style={{flex:1}}><div style={{fontSize:9,color:C.muted}}>Carbs</div><div style={{fontSize:13,fontWeight:700,color:C.tx}}>{Math.round(m.carb)}g</div></div>
+              <div style={{flex:1}}><div style={{fontSize:9,color:C.muted}}>Fat</div><div style={{fontSize:13,fontWeight:700,color:C.tx}}>{Math.round(m.fat)}g</div></div>
+            </div>;})()}
           </div>}
           <div style={{display:'flex',gap:6,marginBottom:8}}>
             <button style={{...S.btnGhost,flex:1,fontSize:11}} onClick={()=>photoInputRef.current?.click()}>{mealPhoto?'Photo attached':'Attach Photo'}</button>
@@ -5817,12 +6023,15 @@ function App(){
             })}
           </FieldSelect>
           <div style={{background:C.surf,borderRadius:12,padding:'10px 12px',marginBottom:8}}>
-            <div style={{...S.row,marginBottom:4}}>
+            <div style={{...S.row,marginBottom:4,alignItems:'flex-start'}}>
               <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{selectedRecipe.name}</div>
-              <span style={{fontSize:10,color:C.muted}}>{selectedRecipe.isMealPrep?'Meal Prep':'Single Meal'} · {selectedRecipe.prepTime} min</span>
+              <div style={{display:'flex',gap:4,flexShrink:0}}>
+                {selectedRecipe.isMealPrep&&<span style={S.pill(C.amberL,C.amberDk)}>Batch prep</span>}
+                <span style={{fontSize:10,color:C.muted}}>{selectedRecipe.prepTime} min</span>
+              </div>
             </div>
             <div style={{fontSize:10,color:C.muted,marginBottom:6}}>
-              {selectedRecipeNutrition.perServing.cal} kcal · {selectedRecipeNutrition.perServing.pro}P · {selectedRecipeNutrition.perServing.carb}C · {selectedRecipeNutrition.perServing.fat}F per serving
+              Per serving · {selectedRecipeNutrition.perServing.cal} kcal · <strong style={{color:C.sageDk}}>{selectedRecipeNutrition.perServing.pro}g protein</strong> · {selectedRecipeNutrition.perServing.carb}g carbs · {selectedRecipeNutrition.perServing.fat}g fat
             </div>
             <div style={{fontSize:10,color:C.muted}}>
               {selectedRecipe.ingredients.map(ing=>`${foodMap[ing.foodId]?.name||ing.foodId} ${ing.grams}g`).join(' · ')}
@@ -6044,9 +6253,26 @@ function App(){
     function markMaintenance(id){
       updateProfile(p=>({...p,maintenanceHistory:{...p.maintenanceHistory,[id]:TODAY}}));
     }
+    function addLifestyleItem(){
+      const title=prompt('Item name?');if(!title)return;
+      const notes=prompt('Notes (optional)','')||'';
+      const id='ls_'+Date.now();
+      const maxOrder=(lifestyleItems||[]).reduce((m,x)=>Math.max(m,x.order||0),0);
+      updateProfile(p=>({...p,lifestyleItems:[...(p.lifestyleItems||[]),{id,title,notes,order:maxOrder+1,archived:false}]}));
+    }
+    function editLifestyleItem(item){
+      const title=prompt('Item name?',item.title);if(!title)return;
+      const notes=prompt('Notes (optional)',item.notes||'')||'';
+      updateProfile(p=>({...p,lifestyleItems:(p.lifestyleItems||[]).map(x=>x.id===item.id?{...x,title,notes}:x)}));
+    }
+    function deleteLifestyleItem(id){
+      updateProfile(p=>({...p,lifestyleItems:(p.lifestyleItems||[]).filter(x=>x.id!==id)}));
+    }
 
-    const dailyDone=DAILY_CHORES.filter(c=>todayChores[c.id]).length;
+    const activeItems=(lifestyleItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.order||0)-(b.order||0));
+    const dailyDone=activeItems.filter(i=>!!todayChores[i.id]).length;
     const weekDone=WEEKLY_CHORES.filter(c=>weekChores[c.id]).length;
+    const [lifestyleOpen,setLifestyleOpen]=useState({daily:false,weekly:false});
 
     return <div style={S.body}>
       <div style={{display:'flex',gap:4,marginBottom:12,overflowX:'auto'}}>
@@ -6093,37 +6319,54 @@ function App(){
       </div>}
 
       {homeTab==='lifestyle'&&<div>
-        <div style={{...S.row,marginBottom:10}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.tx}}>Daily lifestyle</span>
-          <span style={{fontSize:11,color:C.muted}}>{dailyDone}/{DAILY_CHORES.length} done</span>
-        </div>
-        <ProgressBar value={dailyDone} max={DAILY_CHORES.length}/>
-        <div style={{height:10}}/>
-        <div style={S.card}>
-          {DAILY_CHORES.map((c,i)=>{
-            const done=!!todayChores[c.id];
-            return <div key={c.id} style={{...S.row,padding:'10px 0',borderBottom:i<DAILY_CHORES.length-1?`0.5px solid ${C.bd}`:'none'}}>
-              <span style={{fontSize:13,color:done?C.muted:C.tx,textDecoration:done?'line-through':'none'}}>{c.label}</span>
-              <button onClick={()=>toggleDailyChore(c.id)} style={{width:26,height:26,borderRadius:6,border:`1.5px solid ${done?C.sage:C.bd}`,background:done?C.sage:'transparent',color:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>{done?'v':''}</button>
-            </div>;
-          })}
-        </div>
-        <div style={{...S.row,marginBottom:10}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.tx}}>Weekly lifestyle</span>
-          <span style={{fontSize:11,color:C.muted}}>{weekDone}/{WEEKLY_CHORES.length} done</span>
-        </div>
-        <div style={S.card}>
-          {WEEKLY_CHORES.map((c,i)=>{
-            const done=!!weekChores[c.id];
-            return <div key={c.id} style={{...S.row,padding:'10px 0',borderBottom:i<WEEKLY_CHORES.length-1?`0.5px solid ${C.bd}`:'none'}}>
-              <div>
-                <div style={{fontSize:13,color:done?C.muted:C.tx,textDecoration:done?'line-through':'none'}}>{c.label}</div>
-                {c.dayHint&&<div style={{fontSize:10,color:C.muted}}>{['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'][c.dayHint]}</div>}
-              </div>
-              <button onClick={()=>toggleWeeklyChore(c.id)} style={{width:26,height:26,borderRadius:6,border:`1.5px solid ${done?C.sage:C.bd}`,background:done?C.sage:'transparent',color:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>{done?'v':''}</button>
-            </div>;
-          })}
-        </div>
+        <CollapsibleCard
+          title="Daily Lifestyle"
+          summary={`${dailyDone}/${activeItems.length} done today`}
+          open={lifestyleOpen.daily}
+          onToggle={()=>setLifestyleOpen(s=>({...s,daily:!s.daily}))}>
+          <div style={{...S.row,marginBottom:8}}>
+            <div style={{fontSize:11,color:C.muted}}>{dailyDone}/{activeItems.length} done</div>
+            <button style={S.btnSmall(C.sage)} onClick={e=>{e.stopPropagation();addLifestyleItem();}}>+ Item</button>
+          </div>
+          <ProgressBar value={dailyDone} max={activeItems.length||1}/>
+          <div style={{height:10}}/>
+          {activeItems.length===0&&<div style={{textAlign:'center',padding:'16px 0',color:C.muted,fontSize:13}}>No items yet. Tap + Item to add one.</div>}
+          {activeItems.length>0&&<div style={S.card}>
+            {activeItems.map((c,i)=>{
+              const done=!!todayChores[c.id];
+              return <div key={c.id} style={{...S.row,padding:'10px 0',borderBottom:i<activeItems.length-1?`0.5px solid ${C.bd}`:'none'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:done?C.muted:C.tx,textDecoration:done?'line-through':'none'}}>{c.title}</div>
+                  {c.notes&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{c.notes}</div>}
+                </div>
+                <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
+                  <button onClick={()=>editLifestyleItem(c)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>edit</button>
+                  <button onClick={()=>deleteLifestyleItem(c.id)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>x</button>
+                  <button onClick={()=>toggleDailyChore(c.id)} style={{width:26,height:26,borderRadius:6,border:`1.5px solid ${done?C.sage:C.bd}`,background:done?C.sage:'transparent',color:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>{done?'✓':''}</button>
+                </div>
+              </div>;
+            })}
+          </div>}
+        </CollapsibleCard>
+        <CollapsibleCard
+          title="Weekly Lifestyle"
+          summary={`${weekDone}/${WEEKLY_CHORES.length} done this week`}
+          open={lifestyleOpen.weekly}
+          onToggle={()=>setLifestyleOpen(s=>({...s,weekly:!s.weekly}))}>
+          <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{weekDone}/{WEEKLY_CHORES.length} done</div>
+          <div style={S.card}>
+            {WEEKLY_CHORES.map((c,i)=>{
+              const done=!!weekChores[c.id];
+              return <div key={c.id} style={{...S.row,padding:'10px 0',borderBottom:i<WEEKLY_CHORES.length-1?`0.5px solid ${C.bd}`:'none'}}>
+                <div>
+                  <div style={{fontSize:13,color:done?C.muted:C.tx,textDecoration:done?'line-through':'none'}}>{c.label}</div>
+                  {c.dayHint&&<div style={{fontSize:10,color:C.muted}}>{['','Mon','Tue','Wed','Thu','Fri','Sat','Sun'][c.dayHint]}</div>}
+                </div>
+                <button onClick={()=>toggleWeeklyChore(c.id)} style={{width:26,height:26,borderRadius:6,border:`1.5px solid ${done?C.sage:C.bd}`,background:done?C.sage:'transparent',color:C.white,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>{done?'v':''}</button>
+              </div>;
+            })}
+          </div>
+        </CollapsibleCard>
       </div>}
 
       {homeTab==='routine'&&<div>
@@ -6171,6 +6414,36 @@ function App(){
       if(item.status==='active')return item.dueSoon?`Due soon · ${item.daysUntil}d`:'Active';
       return item.daysUntilStart>0?`Starts in ${item.daysUntilStart}d`:`Upcoming in ${item.daysUntil}d`;
     }
+    const mqOverdue=maintenanceQueue.filter(item=>item.status==='overdue');
+    const mqToday=maintenanceQueue.filter(item=>item.status==='today');
+    const mqActive=maintenanceQueue.filter(item=>item.status==='active');
+    const mqUpcoming=maintenanceQueue.filter(item=>item.status==='upcoming');
+    const [maintenanceOpen,setMaintenanceOpen]=useState({overdue:mqOverdue.length>0||mqToday.length>0,today:mqOverdue.length>0||mqToday.length>0,active:false,upcoming:false});
+    function renderMaintGroup(groupLabel,items,openKey,accent){
+      return <CollapsibleCard
+        title={groupLabel}
+        summary={items.length===0?'No items':`${items.length} item${items.length!==1?'s':''}`}
+        open={maintenanceOpen[openKey]}
+        onToggle={()=>setMaintenanceOpen(s=>({...s,[openKey]:!s[openKey]}))}
+        accent={accent}
+        cardStyle={{marginBottom:6}}>
+        {items.length===0&&<div style={{fontSize:12,color:C.muted}}>No items in this group.</div>}
+        {items.map((item,i)=><div key={item.id} style={{padding:'10px 0',borderBottom:i<items.length-1?`0.5px solid ${C.bd}`:'none'}}>
+          <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,color:C.tx,fontWeight:600}}>{item.label}</div>
+              <div style={{fontSize:10,color:item.status==='overdue'?C.red:C.muted,marginTop:2}}>{formatMaintenanceStatus(item)}</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:2}}>{item.category}</div>
+            </div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
+              <button style={S.btnSmall(item.status==='overdue'?C.red:C.sage)} onClick={()=>completeMaintenance(item.id)}>Complete</button>
+              <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>snoozeMaintenance(item.id)}>Snooze</button>
+              <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>editMaintenance(item)}>Edit</button>
+            </div>
+          </div>
+        </div>)}
+      </CollapsibleCard>;
+    }
 
     return <div style={S.body}>
       <div style={S.card}>
@@ -6178,31 +6451,10 @@ function App(){
         <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:6}}>Operational and personal upkeep</div>
         <div style={{fontSize:11,color:C.tx2}}>Refills, cleaning, replacements, restocks, and scheduled checkups stay here until you clear them.</div>
       </div>
-      {[
-        {label:'Overdue',items:maintenanceQueue.filter(item=>item.status==='overdue')},
-        {label:'Due Today',items:maintenanceQueue.filter(item=>item.status==='today')},
-        {label:'Active',items:maintenanceQueue.filter(item=>item.status==='active')},
-        {label:'Upcoming',items:maintenanceQueue.filter(item=>item.status==='upcoming')},
-      ].map(group=><div key={group.label} style={{marginBottom:6}}>
-        <div style={{fontSize:10,fontWeight:500,letterSpacing:'0.7px',color:C.muted,textTransform:'uppercase',marginBottom:6}}>{group.label}</div>
-        <div style={S.card}>
-          {group.items.length===0&&<div style={{fontSize:12,color:C.muted}}>No items in this group.</div>}
-          {group.items.map((item,i)=><div key={item.id} style={{padding:'10px 0',borderBottom:i<group.items.length-1?`0.5px solid ${C.bd}`:'none'}}>
-            <div style={{...S.row,alignItems:'flex-start',gap:10}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,color:C.tx,fontWeight:600}}>{item.label}</div>
-                <div style={{fontSize:10,color:item.status==='overdue'?C.red:C.muted,marginTop:2}}>{formatMaintenanceStatus(item)}</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:2}}>{item.category}</div>
-              </div>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
-                <button style={S.btnSmall(item.status==='overdue'?C.red:C.sage)} onClick={()=>completeMaintenance(item.id)}>Complete</button>
-                <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>snoozeMaintenance(item.id)}>Snooze</button>
-                <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>editMaintenance(item)}>Edit</button>
-              </div>
-            </div>
-          </div>)}
-        </div>
-      </div>)}
+      {renderMaintGroup('Overdue',mqOverdue,'overdue',mqOverdue.length>0?C.red:undefined)}
+      {renderMaintGroup('Due Today',mqToday,'today',mqToday.length>0?C.amber:undefined)}
+      {renderMaintGroup('Active',mqActive,'active',undefined)}
+      {renderMaintGroup('Upcoming',mqUpcoming,'upcoming',undefined)}
     </div>;
   }
 
@@ -6218,6 +6470,23 @@ function App(){
     const pendingInbox=(inboxItems||[]).filter(x=>x.status==='pending');
     const prioClr={1:C.sage,2:C.amber,3:C.red};
     const dueTodayUnscheduled=todayTasks.filter(task=>!task.scheduledTime);
+    const [newTmplName,setNewTmplName]=useState('');
+    const [newTmplSubtasks,setNewTmplSubtasks]=useState('');
+    const [newTmplTags,setNewTmplTags]=useState('');
+    const [newTmplPriority,setNewTmplPriority]=useState(1);
+    const timeBlockedTasks=todayTasks.filter(t=>t.scheduledTime);
+    const anytimeTasks=todayTasks.filter(t=>!t.scheduledTime);
+    const energyNow=dailyLogs?.[TODAY]?.energyScore||null;
+    const energyHigh=energyNow!=null?(energyNow>=7):(recoveryToday?.level==='High');
+    const energyLow=energyNow!=null?(energyNow<=4):(recoveryToday?.level==='Low');
+    const energyTaggedTasks=todayTasks.filter(t=>t.energyLevel&&!t.done);
+    const suggestedByEnergy=energyTaggedTasks.length>0
+      ?(energyHigh
+        ?energyTaggedTasks.filter(t=>t.energyLevel==='high').slice(0,2)
+        :energyLow
+          ?energyTaggedTasks.filter(t=>t.energyLevel==='low').slice(0,2)
+          :todayTasks.filter(t=>!t.done).sort((a,b)=>(b.priority||1)-(a.priority||1)).slice(0,1))
+      :[];
 
     function openTaskComposer(overrides={}){
       setNewTask(createNewTaskDraft(TODAY,overrides));
@@ -6238,6 +6507,8 @@ function App(){
         bucket:newTask.bucket||((newTask.date||TODAY)>TODAY?'scheduled':'next'),
         contextTags:(newTask.contextTags||'').split(',').map(item=>item.trim()).filter(Boolean).slice(0,4),
         scheduledTime:newTask.scheduledTime||'',
+        endTime:newTask.endTime||'',
+        energyLevel:newTask.energyLevel||null,
         updatedAt:new Date().toISOString(),
       };
       updateProfile(p=>({...p,taskHistory:[...p.taskHistory,t]}));
@@ -6327,6 +6598,25 @@ function App(){
       updateProfile(p=>({...p,taskHistory:[...p.taskHistory,nextTask,...subtasks]}));
       showNotif(`${task.text} added back to Next Up`,'success');
     }
+    function saveNewTemplate(){
+      if(!newTmplName.trim())return;
+      const tmpl={
+        id:`custom-${Date.now()}`,
+        name:newTmplName.trim(),
+        text:newTmplName.trim(),
+        priority:newTmplPriority,
+        contextTags:newTmplTags.split(',').map(s=>s.trim()).filter(Boolean),
+        subtasks:newTmplSubtasks.split(',').map(s=>s.trim()).filter(Boolean),
+        defaultBucket:'next',
+      };
+      updateProfile(p=>({...p,taskTemplates:[...(p.taskTemplates||[]),tmpl]}));
+      setNewTmplName('');setNewTmplSubtasks('');setNewTmplTags('');setNewTmplPriority(1);
+      showNotif(`Template "${tmpl.name}" saved`,'success');
+    }
+    function deleteTemplate(id){
+      updateProfile(p=>({...p,taskTemplates:(p.taskTemplates||[]).filter(t=>t.id!==id)}));
+      showNotif('Template removed','success');
+    }
 
     function TaskRow({t,indent=0}){
       const subtasks=allTasks.filter(s=>s.parentId===t.id&&s.status!=='dismissed');
@@ -6342,7 +6632,8 @@ function App(){
               <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:2}}>
                 {t.rolledFrom&&<span style={{fontSize:9,color:C.amber}}>rolled over</span>}
                 {overdue&&<span style={{fontSize:9,color:C.red}}>overdue</span>}
-                {t.scheduledTime&&<span style={{fontSize:9,color:C.muted}}>{t.scheduledTime}</span>}
+                {t.scheduledTime&&<span style={{fontSize:9,color:C.muted}}>{t.endTime?fmtTimeRange(t.scheduledTime,t.endTime):t.scheduledTime}</span>}
+                {t.energyLevel&&<span style={{...S.pill(t.energyLevel==='high'?C.sageL:t.energyLevel==='medium'?C.amberL:C.surf,t.energyLevel==='high'?C.sageDk:t.energyLevel==='medium'?C.amberDk:C.muted),fontSize:8,padding:'2px 6px'}}>{t.energyLevel}</span>}
                 {progress&&<span style={{fontSize:9,color:C.muted}}>{progress.completed}/{progress.total} subtasks</span>}
               </div>
               {(t.contextTags||[]).length>0&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:5}}>
@@ -6357,6 +6648,7 @@ function App(){
             {overdue&&!t.done&&<button onClick={()=>rollTask(t.id)} style={{...S.btnGhost,fontSize:9,padding:'5px 6px'}}>Roll</button>}
             {overdue&&!t.done&&<button onClick={()=>deferTask(t.id)} style={{...S.btnGhost,fontSize:9,padding:'5px 6px'}}>Defer</button>}
             {!t.done&&<button onClick={()=>dismissTask(t.id)} style={{...S.btnGhost,fontSize:9,padding:'5px 6px'}}>Dismiss</button>}
+            {!t.done&&t.status==='active'&&<button onClick={()=>{setFocusTaskId(t.id);setFocusTmrSec(null);setFocusTmrRunning(false);}} style={{...S.btnGhost,fontSize:9,padding:'5px 6px',borderColor:C.navy,color:C.navy}}>Focus</button>}
             <button onClick={()=>openTaskComposer({parentId:t.id,date:t.date||TODAY,bucket:t.bucket||'next',contextTags:(t.contextTags||[]).join(', '),scheduledTime:''})} style={{background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer'}}>+</button>
             <button onClick={()=>deleteTask(t.id)} style={{background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer'}}>x</button>
           </div>
@@ -6369,10 +6661,11 @@ function App(){
       <div style={{display:'flex',gap:6,marginBottom:12}}>
         {[
           {id:'inbox',label:`Inbox${pendingInbox.length>0?' ('+pendingInbox.length+')':''}`,warn:pendingInbox.length>0},
-          {id:'scheduled',label:`Scheduled${futureTasks.length>0?' ('+futureTasks.length+')':''}`},
-          {id:'next',label:`Next Up${todayTasks.length>0?' ('+todayTasks.length+')':''}`},
-          {id:'done',label:`Done${doneTasks.length>0?' ('+doneTasks.length+')':''}`},
-        ].map(({id,label,warn})=><button key={id} onClick={()=>onTabChange(id)} style={{flex:1,padding:'8px',borderRadius:10,border:`1px solid ${tasksTab===id?(warn?C.amber:C.sage):C.bd}`,background:tasksTab===id?(warn?C.amberL:C.sageL):'transparent',color:tasksTab===id?(warn?C.amberDk:C.sageDk):C.muted,fontSize:12,fontWeight:tasksTab===id?600:400,cursor:'pointer'}}>{label}</button>)}
+          {id:'scheduled',label:`Sched`},
+          {id:'next',label:`Next${todayTasks.length>0?' ('+todayTasks.length+')':''}`},
+          {id:'done',label:`Done`},
+          {id:'templates',label:`Templates`},
+        ].map(({id,label,warn})=><button key={id} onClick={()=>onTabChange(id)} style={{flex:1,padding:'8px',borderRadius:10,border:`1px solid ${tasksTab===id?(warn?C.amber:C.sage):C.bd}`,background:tasksTab===id?(warn?C.amberL:C.sageL):'transparent',color:tasksTab===id?(warn?C.amberDk:C.sageDk):C.muted,fontSize:11,fontWeight:tasksTab===id?600:400,cursor:'pointer'}}>{label}</button>)}
       </div>
 
       {tasksTab==='inbox'&&<div>
@@ -6420,6 +6713,14 @@ function App(){
             </div>)}
           </div>
         </div>}
+        {tasksTab==='next'&&suggestedByEnergy.length>0&&<div style={{...S.card,marginBottom:12,borderColor:energyHigh?C.sage:energyLow?C.amber:C.bd}}>
+          <span style={S.lbl}>Suggested for now</span>
+          <div style={{fontSize:11,color:C.muted,marginBottom:8}}>{energyHigh?'Energy is high — tackle something demanding.':energyLow?'Low energy — keep it light.':'Next by priority.'}</div>
+          {suggestedByEnergy.map(t=><div key={t.id} style={{...S.row,padding:'6px 0',borderBottom:`0.5px solid ${C.bd}`}}>
+            <span style={{fontSize:13,color:C.tx,flex:1}}>{t.text}</span>
+            <button style={{...S.btnGhost,fontSize:9,padding:'5px 6px',borderColor:C.navy,color:C.navy}} onClick={()=>{setFocusTaskId(t.id);setFocusTmrSec(null);setFocusTmrRunning(false);}}>Focus</button>
+          </div>)}
+        </div>}
         {showAddTask&&<div style={{...S.card,marginBottom:12}}>
           <FieldInput
             value={taskDraftText}
@@ -6435,13 +6736,20 @@ function App(){
           />
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
             <FieldInput type="date" value={newTask.date||TODAY} onChange={e=>setNewTask(n=>({...n,date:e.target.value}))} style={S.inp}/>
-            <FieldInput type="time" value={newTask.scheduledTime||''} onChange={e=>setNewTask(n=>({...n,scheduledTime:e.target.value,bucket:e.target.value?'scheduled':n.bucket}))} placeholder="Time (optional)" style={S.inp}/>
+            <FieldInput type="time" value={newTask.scheduledTime||''} onChange={e=>setNewTask(n=>({...n,scheduledTime:e.target.value,bucket:e.target.value?'scheduled':n.bucket}))} placeholder="Start time (opt)" style={S.inp}/>
           </div>
+          {newTask.scheduledTime&&<FieldInput type="time" value={newTask.endTime||''} onChange={e=>setNewTask(n=>({...n,endTime:e.target.value}))} placeholder="End time (optional)" style={{...S.inp,marginBottom:8}}/>}
           <FieldInput value={newTask.contextTags||''} onChange={e=>setNewTask(n=>({...n,contextTags:e.target.value}))} placeholder="Context tags (comma separated)" style={{...S.inp,marginBottom:8}}/>
           <div style={{...S.row,marginBottom:8}}>
             <span style={{fontSize:11,color:C.muted}}>Priority:</span>
             <div style={{display:'flex',gap:4}}>
               {[1,2,3].map(p=><button key={p} onClick={()=>setNewTask(n=>({...n,priority:p}))} style={{width:28,height:28,borderRadius:6,border:`1.5px solid ${newTask.priority===p?prioClr[p]:C.bd}`,background:newTask.priority===p?prioClr[p]:'transparent',color:newTask.priority===p?C.white:C.muted,fontSize:11,cursor:'pointer'}}>{p}</button>)}
+            </div>
+          </div>
+          <div style={{...S.row,marginBottom:8}}>
+            <span style={{fontSize:11,color:C.muted}}>Energy:</span>
+            <div style={{display:'flex',gap:4}}>
+              {[{id:'high',label:'High',clr:C.sage,bg:C.sageL},{id:'medium',label:'Med',clr:C.amberDk,bg:C.amberL},{id:'low',label:'Low',clr:C.muted,bg:C.surf}].map(({id,label,clr,bg})=><button key={id} onClick={()=>setNewTask(n=>({...n,energyLevel:n.energyLevel===id?null:id}))} style={{padding:'4px 10px',borderRadius:8,border:`1.5px solid ${newTask.energyLevel===id?clr:C.bd}`,background:newTask.energyLevel===id?bg:'transparent',color:newTask.energyLevel===id?clr:C.muted,fontSize:10,cursor:'pointer'}}>{label}</button>)}
             </div>
           </div>
           <div style={{display:'flex',gap:6,marginBottom:8}}>
@@ -6455,7 +6763,14 @@ function App(){
         {tasksTab==='next'&&todayTasks.length===0&&!showAddTask&&<div style={{textAlign:'center',padding:'30px 0',color:C.muted,fontSize:13}}>No next-up tasks right now. Tap + Add or use a template.</div>}
         {tasksTab==='scheduled'&&futureTasks.length===0&&!showAddTask&&<div style={{textAlign:'center',padding:'30px 0',color:C.muted,fontSize:13}}>Nothing scheduled yet.</div>}
         {tasksTab==='next'&&todayTasks.length>0&&<div style={S.card}>
-          {todayTasks.map(t=><TaskRow key={t.id} t={t}/>)}
+          {timeBlockedTasks.length>0&&<>
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:4,paddingBottom:4,borderBottom:`0.5px solid ${C.bd}`}}>Time-Blocked</div>
+            {timeBlockedTasks.map(t=><TaskRow key={t.id} t={t}/>)}
+          </>}
+          {anytimeTasks.length>0&&<>
+            {timeBlockedTasks.length>0&&<div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginTop:8,marginBottom:4,paddingBottom:4,borderBottom:`0.5px solid ${C.bd}`}}>Anytime</div>}
+            {anytimeTasks.map(t=><TaskRow key={t.id} t={t}/>)}
+          </>}
         </div>}
         {tasksTab==='scheduled'&&futureTasks.length>0&&<div style={S.card}>
           {futureTasks.map(t=><TaskRow key={t.id} t={t}/>)}
@@ -6467,6 +6782,39 @@ function App(){
         {doneTasks.length>0&&<div style={S.card}>
           {doneTasks.slice().reverse().map(t=><TaskRow key={t.id} t={t}/>)}
         </div>}
+      </div>}
+
+      {tasksTab==='templates'&&<div>
+        <div style={{...S.card,marginBottom:12}}>
+          <span style={S.lbl}>New Template</span>
+          <FieldInput value={newTmplName} onChange={e=>setNewTmplName(e.target.value)} placeholder="Template name" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={newTmplSubtasks} onChange={e=>setNewTmplSubtasks(e.target.value)} placeholder="Subtasks (comma separated)" style={{...S.inp,marginBottom:8}}/>
+          <FieldInput value={newTmplTags} onChange={e=>setNewTmplTags(e.target.value)} placeholder="Tags (comma separated)" style={{...S.inp,marginBottom:8}}/>
+          <div style={{...S.row,marginBottom:8}}>
+            <span style={{fontSize:11,color:C.muted}}>Priority:</span>
+            <div style={{display:'flex',gap:4}}>
+              {[1,2,3].map(p=><button key={p} onClick={()=>setNewTmplPriority(p)} style={{width:28,height:28,borderRadius:6,border:`1.5px solid ${newTmplPriority===p?prioClr[p]:C.bd}`,background:newTmplPriority===p?prioClr[p]:'transparent',color:newTmplPriority===p?C.white:C.muted,fontSize:11,cursor:'pointer'}}>{p}</button>)}
+            </div>
+          </div>
+          <button style={S.btnSolid(C.sage)} onClick={saveNewTemplate}>Save Template</button>
+        </div>
+        <div style={S.card}>
+          <span style={S.lbl}>All Templates</span>
+          {taskTemplates.map(tmpl=>{
+            const isDefault=DEFAULT_TASK_TEMPLATES.some(d=>d.id===tmpl.id);
+            return <div key={tmpl.id} style={{...S.row,padding:'9px 0',borderBottom:`0.5px solid ${C.bd}`}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{tmpl.name}</div>
+                <div style={{fontSize:10,color:C.muted}}>{(tmpl.subtasks||[]).length} subtask{(tmpl.subtasks||[]).length!==1?'s':''} · Priority {tmpl.priority}</div>
+                {(tmpl.contextTags||[]).length>0&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>{tmpl.contextTags.map(tag=><span key={tag} style={S.pill(C.surf,C.tx2)}>{tag}</span>)}</div>}
+              </div>
+              <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                <button style={{...S.btnGhost,fontSize:10,padding:'5px 8px'}} onClick={()=>addTaskFromTemplate(tmpl)}>Use</button>
+                {!isDefault&&<button style={{background:'none',border:'none',color:C.red,fontSize:14,cursor:'pointer'}} onClick={()=>deleteTemplate(tmpl.id)}>x</button>}
+              </div>
+            </div>;
+          })}
+        </div>
       </div>}
     </div>;
   }
@@ -6766,6 +7114,7 @@ function App(){
   function FinanceScreen({activeView='overview',onViewChange=()=>{}}){
     const localFinView=FINANCE_VIEW_IDS.includes(activeView)?activeView:'overview';
     const [editTxId,setEditTxId]=useState(null);
+    const [finOverviewOpen,setFinOverviewOpen]=useState({accounts:false,spending:false});
     const accountTypeLabel=type=>(ACCOUNT_TYPE_OPTIONS.find(option=>option.id===type)?.label)||'Other';
     const getTransactionAccountLabel=tx=>{
       const account=financialAccountMap.get(tx.accountId);
@@ -6839,9 +7188,12 @@ function App(){
             </button>)}
           </div>
         </div>
-        {/* Balances */}
-        <div style={S.card}>
-          <span style={S.lbl}>Accounts</span>
+        {/* Accounts */}
+        <CollapsibleCard
+          title="Accounts"
+          summary={hasBalances?`${fmtMoney(totalBalance)} total · ${activeFinancialAccounts.length} account${activeFinancialAccounts.length!==1?'s':''}`:`${activeFinancialAccounts.length} account${activeFinancialAccounts.length!==1?'s':''}`}
+          open={finOverviewOpen.accounts}
+          onToggle={()=>setFinOverviewOpen(s=>({...s,accounts:!s.accounts}))}>
           {activeFinancialAccounts.map(a=><div key={a.id} style={{padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
             <div style={{...S.row,alignItems:'flex-start',gap:10}}>
               <div style={{minWidth:0,flex:1}}>
@@ -6877,10 +7229,13 @@ function App(){
             <span style={{fontSize:18,fontWeight:700,color:C.tx}}>{fmtMoney(totalBalance)}</span>
           </div>}
           {!hasBalances&&activeFinancialAccounts.length>0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Set balances in Settings → Finance if you want totals here.</div>}
-        </div>
+        </CollapsibleCard>
         {/* Spend summary */}
-        <div style={S.card}>
-          <span style={S.lbl}>Spending</span>
+        <CollapsibleCard
+          title="Spending"
+          summary={`${fmtMoney(weekSpend)} this week · ${fmtMoney(monthSpend)} this month`}
+          open={finOverviewOpen.spending}
+          onToggle={()=>setFinOverviewOpen(s=>({...s,spending:!s.spending}))}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
             {[{l:'This week',v:weekSpend},{l:'This month',v:monthSpend}].map(({l,v})=>
               <div key={l} style={{background:C.surf,borderRadius:10,padding:'10px',textAlign:'center'}}>
@@ -6896,7 +7251,7 @@ function App(){
             </div>
             <ProgressBar value={c.total} max={monthSpend} color={c.clr}/>
           </div>)}
-        </div>
+        </CollapsibleCard>
         {/* Alerts */}
         {(unreviewed>0||billsDueSoon.length>0)&&<div style={S.card}>
           <span style={S.lbl}>Attention</span>
@@ -7458,7 +7813,7 @@ function App(){
                   <div style={{marginBottom:12}}>
                     <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Primary Program</div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {['hyrox','running','strength'].map(id=><button key={id} onClick={()=>setPrimaryProgram(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${primaryProgram===id?C.sage:C.bd}`,background:primaryProgram===id?C.sageL:'transparent',color:primaryProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:primaryProgram===id?600:400}}>{FITNESS_PROGRAM_OPTIONS.find(option=>option.id===id)?.label||id}</button>)}
+                      {['hyrox','strength','pilates','recovery'].map(id=><button key={id} onClick={()=>setPrimaryProgram(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${primaryProgram===id?C.sage:C.bd}`,background:primaryProgram===id?C.sageL:'transparent',color:primaryProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:primaryProgram===id?600:400}}>{FITNESS_PROGRAM_OPTIONS.find(option=>option.id===id)?.label||id}</button>)}
                     </div>
                   </div>
                   <div>
@@ -7680,7 +8035,7 @@ function App(){
     const symptoms=todayLog.symptoms||'';
     const cycleDay=records.cycle?.currentDay||'';
     const cyclePhase=records.cycle?.phase||'';
-    const HTABS=['recovery','wellness','body','care'];
+    const HTABS=['recovery','wellness','body','care','library'];
 
     return <div style={S.body}>
       <div style={{display:'flex',gap:4,marginBottom:12,overflowX:'auto'}}>
@@ -7864,10 +8219,69 @@ function App(){
           </div>)}
         </div>
       </div>}
+
+      {hTab==='library'&&<div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:12}}>On-demand sessions for recovery days. Tap Start to launch in Training.</div>
+        {['Pilates','Mobility','Recovery','Stretching'].map(cat=>{
+          const sessions=RECOVERY_LIBRARY_SESSIONS.filter(s=>s.libraryCategory===cat);
+          if(!sessions.length)return null;
+          const accent=cat==='Pilates'?C.sage:cat==='Mobility'?C.amber:cat==='Recovery'?C.navy:C.sageDk;
+          const accentL=cat==='Pilates'?C.sageL:cat==='Mobility'?C.amberL:cat==='Recovery'?C.navyL:C.sageL;
+          return <div key={cat} style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>{cat}</div>
+            {sessions.map(session=><div key={session.id||session.name} style={{...S.card,padding:'12px',marginBottom:6,borderLeft:`3px solid ${accent}`}}>
+              <div style={{...S.row,alignItems:'flex-start',gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{session.name}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:2}}>{session.duration||session.dur} · {cat}</div>
+                  <div style={{fontSize:11,color:C.tx2,marginTop:4,lineHeight:1.4}}>{session.purpose}</div>
+                </div>
+                <button style={{...S.btnSmall(accent),flexShrink:0}} onClick={()=>{
+                  const hydrated=hydrateWorkoutSession({...session,warmup:getWarmupForCategory(session.warmupKey||'mobility'),cooldown:getCooldownForCategory(session.cooldownKey||'mobility')});
+                  launchWorkout(hydrated);
+                  openTab('training');
+                }}>Start</button>
+              </div>
+            </div>)}
+          </div>;
+        })}
+      </div>}
     </div>;
   }
 
   function InsightsScreen(){
+    const [weekReviewCard,setWeekReviewCard]=useState(null);
+    function generateWeeklyReview(){
+      const wkStart=weekKey(NOW);
+      const wkEnd=addDaysIso(wkStart,7);
+      const weekDays=Array.from({length:7},(_,i)=>addDaysIso(wkStart,i));
+      const tasksCompleted=(taskHistory||[]).filter(t=>t.done&&t.updatedAt&&t.updatedAt.slice(0,10)>=wkStart&&t.updatedAt.slice(0,10)<wkEnd).length;
+      const tasksTotal=(taskHistory||[]).filter(t=>!t.parentId&&t.date>=wkStart&&t.date<wkEnd).length;
+      const workoutsCount=(workoutHistory||[]).filter(h=>h.date>=wkStart&&h.date<wkEnd).length;
+      const dailyHabitCount=(habits||[]).filter(h=>h.frequencyType==='daily').length;
+      const habitDueCounts=weekDays.length*dailyHabitCount;
+      const habitDone=weekDays.reduce((s,d)=>s+((dailyLogs[d]?.habitsCompleted||[]).length),0);
+      const habitRate=habitDueCounts>0?Math.round((habitDone/habitDueCounts)*100):null;
+      const energyLogs=weekDays.map(d=>dailyLogs[d]?.energyScore).filter(Boolean);
+      const avgEnergyWk=energyLogs.length?+(energyLogs.reduce((s,n)=>s+n,0)/energyLogs.length).toFixed(1):null;
+      const snapshot={
+        week:wkStart,
+        weekLabel:`Week of ${wkStart}`,
+        createdAt:new Date().toISOString(),
+        workouts:workoutsCount,
+        inboxPending:(inboxItems||[]).filter(x=>x.status==='pending').length,
+        transactions:(transactions||[]).filter(t=>t.date>=wkStart&&t.date<wkEnd).length,
+        habitsCompleted:weekDays.filter(d=>(dailyLogs[d]?.habitsCompleted||[]).length>0).length,
+        tasksCompleted,
+        tasksTotal,
+        workoutsCount,
+        habitRate,
+        avgEnergy:avgEnergyWk,
+      };
+      updateProfile(p=>({...p,weeklySnapshots:[snapshot,...(p.weeklySnapshots||[])]}));
+      setWeekReviewCard(snapshot);
+      showNotif('Weekly review saved','success');
+    }
     const logs=Object.values(dailyLogs||{}).filter(l=>l.energyScore);
     const withSleep7=logs.filter(l=>l.sleepHours>=7);
     const withSleep6=logs.filter(l=>l.sleepHours<6);
@@ -7907,6 +8321,31 @@ function App(){
       insightItems.push('Log more recovery and workout data to unlock stronger pattern detection.');
     }
     return <div style={S.body}>
+      <div style={S.card}>
+        <div style={{...S.row,marginBottom:weekReviewCard?12:0}}>
+          <div><span style={S.lbl}>Weekly Review</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>Capture this week's data</div></div>
+          <button style={S.btnSmall(C.sage)} onClick={generateWeeklyReview}>Generate</button>
+        </div>
+        {weekReviewCard&&<div style={{background:C.surf,borderRadius:12,padding:'12px 14px'}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.tx,marginBottom:6}}>{weekReviewCard.weekLabel}</div>
+          <div style={{...S.row,padding:'4px 0',borderBottom:`0.5px solid ${C.bd}`}}>
+            <span style={{fontSize:11,color:C.muted}}>Tasks completed</span>
+            <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{weekReviewCard.tasksCompleted} / {weekReviewCard.tasksTotal}</span>
+          </div>
+          <div style={{...S.row,padding:'4px 0',borderBottom:`0.5px solid ${C.bd}`}}>
+            <span style={{fontSize:11,color:C.muted}}>Workouts</span>
+            <span style={{fontSize:13,fontWeight:600,color:C.sage}}>{weekReviewCard.workoutsCount}</span>
+          </div>
+          {weekReviewCard.habitRate!=null&&<div style={{...S.row,padding:'4px 0',borderBottom:`0.5px solid ${C.bd}`}}>
+            <span style={{fontSize:11,color:C.muted}}>Habit completion</span>
+            <span style={{fontSize:13,fontWeight:600,color:weekReviewCard.habitRate>=70?C.sage:C.amber}}>{weekReviewCard.habitRate}%</span>
+          </div>}
+          {weekReviewCard.avgEnergy!=null&&<div style={{...S.row,padding:'4px 0'}}>
+            <span style={{fontSize:11,color:C.muted}}>Avg energy</span>
+            <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{weekReviewCard.avgEnergy}/10</span>
+          </div>}
+        </div>}
+      </div>
       <div style={S.card}>
         <span style={S.lbl}>Interpretation</span>
         <div style={{fontSize:15,fontWeight:700,color:C.tx,marginBottom:8}}>Auto-generated patterns</div>
@@ -8397,6 +8836,31 @@ function App(){
               <span style={S.lbl}>Home maintenance</span>
               <div style={{fontSize:13,color:C.tx}}>{Object.keys(maintenanceHistory||{}).length} tasks completed this period</div>
             </div>
+          </div>
+        </div>;
+      })()}
+
+      {/* Focus Mode overlay */}
+      {focusTaskId&&(()=>{
+        const focusTask=taskHistory.find(t=>t.id===focusTaskId)||null;
+        if(!focusTask)return null;
+        const tmrMins=focusTmrSec!==null?Math.floor(focusTmrSec/60):null;
+        const tmrSecs=focusTmrSec!==null?focusTmrSec%60:null;
+        const tmrPct=focusTmrSec!==null?focusTmrSec/(25*60):1;
+        return <div style={{position:'fixed',inset:0,background:C.navy,zIndex:999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px'}}>
+          <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:16}}>Focus Mode</div>
+          <div style={{fontSize:22,fontWeight:800,color:C.white,textAlign:'center',lineHeight:1.3,marginBottom:32,maxWidth:320}}>{focusTask.text}</div>
+          {focusTmrSec!==null&&<div style={{marginBottom:32,textAlign:'center'}}>
+            <div style={{fontSize:60,fontWeight:800,color:C.white,letterSpacing:'-2px'}}>{String(tmrMins).padStart(2,'0')}:{String(tmrSecs).padStart(2,'0')}</div>
+            <div style={{width:200,height:4,background:'rgba(255,255,255,0.2)',borderRadius:99,marginTop:10,overflow:'hidden',margin:'10px auto 0'}}>
+              <div style={{width:`${tmrPct*100}%`,height:'100%',background:C.white,borderRadius:99,transition:'width 1s linear'}}/>
+            </div>
+          </div>}
+          <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:280}}>
+            {focusTmrSec===null&&<button style={{...S.btnSolid(),background:C.sage,border:'none'}} onClick={()=>{setFocusTmrSec(25*60);setFocusTmrRunning(true);}}>Start 25-min Timer</button>}
+            {focusTmrSec!==null&&<button style={{...S.btnSolid(),background:focusTmrRunning?C.amberDk:C.sage,border:'none'}} onClick={()=>setFocusTmrRunning(r=>!r)}>{focusTmrRunning?'Pause':'Resume'}</button>}
+            <button style={{...S.btnSolid(),background:C.sage,border:'none'}} onClick={()=>{updateProfile(p=>({...p,taskHistory:p.taskHistory.map(t=>t.id===focusTask.id?{...t,done:true,status:'done',updatedAt:new Date().toISOString()}:t)}));setFocusTaskId(null);setFocusTmrSec(null);setFocusTmrRunning(false);showNotif('Task completed!','success');}}>Done — Mark Complete</button>
+            <button style={{...S.btnGhost,color:C.white,borderColor:'rgba(255,255,255,0.3)'}} onClick={()=>{setFocusTaskId(null);setFocusTmrSec(null);setFocusTmrRunning(false);}}>Exit Focus</button>
           </div>
         </div>;
       })()}
