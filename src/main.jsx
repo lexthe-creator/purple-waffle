@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import DailyExecutionPanel from './components/DailyExecutionPanel.jsx';
 import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
@@ -184,6 +183,7 @@ const ACTIVE_WORKOUT_STORAGE_KEY=STORAGE_KEYS.activeWorkout;
 function normalizeGrowthState(raw={}){
   const next=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
   const activationChecklist=next.activationChecklist&&typeof next.activationChecklist==='object'?next.activationChecklist:{};
+  const setupCardCompleted=(activationChecklist.checkInCompleted===true&&activationChecklist.prioritiesSet===true&&activationChecklist.actionCompleted===true)||next.setupCardCompleted===true;
   return{
     firstOpenedAt:typeof next.firstOpenedAt==='string'?next.firstOpenedAt:null,
     firstValueAt:typeof next.firstValueAt==='string'?next.firstValueAt:null,
@@ -192,6 +192,7 @@ function normalizeGrowthState(raw={}){
     installPromptShownCount:Number.isFinite(next.installPromptShownCount)?next.installPromptShownCount:0,
     installAcceptedAt:typeof next.installAcceptedAt==='string'?next.installAcceptedAt:null,
     onboardingDismissed:next.onboardingDismissed===true,
+    setupCardCompleted,
     activationChecklist:{
       checkInCompleted:activationChecklist.checkInCompleted===true,
       prioritiesSet:activationChecklist.prioritiesSet===true,
@@ -210,6 +211,209 @@ function getDefaultGrowthState(){
 function isIosLikeInstallContext(){
   const ua=window.navigator.userAgent||'';
   return /iPad|iPhone|iPod/.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document);
+}
+
+function toTitleCaseLabel(text=''){
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part=>part.charAt(0).toUpperCase()+part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function getCompactWorkoutTitle(title=''){
+  const cleaned=(title||'').replace(/^Strength\s+[—-]\s+/i,'').trim();
+  return cleaned?toTitleCaseLabel(cleaned):'Workout';
+}
+
+function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
+  const items=[
+    {id:'checkInCompleted',label:'Check in'},
+    {id:'prioritiesSet',label:'Pick priorities'},
+    {id:'actionCompleted',label:'Start first task'},
+  ];
+  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
+    <div>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Setup</div>
+      <div style={{fontSize:18,fontWeight:800,color:C.tx,lineHeight:1.1}}>Set your day once.</div>
+    </div>
+    <div style={{display:'grid',gap:6}}>
+      {items.map(item=>{
+        const done=activationChecklist?.[item.id]===true;
+        const onClick=item.id==='checkInCompleted'?onOpenCheckIn:onOpenAddTask;
+        return <button
+          key={item.id}
+          type="button"
+          onClick={done?undefined:onClick}
+          style={{
+            ...S.row,
+            width:'100%',
+            background:C.surf,
+            border:`1px solid ${done?C.sageL:C.bd}`,
+            borderRadius:12,
+            padding:'10px 12px',
+            cursor:done?'default':'pointer',
+            textAlign:'left',
+          }}
+        >
+          <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+            <span style={{width:18,height:18,borderRadius:999,display:'inline-flex',alignItems:'center',justifyContent:'center',background:done?C.sage:C.white,border:`1px solid ${done?C.sage:C.bd}`,color:done?C.white:C.muted,fontSize:10,fontWeight:700,flexShrink:0}}>{done?'✓':''}</span>
+            <span style={{fontSize:13,fontWeight:600,color:C.tx,opacity:done?0.72:1}}>{item.label}</span>
+          </div>
+          {!done&&<span style={{fontSize:11,fontWeight:700,color:C.navy,flexShrink:0}}>Open</span>}
+        </button>;
+      })}
+    </div>
+  </section>;
+}
+
+function TodayList({
+  C,
+  S,
+  FieldInput,
+  dailyExecutionEntry,
+  selectedDateLabel,
+  isViewingToday,
+  updatePriorityTask,
+  movePriorityTask,
+  removePriorityTask,
+  addPriorityTask,
+  setDailyExecutionMode,
+}){
+  const headingId=React.useId();
+  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
+  const visibleTasks=dailyExecutionEntry.mode==='execution'
+    ?dailyExecutionEntry.agenda
+    :dailyExecutionEntry.priorities;
+
+  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
+    <div style={{...S.row,alignItems:'flex-start',gap:10}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Today</div>
+        <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
+        {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
+      </div>
+      <span style={S.pill(dailyExecutionEntry.mode==='execution'?C.sageL:C.navyL,dailyExecutionEntry.mode==='execution'?C.sageDk:C.navyDk)}>{dailyExecutionEntry.mode==='execution'?'Execution':'Planning'}</span>
+    </div>
+    <div style={{display:'grid',gap:8}}>
+      {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:8}}>No priorities</div>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={addPriorityTask}>Add task</button>
+      </div>}
+      {visibleTasks.map((task,index,items)=><div key={task.id} style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+        <button
+          type="button"
+          aria-pressed={task.completed}
+          aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
+          style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700}}
+          onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
+        >
+          {task.completed?'✓':''}
+        </button>
+        {dailyExecutionEntry.mode==='planning'
+          ?<FieldInput
+            id={`daily-priority-${task.id}`}
+            aria-label={`Priority ${index+1}`}
+            value={task.text||''}
+            placeholder={`Task ${index+1}`}
+            style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
+            onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
+          />
+          :<div style={{minHeight:42,display:'flex',alignItems:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
+            {task.text||`Task ${index+1}`}
+          </div>}
+        <div style={{display:'flex',gap:6}}>
+          <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
+          <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
+          {dailyExecutionEntry.mode==='planning'&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
+        </div>
+      </div>)}
+    </div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      <button type="button" style={{...S.btnGhost,flex:1}} onClick={addPriorityTask}>Add task</button>
+      {dailyExecutionEntry.mode==='planning'
+        ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
+        :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
+    </div>
+  </section>;
+}
+
+function QuickActions({
+  C,
+  S,
+  metrics,
+  shouldPromptWorkoutDecision,
+  scheduledTodayWorkout,
+  recoveryWorkoutOption,
+  handleWorkoutDecision,
+  mealTitle,
+  mealSubtitle,
+  onMealAction,
+  workoutTitle,
+  workoutDuration,
+  workoutCta,
+  onWorkoutAction,
+  taskTitle,
+  taskMeta,
+  taskCta,
+  onTaskAction,
+  showTaskDone,
+  onTaskDone,
+  onOpenCheckIn,
+  onOpenBrainDump,
+  onOpenCalendar,
+}){
+  return <section style={{display:'grid',gap:10}}>
+    {metrics.length>0&&<div style={{display:'grid',gridTemplateColumns:`repeat(${metrics.length},minmax(0,1fr))`,gap:8}}>
+      {metrics.map(metric=><div key={metric.label} style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+        <div style={{fontSize:9,color:C.muted,marginBottom:4,textTransform:'uppercase',letterSpacing:0.3}}>{metric.label}</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{metric.value}</div>
+      </div>)}
+    </div>}
+    {shouldPromptWorkoutDecision&&<WorkoutDecisionPrompt
+      C={C}
+      S={S}
+      scheduledWorkout={scheduledTodayWorkout}
+      recoveryWorkout={recoveryWorkoutOption}
+      onAccept={()=>handleWorkoutDecision('accept')}
+      onModify={()=>handleWorkoutDecision('modify')}
+      onIgnore={()=>handleWorkoutDecision('ignore')}
+    />}
+    <div style={{display:'grid',gap:8}}>
+      <div style={{...S.row,background:C.card,borderRadius:14,padding:'12px 12px',alignItems:'center'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Meal</div>
+          <div style={{fontSize:14,fontWeight:700,color:C.tx,lineHeight:1.2}}>{mealTitle}</div>
+          {mealSubtitle&&<div style={{fontSize:11,color:C.muted,marginTop:3}}>{mealSubtitle}</div>}
+        </div>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onMealAction}>Add</button>
+      </div>
+      <div style={{...S.row,background:C.card,borderRadius:14,padding:'12px 12px',alignItems:'center'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Workout</div>
+          <div style={{fontSize:14,fontWeight:700,color:C.tx,lineHeight:1.2}}>{workoutTitle}</div>
+          {!!workoutDuration&&<div style={{fontSize:11,color:C.muted,marginTop:3}}>{workoutDuration}</div>}
+        </div>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onWorkoutAction}>{workoutCta}</button>
+      </div>
+      <div style={{...S.row,background:C.card,borderRadius:14,padding:'12px 12px',alignItems:'center'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Tasks</div>
+          <div style={{fontSize:14,fontWeight:700,color:C.tx,lineHeight:1.2}}>{taskTitle}</div>
+          {!!taskMeta&&<div style={{fontSize:11,color:C.muted,marginTop:3}}>{taskMeta}</div>}
+        </div>
+        <div style={{display:'flex',gap:6,flexShrink:0}}>
+          {showTaskDone&&<button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onTaskDone}>Done</button>}
+          <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onTaskAction}>{taskCta}</button>
+        </div>
+      </div>
+    </div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      <button type="button" style={{...S.btnGhost,flex:1}} onClick={onOpenCheckIn}>Check in</button>
+      <button type="button" style={{...S.btnGhost,flex:1,position:'relative'}} onClick={onOpenBrainDump}>Add</button>
+      <button type="button" style={{...S.btnGhost,flex:1}} onClick={onOpenCalendar}>Open Calendar</button>
+    </div>
+  </section>;
 }
 
 function shouldKeepKeyEventLocal(event){
@@ -655,7 +859,7 @@ function normalizeFitnessProgram(program='hyrox'){
 
 function getAnchoredTrainingDays(programType='4-day',trainingWeekStart='Mon'){
   const normalizedProgramType=programType==='5-day'?'5-day':'4-day';
-  const startLabel=trainingWeekStart==='Wed'?'Wed':'Mon';
+  const startLabel=['Sun','Mon','Wed'].includes(trainingWeekStart)?trainingWeekStart:'Mon';
   const dayIndexToLabel=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const startIdx=dayIndexToLabel.indexOf(startLabel);
   const offsets=normalizedProgramType==='5-day'?[0,1,2,4,6]:[0,2,4,6];
@@ -664,13 +868,13 @@ function getAnchoredTrainingDays(programType='4-day',trainingWeekStart='Mon'){
 
 function orderTrainingDays(days=[],trainingWeekStart='Mon'){
   const dayIndexToLabel=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const startIdx=dayIndexToLabel.indexOf(trainingWeekStart==='Wed'?'Wed':'Mon');
+  const startIdx=dayIndexToLabel.indexOf(['Sun','Mon','Wed'].includes(trainingWeekStart)?trainingWeekStart:'Mon');
   const rank=new Map(dayIndexToLabel.map((label,idx)=>[label,(idx-startIdx+7)%7]));
   return [...new Set(days)].filter(label=>rank.has(label)).sort((a,b)=>rank.get(a)-rank.get(b));
 }
 
 function resolveAthleteProfile(profileAthlete={},legacyTrainingPlan={}){
-  const trainingWeekStart=profileAthlete?.trainingWeekStart==='Wed'?'Wed':'Mon';
+  const trainingWeekStart=['Sun','Mon','Wed'].includes(profileAthlete?.trainingWeekStart)?profileAthlete.trainingWeekStart:'Mon';
   const initialProgramType=profileAthlete?.programType==='5-day'?'5-day':'4-day';
   const preferredTrainingDays=orderTrainingDays(
     Array.isArray(profileAthlete?.preferredTrainingDays)&&profileAthlete.preferredTrainingDays.length
@@ -693,7 +897,7 @@ function resolveAthleteProfile(profileAthlete={},legacyTrainingPlan={}){
 }
 
 function getTrainingWeekAnchorDate(dateLike,trainingWeekStart='Mon'){
-  const anchorDow=trainingWeekStart==='Wed'?3:1;
+  const anchorDow=trainingWeekStart==='Wed'?3:trainingWeekStart==='Sun'?0:1;
   const anchored=new Date(typeof dateLike==='string'?`${dateLike}T12:00:00`:dateLike);
   anchored.setHours(0,0,0,0);
   anchored.setDate(anchored.getDate()-((anchored.getDay()-anchorDow+7)%7));
@@ -3310,9 +3514,11 @@ function App(){
       if(['execution_started','meal_planned','meal_logged','workout_started','workout_completed','task_completed'].includes(type))activationChecklist.actionCompleted=true;
       const hasSetupSignal=activationChecklist.checkInCompleted||activationChecklist.prioritiesSet;
       const hasActionSignal=activationChecklist.actionCompleted;
+      const setupCardCompleted=activationChecklist.checkInCompleted&&activationChecklist.prioritiesSet&&activationChecklist.actionCompleted;
       return{
         ...next,
         lastSeenAt:nowIso,
+        setupCardCompleted:next.setupCardCompleted||setupCardCompleted,
         activationChecklist,
         firstOpenedAt:next.firstOpenedAt||nowIso,
         firstValueAt:next.firstValueAt||(hasSetupSignal&&hasActionSignal?nowIso:null),
@@ -3369,7 +3575,7 @@ function App(){
   const installCooldownActive=!!(growthState.installPromptDismissedAt&&Date.now()-new Date(growthState.installPromptDismissedAt).getTime()<installDismissCooldownMs);
   const shouldShowInstallCta=installAvailable&&!isInstalled&&installEngaged&&!installCooldownActive;
   const needsInstallHelp=!installAvailable&&!isInstalled&&installEngaged;
-  const showActivationChecklist=loaded&&!growthState.firstValueAt&&!growthState.onboardingDismissed;
+  const showActivationChecklist=loaded&&!growthState.setupCardCompleted&&!growthState.onboardingDismissed;
   const installHelpText=isIosLikeInstallContext()
     ?'Use Share > Add to Home Screen in Safari to install this app.'
     :'Install becomes available in supported browsers after the app is served from HTTPS or localhost.';
@@ -4774,6 +4980,19 @@ function App(){
       :missingMealSlots[0]
         ?`${missingMealSlots[0].slot.label} still open`
         :'Meals logged';
+    const homeMetrics=[
+      energyFive!=null?{label:'Energy',value:`${energyFive}/5`}:null,
+      sleepHoursToday?{label:'Sleep',value:`${sleepWhole}h ${String(sleepMinutes).padStart(2,'0')}m`}:null,
+      pendingInbox.length>0?{label:'Inbox',value:String(pendingInbox.length)}:null,
+    ].filter(Boolean);
+    const mealCardTitle='Log meal';
+    const mealCardSubtitle=(nextPlannedMeal||missingMealSlots.length>0)?'Quick add':null;
+    const workoutCardTitle=getCompactWorkoutTitle(workoutTitle||restDayRecovery.name);
+    const workoutCardDuration=workoutDuration||restDayRecovery.dur||'25 min';
+    const taskCardTitle=nextTaskItem?.text||'No tasks';
+    const taskCardMeta=nextTaskItem
+      ?`${nextTaskItem.scheduledTime||'Anytime'}${nextTaskItem.priority?` · P${nextTaskItem.priority}`:''}`
+      :null;
 
     function rollAllOverdue(){
       updateProfile(p=>({
@@ -4850,6 +5069,17 @@ function App(){
         photo:entry.photo||null,
       },slotOverride||entry.slot||'snack');
       showNotif(`Repeated ${entry.meal}`,'success');
+    }
+    function openMealQuickAdd(){
+      setMealShortcut({slot:missingMealSlots[0]?.slot.id||'lunch',mode:'ingredient'});
+      setShowManual(true);
+      openTab('meals');
+    }
+    function openAddTaskFlow(){
+      setNewTask(createNewTaskDraft(activeDate,{date:activeDate,bucket:'next'}));
+      setTaskDraftText('');
+      setShowAddTask(true);
+      openTab('tasks',{taskTab:'next'});
     }
 
     function buildAgendaItemsForDate(dateStr){
@@ -4965,112 +5195,56 @@ function App(){
           <button style={{...S.btnGhost,flex:1,fontSize:11}} onClick={()=>{dismissCarryover();openTab('tasks',{taskTab:'next'});}}>Review</button>
         </div>
       </div>}
-      <DailyExecutionPanel
+      {showActivationChecklist&&<SetupCard
+        C={C}
+        S={S}
+        activationChecklist={growthState.activationChecklist}
+        onOpenCheckIn={()=>setShowMorningCheckin(true)}
+        onOpenAddTask={openAddTaskFlow}
+      />}
+      {(shouldShowInstallCta||needsInstallHelp)&&!isInstalled&&<div style={{...S.card,padding:'12px 14px'}}>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Install</div>
+        <div style={{fontSize:11,color:C.tx2,lineHeight:1.4,marginBottom:shouldShowInstallCta?10:0}}>{installHelpText}</div>
+        {shouldShowInstallCta&&<button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openInstallPrompt}>Install</button>}
+      </div>}
+      <TodayList
         C={C}
         S={S}
         FieldInput={FieldInput}
         dailyExecutionEntry={dailyExecutionEntry}
-        installAvailable={shouldShowInstallCta}
-        installHelpVisible={needsInstallHelp}
-        installHelpText={installHelpText}
-        isInstalled={isInstalled}
-        openInstallPrompt={openInstallPrompt}
-        showActivationChecklist={showActivationChecklist}
-        activationChecklist={growthState.activationChecklist}
-        dismissActivationChecklist={()=>{
-          updateGrowthState(prev=>({...prev,onboardingDismissed:true}));
-          trackGrowthEvent('onboarding_dismissed',{surface:'home_activation'});
-        }}
-        openCommandBar={openCommandBar}
-        energyFive={energyFive}
-        sleepHoursToday={sleepHoursToday}
-        sleepWhole={sleepWhole}
-        sleepMinutes={sleepMinutes}
-        pendingInbox={pendingInbox}
+        selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):'Today'}
+        isViewingToday={isViewingToday}
+        updatePriorityTask={updatePriorityTask}
+        movePriorityTask={movePriorityTask}
+        removePriorityTask={removePriorityTask}
+        addPriorityTask={addPriorityTask}
+        setDailyExecutionMode={setDailyExecutionMode}
+      />
+      <QuickActions
+        C={C}
+        S={S}
+        metrics={homeMetrics}
         shouldPromptWorkoutDecision={shouldPromptWorkoutDecision}
         scheduledTodayWorkout={scheduledTodayWorkout}
         recoveryWorkoutOption={recoveryWorkoutOption}
         handleWorkoutDecision={handleWorkoutDecision}
-        updatePriorityTask={updatePriorityTask}
-        movePriorityTask={movePriorityTask}
-        removePriorityTask={removePriorityTask}
-        compactNextMealLabel={compactNextMealLabel}
-        nextPlannedMeal={nextPlannedMeal}
-        mealSlots={MEAL_SLOTS}
-        openMeals={()=>openTab('meals')}
-        workoutTitle={workoutTitle}
-        workoutDuration={workoutDuration}
-        workoutMeta={workoutMeta}
-        wktDone={wktDone}
-        openTodayWorkoutAction={openTodayWorkoutAction}
-        nextTaskItem={nextTaskItem}
-        toggleTaskDone={toggleTaskDone}
-        habitsSummary={habitsSummary}
-        habitsBadge={habitsBadge}
-        openHabitsModal={()=>openHabitsEditor(activeDate)}
-        todayLog={todayLog}
-        selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):''}
-        isViewingToday={isViewingToday}
-        setShowMorningCheckin={setShowMorningCheckin}
-        openBrainDump={openBrainDump}
-        addPriorityTask={addPriorityTask}
-        setDailyExecutionMode={setDailyExecutionMode}
-        openCalendar={()=>openTab('calendar',{calendarFocusDay:activeDate,calendarViewMode:'week',calendarWeekIndex:getWeekIndexForDate(activeDate,TODAY),calendarMonthIndex:getMonthIndexForDate(activeDate,TODAY)})}
+        mealTitle={mealCardTitle}
+        mealSubtitle={mealCardSubtitle}
+        onMealAction={openMealQuickAdd}
+        workoutTitle={workoutCardTitle}
+        workoutDuration={workoutCardDuration}
+        workoutCta={wktDone?'View':'Start'}
+        onWorkoutAction={openTodayWorkoutAction}
+        taskTitle={taskCardTitle}
+        taskMeta={taskCardMeta}
+        taskCta={nextTaskItem?'Open':'Add task'}
+        onTaskAction={nextTaskItem?()=>openTab('tasks',{taskTab:'next'}):openAddTaskFlow}
+        showTaskDone={!!nextTaskItem}
+        onTaskDone={()=>nextTaskItem&&toggleTaskDone(nextTaskItem.id)}
+        onOpenCheckIn={()=>setShowMorningCheckin(true)}
+        onOpenBrainDump={openBrainDump}
+        onOpenCalendar={()=>openTab('calendar',{calendarFocusDay:activeDate,calendarViewMode:'week',calendarWeekIndex:getWeekIndexForDate(activeDate,TODAY),calendarMonthIndex:getMonthIndexForDate(activeDate,TODAY)})}
       />
-
-      <div style={{display:'grid',gridTemplateColumns:'1.15fr 0.85fr',gap:12}}>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:10}}>
-            <div>
-              <div style={S.lbl}>Nutrition Today</div>
-              <div style={{fontSize:18,fontWeight:700,color:C.tx}}>Progress, not just numbers</div>
-            </div>
-            <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>{setMealShortcut({slot:missingMealSlots[0]?.slot.id||'lunch',mode:'ingredient'});setShowManual(true);openTab('meals');}}>Log food</button>
-          </div>
-          {[
-            {label:'Protein',value:`${totPro}g / ${macros.protein}g`,progress:totPro,max:macros.protein,color:C.amber},
-            {label:'Hydration',value:`${todayH} oz / ${hydGoal} oz`,progress:todayH,max:hydGoal,color:C.navy},
-            {label:'Meals',value:`${mealsLogged} / ${mealsGoal}`,progress:mealsLogged,max:mealsGoal,color:C.sage},
-          ].map(item=><div key={item.label} style={{marginBottom:10}}>
-            <div style={{...S.row,marginBottom:4}}>
-              <span style={{fontSize:11,color:C.tx}}>{item.label}</span>
-              <span style={{fontSize:11,color:C.muted}}>{item.value}</span>
-            </div>
-            <ProgressBar value={item.progress} max={item.max} color={item.color}/>
-          </div>)}
-          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>
-            {lastBreakfast&&<button style={{...S.btnGhost,fontSize:10,padding:'6px 9px'}} onClick={()=>repeatMeal(lastBreakfast,'breakfast')}>Repeat breakfast</button>}
-            {lastSnack&&<button style={{...S.btnGhost,fontSize:10,padding:'6px 9px'}} onClick={()=>repeatMeal(lastSnack,'snack')}>Repeat snack</button>}
-            <button style={{...S.btnGhost,fontSize:10,padding:'6px 9px'}} onClick={()=>addWater(12)}>+12 oz water</button>
-          </div>
-        </div>
-
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:10}}>
-            <div>
-              <div style={S.lbl}>Recovery</div>
-              <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{recoveryState.label}</div>
-            </div>
-            <span style={S.pill(recoveryState.bg,recoveryState.color)}>{recoveryReadiness}</span>
-          </div>
-          <div style={{display:'grid',gap:8,marginBottom:10}}>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Sleep</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{sleepHoursToday?`${sleepWhole}h ${String(sleepMinutes).padStart(2,'0')}m`:'—'}</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Energy</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{energyFive}/5</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Meals logged</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{mealsLogged}</div>
-            </div>
-          </div>
-          <div style={{fontSize:11,color:C.tx2,marginBottom:10}}>{recoveryState.recommendation}</div>
-          <button style={{...S.btnGhost,width:'100%'}} onClick={()=>setShowEnergyIn(true)}>Update recovery</button>
-        </div>
-      </div>
 
       <button
         type="button"
@@ -8651,7 +8825,7 @@ function App(){
                   </div>
                   <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Training Week Anchor</div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {['Mon','Wed'].map(option=><button key={option} onClick={()=>setTrainingWeekStart(option)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${(athlete.trainingWeekStart||'Mon')===option?C.sage:C.bd}`,background:(athlete.trainingWeekStart||'Mon')===option?C.sageL:'transparent',color:(athlete.trainingWeekStart||'Mon')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.trainingWeekStart||'Mon')===option?600:400}}>{option==='Mon'?'Monday Start':'Wednesday Start'}</button>)}
+                    {['Sun','Mon','Wed'].map(option=><button key={option} onClick={()=>setTrainingWeekStart(option)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${(athlete.trainingWeekStart||'Mon')===option?C.sage:C.bd}`,background:(athlete.trainingWeekStart||'Mon')===option?C.sageL:'transparent',color:(athlete.trainingWeekStart||'Mon')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.trainingWeekStart||'Mon')===option?600:400}}>{option==='Sun'?'Sunday Start':option==='Mon'?'Monday Start':'Wednesday Start'}</button>)}
                   </div>
                 </div>
 
@@ -8821,8 +8995,8 @@ function App(){
       tasks:'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 13h14v-2H7v2zm0-6v2h14V7H7zm0 10h14v-2H7v2z',
       // Inbox tray
       inbox:'M19 3H4.99C3.88 3 3 3.9 3 5l.01 14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H5V5h14v10z',
-      // Barbell, simplified for the small bottom-nav viewport
-      training:'M21 7h-2V5h-2v2h-2v10h2v2h2v-2h2V7zm-14 0H5V5H3v14h2v-2h2V7zm6-2h-2v14h2V5zm-4 3H7v8h2V8zm8 0h-2v8h2V8z',
+      // Dumbbell diagonal (Material Design fitness_center)
+      training:'M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 5.57 2 7.71 3.43 9.14 2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22 14.86 20.57 16.28 22 18.43 19.86 19.85 18.43 22 16.28 20.57 14.86z',
       // Fork and knife / restaurant
       meals:'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
       // Menu / more
