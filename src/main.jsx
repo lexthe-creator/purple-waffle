@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import DailyExecutionPanel from './components/DailyExecutionPanel.jsx';
+import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
+import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
 
 const IS_DEV=import.meta.env.DEV;
@@ -418,7 +421,7 @@ const FITNESS_ADD_ON_OPTIONS=[
   {id:'pilates',label:'Pilates'},
   {id:'recovery',label:'Recovery'},
 ];
-const DEFAULT_ATHLETE={fiveKTime:null,hyroxFinishTime:null,weakStations:[],strongStations:[],squat5RM:null,deadlift5RM:null,wallBallMaxReps:null,preferredTrainingDays:['Mon','Wed','Fri','Sun'],programType:'4-day',trainingWeekStart:'Mon',primaryProgram:'hyrox',secondaryAddOns:[]};
+const DEFAULT_ATHLETE={fiveKTime:null,hyroxFinishTime:null,weakStations:[],strongStations:[],squat5RM:null,deadlift5RM:null,wallBallMaxReps:null,preferredTrainingDays:['Mon','Wed','Fri','Sun'],programType:'4-day',trainingWeekStart:'Mon',primaryProgram:'hyrox',secondaryAddOns:[],raceDate:DEFAULT_RACE,planStartDate:DEFAULT_START};
 
 function normalizeFitnessProgram(program='hyrox'){
   const normalized=String(program||'hyrox').trim().toLowerCase();
@@ -440,6 +443,72 @@ function orderTrainingDays(days=[],trainingWeekStart='Mon'){
   const startIdx=dayIndexToLabel.indexOf(trainingWeekStart==='Wed'?'Wed':'Mon');
   const rank=new Map(dayIndexToLabel.map((label,idx)=>[label,(idx-startIdx+7)%7]));
   return [...new Set(days)].filter(label=>rank.has(label)).sort((a,b)=>rank.get(a)-rank.get(b));
+}
+
+function resolveAthleteProfile(profileAthlete={},legacyTrainingPlan={}){
+  const trainingWeekStart=profileAthlete?.trainingWeekStart==='Wed'?'Wed':'Mon';
+  const initialProgramType=profileAthlete?.programType==='5-day'?'5-day':'4-day';
+  const preferredTrainingDays=orderTrainingDays(
+    Array.isArray(profileAthlete?.preferredTrainingDays)&&profileAthlete.preferredTrainingDays.length
+      ?profileAthlete.preferredTrainingDays
+      :getAnchoredTrainingDays(initialProgramType,trainingWeekStart),
+    trainingWeekStart
+  );
+  const programType=preferredTrainingDays.length>=5?'5-day':'4-day';
+  return{
+    ...DEFAULT_ATHLETE,
+    ...(profileAthlete||{}),
+    trainingWeekStart,
+    programType,
+    preferredTrainingDays:preferredTrainingDays.length
+      ?preferredTrainingDays
+      :getAnchoredTrainingDays(programType,trainingWeekStart),
+    planStartDate:normalizeDateKey(profileAthlete?.planStartDate||legacyTrainingPlan?.startDate,DEFAULT_START)||DEFAULT_START,
+    raceDate:normalizeDateKey(profileAthlete?.raceDate||legacyTrainingPlan?.raceDate,DEFAULT_RACE)||DEFAULT_RACE,
+  };
+}
+
+function getTrainingWeekAnchorDate(dateLike,trainingWeekStart='Mon'){
+  const anchorDow=trainingWeekStart==='Wed'?3:1;
+  const anchored=new Date(typeof dateLike==='string'?`${dateLike}T12:00:00`:dateLike);
+  anchored.setHours(0,0,0,0);
+  anchored.setDate(anchored.getDate()-((anchored.getDay()-anchorDow+7)%7));
+  return anchored;
+}
+
+function getTrainingCycleState(planStartDate=DEFAULT_START,raceDate=DEFAULT_RACE,referenceDate=getCurrentDate().today){
+  const resolvedStart=normalizeDateKey(planStartDate,DEFAULT_START)||DEFAULT_START;
+  const resolvedRace=normalizeDateKey(raceDate,DEFAULT_RACE)||DEFAULT_RACE;
+  const currentDate=typeof referenceDate==='string'?new Date(`${referenceDate}T12:00:00`):new Date(referenceDate);
+  currentDate.setHours(12,0,0,0);
+  const startDate=new Date(`${resolvedStart}T12:00:00`);
+  const raceDateObj=new Date(`${resolvedRace}T12:00:00`);
+  const elapsedDays=Math.max(0,Math.floor((currentDate-startDate)/86400000));
+  const totalWeeks=Math.max(1,Math.round((raceDateObj-startDate)/(7*86400000)));
+  const currentWeek=Math.min(totalWeeks,Math.floor(elapsedDays/7)+1);
+  const weekType=currentWeek%2===1?'A':'B';
+  const taperStartWeek=Math.max(totalWeeks-3,1);
+  const peakStartWeek=Math.max(taperStartWeek-5,1);
+  const specificityStartWeek=Math.max(peakStartWeek-7,1);
+  const buildStartWeek=Math.max(specificityStartWeek-8,1);
+  const phaseEnds=[buildStartWeek-1,specificityStartWeek-1,peakStartWeek-1,taperStartWeek-1,totalWeeks];
+  const phaseIndex=currentWeek<=phaseEnds[0]?0:currentWeek<=phaseEnds[1]?1:currentWeek<=phaseEnds[2]?2:currentWeek<=phaseEnds[3]?3:4;
+  return{
+    planStartDate:resolvedStart,
+    raceDate:resolvedRace,
+    totalWeeks,
+    currentWeek,
+    weekType,
+    daysToRace:Math.max(0,Math.ceil((raceDateObj-currentDate)/86400000)),
+    weeksToRace:Math.max(0,Math.ceil((raceDateObj-currentDate)/604800000)),
+    phaseIndex,
+    phase:PHASES[phaseIndex],
+    phaseCode:['base','build','specificity','peak','taper'][phaseIndex]||'base',
+    taperStartWeek,
+    peakStartWeek,
+    specificityStartWeek,
+    buildStartWeek,
+  };
 }
 
 const PROGRAM_LIBRARY_META={
@@ -780,7 +849,42 @@ function resolveWeeklyTrainingPlan(weekStart,wkType,phIdx,fitnessProgram='hyrox'
       status,
       moved:!!(completedLog&&completedLog.date!==planned.plannedDate),
       moveLabel:completedLog&&completedLog.date!==planned.plannedDate
-        ?`Moved to ${new Date(completedLog.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}`
+        ?`Moved to ${formatDate(completedLog.date,'weekdayMonthDayShort')}`
+        :null,
+    });
+    return acc;
+  },[]);
+}
+
+function resolveWeeklyTrainingPlanFromProfile(weekStart,athleteProfile,fitnessProgram='hyrox',history,todayStr=getCurrentDate().today){
+  const programType=athleteProfile?.programType||'4-day';
+  const preferredTrainingDays=athleteProfile?.preferredTrainingDays;
+  const trainingWeekStart=athleteProfile?.trainingWeekStart||'Mon';
+  const days=Array.from({length:7},(_,i)=>{
+    const d=new Date(weekStart);
+    d.setDate(d.getDate()+i);
+    return formatDateKey(d);
+  });
+  return days.reduce((acc,dateStr)=>{
+    const cycleState=getTrainingCycleState(athleteProfile?.planStartDate,athleteProfile?.raceDate,dateStr);
+    const planned=getPlannedWorkoutForDate(dateStr,cycleState.weekType,cycleState.phaseIndex,fitnessProgram,programType,preferredTrainingDays,trainingWeekStart);
+    if(!planned)return acc;
+    const completedLog=getWorkoutLogForPlan(planned,history);
+    const status=completedLog
+      ?(completedLog.date===planned.plannedDate?'completed':'moved')
+      :dateStr<todayStr
+        ?'missed'
+        :dateStr===todayStr
+          ?'today'
+          :'planned';
+    acc.push({
+      ...planned,
+      completedLog,
+      completedDate:completedLog?.date||null,
+      status,
+      moved:!!(completedLog&&completedLog.date!==planned.plannedDate),
+      moveLabel:completedLog&&completedLog.date!==planned.plannedDate
+        ?`Moved to ${formatDate(completedLog.date,'weekdayMonthDayShort')}`
         :null,
     });
     return acc;
@@ -1763,7 +1867,7 @@ function CalBtn({title,desc,dateStr,durStr,color}){
 const DEFAULT_OPS={
   userProfile:{weight:null,height:null,age:null},
   athleteProfile:{...DEFAULT_ATHLETE},
-  trainingPlan:{planId:'hyrox',startDate:'2026-03-16',raceDate:'2026-10-25',days:4},
+  trainingPlan:{planId:'hyrox'},
   accounts:[],
   categories:[],
   meals:{},
@@ -1797,6 +1901,8 @@ const DEFAULT_OPS={
   recurringExpenses:[],
   financeSettings:{billReminders:true,reviewPrefs:'flagNew',transferRules:[]},
   top3:{},
+  dailyExecution:{},
+  dailyRecommendations:{},
   inboxItems:[], // [{id,text,createdDate,suggestedType,status:'pending'|'processed'}]
   googleClientId:null,
   notifications:{morningTime:'07:00',eveningTime:'21:00'},
@@ -1839,8 +1945,11 @@ function syncCanonicalProfileState(profile={}){
   const meals=normalizeMealsByDate(profile.meals||profile.nutr||profile.mealHistory||{});
   const workouts=Array.isArray(profile.workouts)?profile.workouts:(Array.isArray(profile.workoutHistory)?profile.workoutHistory:[]);
   const tasks=Array.isArray(profile.tasks)?profile.tasks:(Array.isArray(profile.taskHistory)?profile.taskHistory:[]);
+  const athleteProfile=resolveAthleteProfile(profile.athleteProfile,profile.trainingPlan);
   return{
     ...profile,
+    athleteProfile,
+    trainingPlan:{planId:profile.trainingPlan?.planId||profile.fitnessProgram||athleteProfile.primaryProgram||'hyrox'},
     accounts,
     categories,
     meals,
@@ -1899,6 +2008,19 @@ function normalizeLoadedProfile(data={}){
     if(normalizedKey)acc[normalizedKey]=Array.isArray(value)?value.slice(0,3):['','',''];
     return acc;
   },{});
+  normalized.dailyExecution=Object.entries(normalized.dailyExecution&&typeof normalized.dailyExecution==='object'?normalized.dailyExecution:{}).reduce((acc,[key,value])=>{
+    const normalizedKey=normalizeDateKey(key,null);
+    if(normalizedKey)acc[normalizedKey]=normalizeDailyExecutionEntry(value,normalizedKey,normalized.top3?.[normalizedKey]||[]);
+    return acc;
+  },{});
+  Object.entries(normalized.top3).forEach(([dateKey,value])=>{
+    if(!normalized.dailyExecution[dateKey])normalized.dailyExecution[dateKey]=normalizeDailyExecutionEntry(null,dateKey,value);
+  });
+  normalized.dailyRecommendations=Object.entries(normalized.dailyRecommendations&&typeof normalized.dailyRecommendations==='object'?normalized.dailyRecommendations:{}).reduce((acc,[key,value])=>{
+    const normalizedKey=normalizeDateKey(key,null);
+    if(normalizedKey)acc[normalizedKey]=normalizeDailyRecommendationsEntry(value,normalizedKey);
+    return acc;
+  },{});
   normalized.tasks=normalized.tasks.map(task=>normalizeTaskEntry({
     ...task,
     date:normalizeDateKey(task?.date),
@@ -1919,6 +2041,68 @@ function normalizeLoadedProfile(data={}){
     accountId:resolveTransactionAccountId(tx?.accountId||tx?.accountName||tx?.account,normalized.accounts),
   }));
   return syncCanonicalProfileState(normalized);
+}
+
+function createDailyExecutionTask(text='',overrides={}){
+  return{
+    id:overrides.id||`dx-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    text,
+    completed:!!overrides.completed,
+    date:overrides.date||getTodayKey(),
+    timestamp:overrides.timestamp||new Date().toISOString(),
+    updatedAt:overrides.updatedAt||new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
+  return createDailyExecutionTask(typeof task==='string'?task:(task?.text||''),{
+    ...((task&&typeof task==='object'&&!Array.isArray(task))?task:{}),
+    id:task?.id||`dx-${dateKey}-${index}`,
+    date:normalizeDateKey(task?.date||dateKey,dateKey),
+    completed:!!task?.completed,
+    timestamp:typeof task?.timestamp==='string'?task.timestamp:null,
+    updatedAt:typeof task?.updatedAt==='string'?task.updatedAt:new Date().toISOString(),
+  });
+}
+
+function normalizeDailyExecutionEntry(entry,dateKey=getTodayKey(),legacyTop3=[]){
+  const source=entry&&typeof entry==='object'&&!Array.isArray(entry)?entry:{};
+  const prioritiesSource=Array.isArray(source.priorities)&&source.priorities.length>0
+    ?source.priorities
+    :Array.isArray(legacyTop3)
+      ?legacyTop3.filter(item=>typeof item==='string'&&item.trim())
+      :[];
+  const priorities=prioritiesSource.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index));
+  const agenda=Array.isArray(source.agenda)&&source.agenda.length>0
+    ?source.agenda.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index))
+    :[];
+  const mode=source.mode==='execution'?'execution':'planning';
+  return{
+    date:dateKey,
+    priorities,
+    agenda:mode==='execution'&&agenda.length===0?priorities.map(task=>({...task})):agenda,
+    mode,
+  };
+}
+
+function normalizeDailyRecommendation(recommendation={},dateKey=getTodayKey()){
+  const next=recommendation&&typeof recommendation==='object'&&!Array.isArray(recommendation)?recommendation:{};
+  return{
+    type:next.type||'task',
+    date:normalizeDateKey(next.date||dateKey,dateKey),
+    suggestion:next.suggestion&&typeof next.suggestion==='object'?next.suggestion:{},
+    userOverride:!!next.userOverride,
+    finalSelection:next.finalSelection&&typeof next.finalSelection==='object'?next.finalSelection:null,
+    action:['accept','modify','ignore'].includes(next.action)?next.action:null,
+  };
+}
+
+function normalizeDailyRecommendationsEntry(entry={},dateKey=getTodayKey()){
+  const next=entry&&typeof entry==='object'&&!Array.isArray(entry)?entry:{};
+  return{
+    workout:next.workout?normalizeDailyRecommendation({...next.workout,type:'workout'},dateKey):null,
+  };
 }
 
 const MACROS={protein:140,carbsTraining:200,carbsRest:130,fat:55};
@@ -2854,7 +3038,7 @@ function App(){
   const restRef=useRef(null),recRef=useRef(null),saveRef=useRef(null);
   const latestProfileRef=useRef(DEFAULT_OPS);
   const prevTodayRef=useRef(TODAY);
-  const {trainingPlan,athleteProfile,accounts,categories,meals,exercises,workouts,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,tasks,taskTemplates,choreHistory,lifestyleItems,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
+  const {athleteProfile,accounts,categories,meals,exercises,workouts,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,tasks,taskTemplates,choreHistory,lifestyleItems,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
   const financialAccounts=accounts;
   const nutr=meals;
   const workoutHistory=workouts;
@@ -3231,33 +3415,28 @@ function App(){
     return()=>clearTimeout(recRef.current);
   },[recOn,recTmr,recIdx,recSecond,recSess]);
 
-  const {days,startDate,raceDate}=trainingPlan;
   const athlete=athleteProfile;
   const fitnessProgram=normalizeFitnessProgram(profile.fitnessProgram||'hyrox');
   const trainingFlags=getTrainingDayFlags(DOW,athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon');
-
-  const effStart=startDate||DEFAULT_START,effRace=raceDate||DEFAULT_RACE;
-  const _start=new Date(effStart+'T00:00:00'),_race=new Date(effRace+'T00:00:00');
-  const daysSS=Math.max(0,Math.floor((NOW-_start)/86400000));
-  const totalWks=Math.max(1,Math.round((_race-_start)/(7*86400000)));
-  const CUR_WK=Math.floor(daysSS/7)+1,WK_TYPE=CUR_WK%2===1?'A':'B';
-  const _taperS=Math.max(totalWks-3,1),_peakS=Math.max(_taperS-5,1),_specS=Math.max(_peakS-7,1),_buildS=Math.max(_specS-8,1);
-  const PH_ENDS=[_buildS-1,_specS-1,_peakS-1,_taperS-1,totalWks];
-  const PH_IDX=CUR_WK<=PH_ENDS[0]?0:CUR_WK<=PH_ENDS[1]?1:CUR_WK<=PH_ENDS[2]?2:CUR_WK<=PH_ENDS[3]?3:4;
-  const DTR=Math.max(0,Math.ceil((_race-NOW)/86400000));
-  const PH=PHASES[PH_IDX];
-  const phCode=['base','build','specificity','peak','taper'][PH_IDX]||'base';
+  const trainingCycle=getTrainingCycleState(athlete?.planStartDate,athlete?.raceDate,TODAY);
+  const raceDate=trainingCycle.raceDate;
+  const planStartDate=trainingCycle.planStartDate;
+  const CUR_WK=trainingCycle.currentWeek;
+  const PH_IDX=trainingCycle.phaseIndex;
+  const PH=trainingCycle.phase;
+  const DTR=trainingCycle.daysToRace;
+  const phCode=trainingCycle.phaseCode;
   const paceProfile=computePaces(athlete.fiveKTime);
-  const weekMon=(()=>{const d=new Date(NOW);d.setDate(d.getDate()-((d.getDay()+6)%7));d.setHours(0,0,0,0);return d;})();
-  const currentWeekKey=weekKey(NOW);
+  const weekMon=getTrainingWeekAnchorDate(NOW,athlete?.trainingWeekStart||'Mon');
+  const currentWeekKey=formatDateKey(weekMon);
   const weekDatesGlobal=Array.from({length:7},(_,i)=>{const d=new Date(weekMon);d.setDate(d.getDate()+i);return formatDateKey(d);});
   const weekAnalytics=computeWeeklyAnalytics(workoutHistory,weekMon);
   const weekWorkoutGoal=(athlete?.preferredTrainingDays?.length)||((athlete?.programType||'4-day')==='5-day'?5:4);
   const weekMilesGoal=phCode==='peak'?20:phCode==='specificity'?18:phCode==='build'?15:phCode==='taper'?10:12;
-  const resolvedWkType=WK_TYPE||'A';
+  const resolvedWkType=trainingCycle.weekType||'A';
   const resolvedPhaseIdx=Number.isFinite(PH_IDX)?PH_IDX:0;
   const TODAY_WK=getTodayWk(resolvedWkType,resolvedPhaseIdx,trainingFlags);
-  const weekPlannedWorkouts=resolveWeeklyTrainingPlan(weekMon,resolvedWkType,resolvedPhaseIdx,fitnessProgram,athlete?.programType||'4-day',athlete?.preferredTrainingDays,athlete?.trainingWeekStart||'Mon',workoutHistory,TODAY);
+  const weekPlannedWorkouts=resolveWeeklyTrainingPlanFromProfile(weekMon,athlete,fitnessProgram,workoutHistory,TODAY);
   const workoutLibrarySessions=getWorkoutLibrarySessions(fitnessProgram,athlete?.programType||'4-day',resolvedWkType,resolvedPhaseIdx);
   const todayPlannedWorkout=weekPlannedWorkouts.find(item=>item.plannedDate===TODAY)||null;
   const missedPlannedWorkouts=weekPlannedWorkouts.filter(item=>item.status==='missed');
@@ -3298,7 +3477,22 @@ function App(){
   const plannerWorkoutStatusGlobal=weekAnalytics.sessionsLogged<plannerWeekWorkoutGoal?'Behind target':'On track';
   const pendingInbox=(inboxItems||[]).filter(x=>x.status==='pending');
   const recoveryToday=computeRecoveryState(dailyLogs?.[TODAY],energyScore,sleepHours);
-  const adjustedTodayWorkout=suggestedWorkoutBase?adjustWorkoutForRecovery(suggestedWorkoutBase,recoveryToday):null;
+  const restDayRecovery=RECOVERY_WORKOUT_LIBRARY[1];
+  const workoutDecisionThreshold=70;
+  const scheduledTodayWorkout=suggestedWorkoutBase?hydrateWorkoutSession({
+    ...suggestedWorkoutBase,
+    adjustmentLabel:'Planned Session',
+    adjustmentReason:'Scheduled workout',
+  }):null;
+  const recoveryWorkoutOption=suggestedWorkoutBase?adjustWorkoutForRecovery(suggestedWorkoutBase,{...recoveryToday,level:'Low'}):restDayRecovery;
+  const dailyWorkoutRecommendation=profile.dailyRecommendations?.[TODAY]?.workout||null;
+  const shouldPromptWorkoutDecision=!!scheduledTodayWorkout&&recoveryToday.readiness<workoutDecisionThreshold&&!wktDone;
+  const selectedTodayWorkout=shouldPromptWorkoutDecision&&dailyWorkoutRecommendation?.action==='modify'
+    ?hydrateWorkoutSession(dailyWorkoutRecommendation.finalSelection||recoveryWorkoutOption)
+    :scheduledTodayWorkout;
+  const adjustedTodayWorkout=selectedTodayWorkout;
+  const hasModifiedSession=false;
+  const modifiedSessionChanges=[];
   const activeFinancialAccounts=useMemo(
     ()=>normalizeFinancialAccounts(financialAccounts).filter(account=>account.isActive!==false),
     [financialAccounts]
@@ -3321,31 +3515,16 @@ function App(){
   );
   const todaysStatus=!trainingFlags.isTrainingDay
     ?(suggestedPlanEntry?'suggested':'rest')
-    :adjustedTodayWorkout?.type==='recovery'
+    :selectedTodayWorkout?.type==='recovery'
       ?'recovery_override'
-      :adjustedTodayWorkout
+      :selectedTodayWorkout
         ?'training'
         :'rest';
-  const restDayRecovery=RECOVERY_WORKOUT_LIBRARY[1];
   const suggestionLabel=suggestedPlanEntry?.suggestedCarryover
     ?`Suggested for today: ${suggestedPlanEntry.plannedDayLabel}'s ${suggestedPlanEntry.plannedName}`
     :todayPlannedWorkout
       ?`Planned for today: ${todayPlannedWorkout.plannedName}`
       :null;
-  const hasModifiedSession=adjustedTodayWorkout?.adjustmentLabel==='Reduced Volume';
-  const modifiedSessionChanges=hasModifiedSession
-    ?((suggestedWorkoutBase?.ex||[]).map((exercise,idx)=>{
-      const originalSets=exercise?.targetSets||exercise?.s||3;
-      const modifiedExercise=adjustedTodayWorkout?.ex?.[idx];
-      const modifiedSets=modifiedExercise?.targetSets||modifiedExercise?.s||originalSets;
-      if(modifiedSets===originalSets)return null;
-      return {
-        name:exercise?.n||modifiedExercise?.n||`Exercise ${idx+1}`,
-        originalSets,
-        modifiedSets,
-      };
-    }).filter(Boolean))
-    :[];
 
   useEffect(()=>{
     if(!loaded||maintenanceAttentionItems.length===0||lastMaintenancePromptDate===TODAY)return;
@@ -3353,7 +3532,7 @@ function App(){
     showNotif(
       `${maintenanceAttentionItems.length} maintenance item${maintenanceAttentionItems.length!==1?'s':''} need attention.`,
       'warn',
-      topItem?`${topItem.label} is ${topItem.status==='overdue'?'overdue':topItem.status==='today'?'due today':'due soon'}${topItem.dueDate?` because the due date is ${new Date(topItem.dueDate+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric'})}`:''}.`:''
+      topItem?`${topItem.label} is ${topItem.status==='overdue'?'overdue':topItem.status==='today'?'due today':'due soon'}${topItem.dueDate?` because the due date is ${formatDate(topItem.dueDate,'monthDayLong')}`:''}.`:''
     );
     updateProfile({lastMaintenancePromptDate:TODAY});
   },[loaded,maintenanceAttentionItems.length,lastMaintenancePromptDate,TODAY,updateProfile]);
@@ -3654,6 +3833,39 @@ function App(){
     saveDailyLog({energyScore,sleepHours,workoutDone:wktDone,proteinMet:totPro>=(proGoal*0.9),hydrationMet:todayH>=(hydGoal*0.9)});
     setShowEnergyIn(false);showNotif('Energy logged','success');
   }
+  function updateDailyExecution(dateKey,updater){
+    const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
+    const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
+    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>task.text||'');
+    updateProfile(current=>({
+      ...current,
+      dailyExecution:{...(current.dailyExecution||{}),[dateKey]:nextEntry},
+      top3:{...(current.top3||{}),[dateKey]:nextTop3},
+    }));
+    syncDailyCheckinTop3(dateKey,nextTop3);
+  }
+  function updateWorkoutRecommendationForToday(action,finalSelection=null){
+    updateProfile(current=>({
+      ...current,
+      dailyRecommendations:{
+        ...(current.dailyRecommendations||{}),
+        [TODAY]:{
+          ...normalizeDailyRecommendationsEntry(current.dailyRecommendations?.[TODAY],TODAY),
+          workout:normalizeDailyRecommendation({
+            type:'workout',
+            date:TODAY,
+            suggestion:{
+              scheduledWorkout:scheduledTodayWorkout,
+              recoveryWorkout:recoveryWorkoutOption,
+            },
+            userOverride:action==='modify',
+            finalSelection,
+            action,
+          },TODAY),
+        },
+      },
+    }));
+  }
   function completeHabit(habitId){
     const log=dailyLogs?.[TODAY]||{};
     const done=[...(log.habitsCompleted||[])];
@@ -3900,19 +4112,9 @@ function App(){
   }
 
   function HomeScreenV2(){
-    const top3Today=top3[TODAY]||['','',''];
-    const [t3,setT3]=useState(top3Today);
-    const [agendaTab,setAgendaTab]=useState('today');
-    const saveTop3=vals=>{
-      const todayKey=getTodayKey();
-      setT3(vals);
-      updateProfile(p=>({...p,top3:{...p.top3,[todayKey]:vals}}));
-      syncDailyCheckinTop3(todayKey,vals);
-    };
-    useEffect(()=>{
-      setT3(top3Today);
-    },[TODAY,top3]);
-
+    const [weekAheadOpen,setWeekAheadOpen]=useState(false);
+    const agendaTab='today';
+    const dailyExecutionEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[TODAY],TODAY,top3[TODAY]||[]);
     const todayLog=dailyLogs?.[TODAY]||{};
     const pendingInbox=(inboxItems||[]).filter(x=>x.status==='pending');
     const mealsLogged=todayN.length;
@@ -3928,7 +4130,6 @@ function App(){
     const taskBuckets=getTaskBuckets(taskHistory,TODAY);
     const nextWeekMon=new Date(weekMon);nextWeekMon.setDate(weekMon.getDate()+7);
     const nextWeekDates=Array.from({length:7},(_,i)=>{const d=new Date(nextWeekMon);d.setDate(nextWeekMon.getDate()+i);return formatDateKey(d);});
-    const [weekAheadOpen,setWeekAheadOpen]=useState(false);
     const overdueTasks=taskBuckets.overdue;
     const carryoverDismissed=!!(dailyLogs?.[TODAY]?.carryoverDismissed);
     const showCarryoverPrompt=overdueTasks.length>0&&!carryoverDismissed;
@@ -3956,12 +4157,88 @@ function App(){
         ?{label:'Moderate',color:C.amberDk,bg:C.amberL,recommendation:'Train, but keep volume controlled.'}
         :{label:'Low',color:C.red,bg:C.redL,recommendation:'Recovery or light session recommended.'};
     const doneForToday=wktDone&&maintenanceAttentionItems.length===0&&(missingMealSlots.length===0||mealsLogged>=mealsGoal);
-    const workoutTitle=adjustedTodayWorkout?.name||restDayRecovery.name;
-    const workoutMeta=todaysStatus==='recovery_override'
-      ?'Recovery replaced your planned session'
-      :suggestionLabel||describeWorkoutAdjustment(adjustedTodayWorkout)||'Open today’s plan';
-    const workoutDuration=adjustedTodayWorkout?.dur||restDayRecovery.dur||'25 min';
+    const workoutTitle=selectedTodayWorkout?.name||restDayRecovery.name;
+    const workoutMeta=shouldPromptWorkoutDecision&&!dailyWorkoutRecommendation?.action
+      ?'Recovery is low. Choose whether to continue or switch.'
+      :todaysStatus==='recovery_override'
+        ?'Recovery workout selected for today'
+        :suggestionLabel||selectedTodayWorkout?.adjustmentReason||'Open today’s plan';
+    const workoutDuration=selectedTodayWorkout?.dur||selectedTodayWorkout?.duration||restDayRecovery.dur||'25 min';
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
+
+    useEffect(()=>{
+      if(dailyExecutionEntry.mode!=='planning'||dailyExecutionEntry.priorities.length===0)return;
+      if(!dailyExecutionEntry.priorities.every(task=>task.completed))return;
+      updateDailyExecution(TODAY,entry=>({
+        ...entry,
+        mode:'execution',
+        agenda:entry.priorities.map(task=>({...task})),
+      }));
+    },[TODAY,dailyExecutionEntry]);
+
+    function setDailyExecutionMode(nextMode){
+      updateDailyExecution(TODAY,entry=>({
+        ...entry,
+        mode:nextMode,
+        agenda:nextMode==='execution'
+          ?(entry.agenda.length>0?entry.agenda:entry.priorities.map(task=>({...task})))
+          :entry.agenda,
+      }));
+    }
+
+    function updatePriorityTask(taskId,patch){
+      updateDailyExecution(TODAY,entry=>{
+        const priorities=entry.priorities.map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task);
+        const agendaSource=entry.mode==='execution'
+          ?(entry.agenda.length>0?entry.agenda:entry.priorities).map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task)
+          :entry.agenda;
+        return{...entry,priorities,agenda:agendaSource};
+      });
+    }
+
+    function addPriorityTask(){
+      updateDailyExecution(TODAY,entry=>({
+        ...entry,
+        mode:entry.mode==='execution'?entry.mode:'planning',
+        priorities:[...entry.priorities,createDailyExecutionTask('',{date:TODAY})],
+      }));
+    }
+
+    function removePriorityTask(taskId){
+      updateDailyExecution(TODAY,entry=>({
+        ...entry,
+        priorities:entry.priorities.filter(task=>task.id!==taskId),
+        agenda:entry.agenda.filter(task=>task.id!==taskId),
+      }));
+    }
+
+    function movePriorityTask(taskId,direction){
+      updateDailyExecution(TODAY,entry=>{
+        const priorities=[...entry.priorities];
+        const index=priorities.findIndex(task=>task.id===taskId);
+        const target=index+direction;
+        if(index<0||target<0||target>=priorities.length)return entry;
+        [priorities[index],priorities[target]]=[priorities[target],priorities[index]];
+        const orderedAgenda=entry.mode==='execution'
+          ?priorities.map(priorityTask=>entry.agenda.find(task=>task.id===priorityTask.id)||priorityTask)
+          :entry.agenda;
+        return{...entry,priorities,agenda:orderedAgenda};
+      });
+    }
+
+    function handleWorkoutDecision(action){
+      if(action==='modify'){
+        updateWorkoutRecommendationForToday('modify',recoveryWorkoutOption);
+        showNotif('Recovery workout selected','success');
+        return;
+      }
+      if(action==='accept'){
+        updateWorkoutRecommendationForToday('accept',scheduledTodayWorkout);
+        showNotif('Scheduled workout kept','success');
+        return;
+      }
+      updateWorkoutRecommendationForToday('ignore',scheduledTodayWorkout);
+    }
 
     const latestRunEntry=[...workoutHistory].reverse().find(entry=>entry.type==='run');
     const latestStrengthEntry=[...workoutHistory].reverse().find(entry=>entry.type==='workout');
@@ -3990,7 +4267,7 @@ function App(){
       const mins=latestSimulationEntry.data?.startedAt&&latestSimulationEntry.data?.completedAt
         ?Math.max(1,Math.round((latestSimulationEntry.data.completedAt-latestSimulationEntry.data.startedAt)/60000))
         :null;
-      return mins?`${fmtDur(mins)} · ${latestSimulationEntry.date}`:`${latestSimulationEntry.name} · ${latestSimulationEntry.date}`;
+      return mins?`${fmtDur(mins)} · ${formatDate(latestSimulationEntry.date,'monthDayShort')}`:`${latestSimulationEntry.name} · ${formatDate(latestSimulationEntry.date,'monthDayShort')}`;
     })();
     const mealHistoryAll=Object.entries(nutr||{}).flatMap(([date,entries])=>(entries||[]).map(entry=>({...entry,date}))).sort((a,b)=>a.date===b.date?((b.id||0)-(a.id||0)):b.date.localeCompare(a.date));
     const lastBreakfast=mealHistoryAll.find(entry=>entry.slot==='breakfast');
@@ -4046,8 +4323,8 @@ function App(){
     }
 
     function openTodayWorkoutAction(){
-      if(adjustedTodayWorkout){
-        launchWorkout(adjustedTodayWorkout);
+      if(selectedTodayWorkout){
+        launchWorkout(selectedTodayWorkout);
         return;
       }
       openTab('training');
@@ -4164,7 +4441,7 @@ function App(){
         };
       }
       return weekDates.reduce((acc,dateStr)=>{
-        const dayLabel=new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'});
+        const dayLabel=formatDate(dateStr,'weekdayShort');
         const groups=buildAgendaItemsForDate(dateStr);
         acc.scheduled.push(...groups.scheduled.map(item=>({...item,dayLabel})));
         acc.suggestions.push(...groups.suggestions.map(item=>({...item,dayLabel})));
@@ -4187,158 +4464,56 @@ function App(){
           <button style={{...S.btnGhost,flex:1,fontSize:11}} onClick={()=>{dismissCarryover();openTab('tasks',{taskTab:'next'});}}>Review</button>
         </div>
       </div>}
-      <div style={{...S.card,paddingBottom:14}}>
-        <div style={{...S.row,alignItems:'flex-start',marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Daily Priorities</div>
-            <div style={{...S.support,maxWidth:240}}>Set the day, then move.</div>
-          </div>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            {installAvailable&&!isInstalled&&<button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={openInstallPrompt}>Install</button>}
-            <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={openCommandBar}>Quick Capture</button>
-          </div>
-        </div>
-        <div style={{display:'grid',gap:8,marginBottom:12}}>
-          {[0,1,2].map(idx=><FieldInput
-            key={idx}
-            value={t3[idx]||''}
-            placeholder={`Priority ${idx+1}`}
-            style={S.inp}
-            onChange={e=>{
-              const next=[...t3];
-              next[idx]=e.target.value;
-              saveTop3(next);
-            }}
-          />)}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:10}}>
-          <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Energy</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{energyFive}/5</div>
-          </div>
-          <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Sleep</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{sleepHoursToday?`${sleepWhole}h ${String(sleepMinutes).padStart(2,'0')}m`:'—'}</div>
-          </div>
-          <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Inbox</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{pendingInbox.length}</div>
-          </div>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowMorningCheckin(true)}>{todayLog.checkInDone?'Review check-in':'Morning check-in'}</button>
-          <button style={{...S.btnGhost,flex:1,position:'relative'}} onClick={openBrainDump}>
-            Brain Dump
-            {pendingInbox.length>0&&<span style={{position:'absolute',top:6,right:8,minWidth:16,height:16,borderRadius:999,background:C.red,color:C.white,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{Math.min(pendingInbox.length,9)}</span>}
-          </button>
-        </div>
-      </div>
-
-      <div style={S.card}>
-        <div style={{...S.row,marginBottom:10}}>
-          <div>
-            <div style={S.lbl}>Daily Execution</div>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>What’s next across the day</div>
-          </div>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('tasks',{taskTab:'next'})}>Open flow</button>
-        </div>
-        <div style={{display:'grid',gap:8}}>
-          <div style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px',alignItems:'center'}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Next task</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{nextTaskItem?.text||'Nothing queued'}</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:2}}>{nextTaskItem?`${nextTaskItem.scheduledTime||'Unscheduled'} · Priority ${nextTaskItem.priority||1}`:'Capture or schedule a task'}</div>
-            </div>
-            {nextTaskItem&&<button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>toggleTaskDone(nextTaskItem.id)}>Done</button>}
-          </div>
-          <div style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px',alignItems:'center'}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Next meal</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{compactNextMealLabel}</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:2}}>{nextPlannedMeal?`${(MEAL_SLOTS.find(slot=>slot.id===nextPlannedMeal.slot)||{}).label||nextPlannedMeal.slot} planned`:'Use templates or quick logging'}</div>
-            </div>
-            <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>openTab('meals')}>{nextPlannedMeal?'Open plan':'Plan meal'}</button>
-          </div>
-          <div style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px',alignItems:'center'}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Today’s workout</div>
-              <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{workoutTitle}</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:2}}>{workoutDuration} · {wktDone?'Completed':workoutMeta}</div>
-            </div>
-            <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={openTodayWorkoutAction}>{wktDone?'View':'Start'}</button>
-          </div>
-        </div>
-      </div>
-
-      <div style={{...S.card,padding:'20px 16px',boxShadow:C.shadowStrong}}>
-        <div style={{...S.row,alignItems:'flex-end',marginBottom:14}}>
-          <div>
-            <div style={S.lbl}>Today Agenda</div>
-            <div style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.15}}>What happens next</div>
-          </div>
-          <div style={{display:'flex',gap:6}}>
-            {[{id:'today',label:'Today'},{id:'tomorrow',label:'Tomorrow'},{id:'week',label:'This Week'}].map(item=><button key={item.id} onClick={()=>setAgendaTab(item.id)} style={{padding:'7px 10px',borderRadius:10,border:`1px solid ${agendaTab===item.id?C.navy:C.bd}`,background:agendaTab===item.id?C.navyL:'transparent',color:agendaTab===item.id?C.navyDk:C.muted,fontSize:11,fontWeight:agendaTab===item.id?700:500,cursor:'pointer'}}>{item.label}</button>)}
-          </div>
-        </div>
-        {!hasAgendaContent
-          ?<div style={{background:C.surf,borderRadius:12,padding:'14px 12px',marginBottom:12}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:4}}>Nothing scheduled {agendaTab==='today'?'today':agendaTab==='tomorrow'?'tomorrow':'this week'} yet</div>
-            <div style={{fontSize:11,color:C.muted}}>Use Calendar or Tasks to add structure.</div>
-          </div>
-          :<div style={{display:'grid',gap:12,marginBottom:12}}>
-            {visibleScheduledItems.length>0&&<div>
-              <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Scheduled</div>
-              <div style={{display:'grid',gap:8}}>
-                {visibleScheduledItems.map(item=><div key={item.id} style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gridTemplateColumns:'64px 1fr auto',gap:10,alignItems:'center'}}>
-                  <div>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{item.dayLabel}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{item.timeLabel}</div>
-                  </div>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.tx,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.title}</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>{item.meta}</div>
-                  </div>
-                  {item.kind==='task'
-                    ?<button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>toggleTaskDone(item.taskId)}>Done</button>
-                    :<span style={S.pill(item.kind==='workout'?C.navyL:item.kind==='busy'?C.amberL:C.surf,item.kind==='workout'?C.navyDk:item.kind==='busy'?C.amberDk:C.tx2)}>{item.kind}</span>}
-                </div>)}
-              </div>
-            </div>}
-            {visibleSuggestionItems.length>0&&<div>
-              <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Suggestions</div>
-              <div style={{display:'grid',gap:8}}>
-                {visibleSuggestionItems.map(item=><div key={item.id} style={{background:C.card,border:`1px dashed ${C.bd}`,borderRadius:12,padding:'10px 12px',display:'grid',gridTemplateColumns:'64px 1fr auto',gap:10,alignItems:'center'}}>
-                  <div>
-                    <div style={{fontSize:10,color:C.muted,marginBottom:2}}>{item.dayLabel}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{item.timeLabel}</div>
-                  </div>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.tx,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.title}</div>
-                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>{item.meta}</div>
-                  </div>
-                  {item.kind==='alert'
-                    ?<button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>completeMaintenanceItem(item.maintenanceId)}>Clear</button>
-                    :<span style={S.pill(item.kind==='meal'?C.sageL:item.kind==='alert'?C.redL:C.surf,item.kind==='meal'?C.sageDk:item.kind==='alert'?C.red:C.tx2)}>{item.kind}</span>}
-                </div>)}
-              </div>
-            </div>}
-          </div>}
-        <div style={{display:'flex',gap:8}}>
-          <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('calendar',{calendarFocusDay:agendaTab==='tomorrow'?addDaysIso(TODAY,1):TODAY})}>Open Calendar</button>
-          <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('tasks',{taskTab:'next'})}>Open Tasks</button>
-        </div>
-      </div>
+      <DailyExecutionPanel
+        C={C}
+        S={S}
+        FieldInput={FieldInput}
+        dailyExecutionEntry={dailyExecutionEntry}
+        installAvailable={installAvailable}
+        isInstalled={isInstalled}
+        openInstallPrompt={openInstallPrompt}
+        openCommandBar={openCommandBar}
+        energyFive={energyFive}
+        sleepHoursToday={sleepHoursToday}
+        sleepWhole={sleepWhole}
+        sleepMinutes={sleepMinutes}
+        pendingInbox={pendingInbox}
+        shouldPromptWorkoutDecision={shouldPromptWorkoutDecision}
+        scheduledTodayWorkout={scheduledTodayWorkout}
+        recoveryWorkoutOption={recoveryWorkoutOption}
+        handleWorkoutDecision={handleWorkoutDecision}
+        updatePriorityTask={updatePriorityTask}
+        movePriorityTask={movePriorityTask}
+        removePriorityTask={removePriorityTask}
+        compactNextMealLabel={compactNextMealLabel}
+        nextPlannedMeal={nextPlannedMeal}
+        mealSlots={MEAL_SLOTS}
+        openMeals={()=>openTab('meals')}
+        workoutTitle={workoutTitle}
+        workoutDuration={workoutDuration}
+        workoutMeta={workoutMeta}
+        wktDone={wktDone}
+        openTodayWorkoutAction={openTodayWorkoutAction}
+        nextTaskItem={nextTaskItem}
+        toggleTaskDone={toggleTaskDone}
+        todayLog={todayLog}
+        setShowMorningCheckin={setShowMorningCheckin}
+        openBrainDump={openBrainDump}
+        addPriorityTask={addPriorityTask}
+        setDailyExecutionMode={setDailyExecutionMode}
+        openCalendar={()=>openTab('calendar',{calendarFocusDay:TODAY})}
+      />
 
       <div style={S.card}>
         <button style={{width:'100%',background:'none',border:'none',cursor:'pointer',textAlign:'left',padding:0}} onClick={()=>setWeekAheadOpen(o=>!o)}>
           <div style={S.row}>
-            <div><span style={S.lbl}>Week Ahead</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>{nextWeekDates[0]} – {nextWeekDates[6]}</div></div>
+            <div><span style={S.lbl}>Week Ahead</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>{formatDateRange(nextWeekDates[0],nextWeekDates[6],'monthDayShort')}</div></div>
             <span style={{fontSize:13,color:C.muted}}>{weekAheadOpen?'▲':'▼'}</span>
           </div>
         </button>
         {weekAheadOpen&&<div style={{marginTop:12,display:'grid',gap:8}}>
           {nextWeekDates.map(dateStr=>{
-            const dayLabel=new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+            const dayLabel=formatDate(dateStr,'weekdayMonthDayShort');
             const scheduledCount=taskBuckets.scheduled.filter(t=>t.date===dateStr).length;
             return <div key={dateStr} style={{...S.row,background:C.surf,borderRadius:12,padding:'10px 12px'}}>
               <div>
@@ -4361,7 +4536,7 @@ function App(){
         </div>
         <div style={{display:'grid',gap:8}}>
           {annualHoldingItems.slice(0,4).map(item=>{
-            const dueLabel=item.dueDate?new Date(item.dueDate+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):null;
+            const dueLabel=item.dueDate?formatDate(item.dueDate,'monthYear'):null;
             return <div key={item.id} style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
               <div>
                 <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{item.label}</div>
@@ -4575,7 +4750,7 @@ function App(){
         :todaysStatus==='recovery_override'
           ?'Recovery replacement'
           :todaysStatus==='training'
-            ?(recoveryToday.level==='Moderate'?'Reduced volume':'Ready')
+            ?'Ready'
             :todaysStatus==='suggested'
               ?'Suggested'
               :'Rest day';
@@ -4584,7 +4759,7 @@ function App(){
         ?'Completed'
         :wkSess
           ?'In Progress'
-          :todaysStatus==='recovery_override'||recoveryToday.level==='Moderate'
+          :todaysStatus==='recovery_override'
             ?'Recovery Adjusted'
             :'Planned'
     );
@@ -4792,6 +4967,16 @@ function App(){
               <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{suggestionLabel}</div>
               {suggestedPlanEntry?.plannedDate!==TODAY&&<div style={{fontSize:11,color:C.tx2,marginTop:2}}>The calendar keeps the original plan. Completion will be marked off-schedule unless you replan the week.</div>}
             </div>}
+            {shouldPromptWorkoutDecision&&<WorkoutDecisionPrompt
+              C={C}
+              S={S}
+              compact
+              scheduledWorkout={scheduledTodayWorkout}
+              recoveryWorkout={recoveryWorkoutOption}
+              onAccept={()=>handleWorkoutDecision('accept')}
+              onModify={()=>handleWorkoutDecision('modify')}
+              onIgnore={()=>handleWorkoutDecision('ignore')}
+            />}
             <div style={{display:'grid',gridTemplateColumns:'repeat(2,minmax(0,1fr))',gap:8,marginBottom:12}}>
               <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
                 <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Workout Name</div>
@@ -5051,7 +5236,7 @@ function App(){
             <div style={{...S.row,marginBottom:8}}>
               <div>
                 <div style={{fontSize:14,fontWeight:700,color:C.tx}}>{entry.name}</div>
-                <div style={{fontSize:10,color:C.muted}}>{entry.date}</div>
+                <div style={{fontSize:10,color:C.muted}}>{formatDate(entry.date,'primary')}</div>
               </div>
               <span style={S.pill(entry.type==='recovery'?C.amberL:entry.type==='run'?C.navyL:C.sageL,entry.type==='recovery'?C.amberDk:entry.type==='run'?C.navyDk:C.sageDk)}>
                 {getHistoryEntryTypeLabel(entry)}
@@ -6675,7 +6860,7 @@ function App(){
         </div>}
         {pendingInbox.map((item,i)=><div key={item.id} style={{...S.card,marginBottom:8}}>
           <div style={{fontSize:13,color:C.tx,marginBottom:10,lineHeight:1.5}}>{item.text}</div>
-          <div style={{fontSize:9,color:C.muted,marginBottom:10}}>{item.createdDate}</div>
+          <div style={{fontSize:9,color:C.muted,marginBottom:10}}>{formatDate(item.createdDate,'monthDayShort')}</div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
             <button onClick={()=>convertInboxItem(item.id,'task')} style={S.btnSmall(C.sage)}>→ Task</button>
             <button onClick={()=>convertInboxItem(item.id,'finance')} style={S.btnSmall(C.navy)}>→ Finance</button>
@@ -6896,7 +7081,7 @@ function App(){
       <div style={{...S.row,marginBottom:10}}>
         <button style={S.btnGhost} onClick={()=>setCalOffset(o=>o-1)}>Prev</button>
         <span style={{fontSize:12,color:C.tx,fontWeight:500}}>
-          {weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – {weekDays[6].toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+          {formatDateRange(weekStart,weekDays[6],'monthDayShort')}
         </span>
         <button style={S.btnGhost} onClick={()=>setCalOffset(o=>o+1)}>Next</button>
       </div>
@@ -6922,7 +7107,7 @@ function App(){
       {/* Day header + actions */}
       <div style={{...S.row,marginBottom:10}}>
         <span style={{fontSize:14,fontWeight:600,color:C.tx}}>
-          {new Date(selDay+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})}
+          {formatDate(selDay,'primary')}
         </span>
         <div style={{display:'flex',gap:5}}>
           {googleConnected&&<button style={S.btnSmall(C.navy)} onClick={syncGoogleCal}>Sync</button>}
@@ -7133,7 +7318,7 @@ function App(){
           {showEditButton&&<button onClick={onToggleEdit} style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0,marginTop:2}}>{isEditing?'close':'edit'}</button>}
         </div>
         <div style={{width:'100%',fontSize:10,color:C.muted,lineHeight:1.4,paddingLeft:transaction.isReviewed?0:12,overflowWrap:'anywhere'}}>
-          {transaction.date} · <span style={{color:cat.clr}}>{cat.label}</span> · {getTransactionAccountLabel(transaction)}{transaction.isTransfer?' · transfer':''}
+          {formatDate(transaction.date,'monthDayShort')} · <span style={{color:cat.clr}}>{cat.label}</span> · {getTransactionAccountLabel(transaction)}{transaction.isTransfer?' · transfer':''}
         </div>
       </div>;
     };
@@ -7262,7 +7447,7 @@ function App(){
           {billsDueSoon.map(r=><div key={r.merchant} style={{...S.row,padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
             <div>
               <div style={{fontSize:13,color:C.tx}}>{r.merchant}</div>
-              <div style={{fontSize:10,color:C.amber}}>Due {r.nextExpectedDate} · {fmtMoney(r.averageAmount)}</div>
+              <div style={{fontSize:10,color:C.amber}}>Due {formatDate(r.nextExpectedDate,'monthDayLong')} · {fmtMoney(r.averageAmount)}</div>
             </div>
             <span style={{fontSize:10,color:C.muted}}>{r.frequency}</span>
           </div>)}
@@ -7333,7 +7518,7 @@ function App(){
       return <div style={S.body}>
         <div style={{...S.row,marginBottom:10,gap:8}}><div style={{flex:1,overflowX:'auto'}}>{sub()}</div>{addBtn}</div>
         <div style={{...S.row,marginBottom:10}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{new Date(monthStart).toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span>
+          <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{formatDate(monthStart,'monthYear')}</span>
           <span style={{fontSize:13,fontWeight:700,color:C.tx}}>{fmtMoney(monthSpend)}</span>
         </div>
         {catSpend.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:C.muted,fontSize:13}}>No spending data yet.</div>}
@@ -7382,7 +7567,7 @@ function App(){
                 <div style={{fontSize:14,fontWeight:600,color:C.tx}}>{r.merchant}</div>
                 <div style={{fontSize:11,color:C.muted,marginTop:2}}>
                   {fmtMoney(r.averageAmount)} · {r.frequency}
-                  {r.nextExpectedDate&&<span style={{color:isDue?C.amber:C.muted}}> · due {r.nextExpectedDate}{isDue?` (${daysUntil}d)`:''}</span>}
+                  {r.nextExpectedDate&&<span style={{color:isDue?C.amber:C.muted}}> · due {formatDate(r.nextExpectedDate,'monthDayLong')}{isDue?` (${daysUntil}d)`:''}</span>}
                 </div>
               </div>
               <span style={S.tag(cat.clr,C.surf)}>{cat.label||'Other'}</span>
@@ -7404,7 +7589,7 @@ function App(){
         const wk=formatDateKey(d);
         const wkEnd=new Date(d);wkEnd.setDate(d.getDate()+6);
         const total=spendTx.filter(t=>t.date>=wk&&t.date<=formatDateKey(wkEnd)).reduce((s,t)=>s+t.amount,0);
-        return{label:d.toLocaleDateString('en-US',{month:'short',day:'numeric'}),total,wk};
+        return{label:formatDate(d,'monthDayShort'),total,wk};
       }).reverse();
       const maxWeek=Math.max(...weeks.map(w=>w.total),1);
       return <div style={S.body}>
@@ -7717,7 +7902,7 @@ function App(){
                   return <div key={b.id} style={{...S.row,padding:'6px 0',borderBottom:`0.5px solid ${C.bd}`}}>
                     <div>
                       <div style={{fontSize:12,color:C.tx}}>{b.title}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{b.recurring?`Every ${'SMTWTFS'[b.dow||0]}`:b.date} · {fmtTimeRange(b.startTime,b.endTime)} · <span style={{color:cat.clr}}>{cat.label}</span></div>
+                      <div style={{fontSize:10,color:C.muted}}>{b.recurring?`Every ${'SMTWTFS'[b.dow||0]}`:formatDate(b.date,'weekdayMonthDayShort')} · {fmtTimeRange(b.startTime,b.endTime)} · <span style={{color:cat.clr}}>{cat.label}</span></div>
                     </div>
                     <button onClick={()=>deleteBusyBlock(b.id)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>x</button>
                   </div>;
@@ -7755,8 +7940,7 @@ function App(){
                   :getAnchoredTrainingDays(athlete.programType||'4-day',athlete.trainingWeekStart||'Mon'),
                 athlete.trainingWeekStart||'Mon'
               );
-              const raceWeeks=Math.max(0,Math.ceil((new Date((raceDate||DEFAULT_RACE)+'T12:00:00')-NOW)/604800000));
-              const phaseByWeeks=getPhaseByWeeks(raceWeeks);
+              const raceWeeks=trainingCycle.weeksToRace;
               const derivedSquat=athlete.squat5RM
                 ?[{label:'60%',value:Math.round(athlete.squat5RM*0.60)},{label:'70%',value:Math.round(athlete.squat5RM*0.70)},{label:'80%',value:Math.round(athlete.squat5RM*0.80)},{label:'85%',value:Math.round(athlete.squat5RM*0.85)}]
                 :[];
@@ -7871,11 +8055,11 @@ function App(){
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
                     <div>
                       <span style={S.lbl}>Race Date</span>
-                      <FieldInput type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,raceDate:e.target.value}}))} style={S.inp}/>
+                      <FieldInput type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,raceDate:e.target.value}}))} style={S.inp}/>
                     </div>
                     <div>
                       <span style={S.lbl}>Plan Start</span>
-                      <FieldInput type="date" value={startDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,startDate:e.target.value}}))} style={S.inp}/>
+                      <FieldInput type="date" value={planStartDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,planStartDate:e.target.value}}))} style={S.inp}/>
                     </div>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
@@ -7885,7 +8069,7 @@ function App(){
                     </div>
                     <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
                       <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Training phase</div>
-                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{PH?.name||phaseByWeeks.name}</div>
+                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{PH?.name||trainingCycle.phase?.name}</div>
                     </div>
                     <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
                       <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Current week</div>
@@ -7998,8 +8182,8 @@ function App(){
       tasks:'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 13h14v-2H7v2zm0-6v2h14V7H7zm0 10h14v-2H7v2z',
       // Inbox tray
       inbox:'M19 3H4.99C3.88 3 3 3.9 3 5l.01 14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H5V5h14v10z',
-      // Dumbbell / fitness center
-      training:'M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43l-1.29-1.28-2.83 2.83 1.28 1.29-1.43 1.43 1.43 1.43-1.43 1.43 1.43 1.43L4 14l2.83 2.83 2.86-2.86 2.57 2.57-2.86 2.86L12 22l3.57-3.57 1.29 1.28 2.83-2.83-1.28-1.29 1.43-1.43-1.43-1.43 1.43-1.43-1.43-1.43z',
+      // Barbell, simplified for the small bottom-nav viewport
+      training:'M21 7h-2V5h-2v2h-2v10h2v2h2v-2h2V7zm-14 0H5V5H3v14h2v-2h2V7zm6-2h-2v14h2V5zm-4 3H7v8h2V8zm8 0h-2v8h2V8z',
       // Fork and knife / restaurant
       meals:'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
       // Menu / more
@@ -8181,7 +8365,7 @@ function App(){
           {((records.labs)||[]).length===0?<div style={{fontSize:12,color:C.muted}}>No labs logged yet.</div>:(records.labs||[]).map((lab,idx)=><div key={lab.id||idx} style={{...S.row,padding:'8px 0',borderBottom:idx<(records.labs||[]).length-1?`0.5px solid ${C.bd}`:'none'}}>
             <div>
               <div style={{fontSize:12,color:C.tx}}>{lab.label}</div>
-              <div style={{fontSize:10,color:C.muted}}>{lab.value} · {lab.date}</div>
+              <div style={{fontSize:10,color:C.muted}}>{lab.value} · {formatDate(lab.date,'monthDayShort')}</div>
             </div>
           </div>)}
         </div>
@@ -8215,7 +8399,7 @@ function App(){
           </div>
           {((records.appointments)||[]).length===0?<div style={{fontSize:12,color:C.muted}}>No appointments scheduled.</div>:(records.appointments||[]).map((appt,idx)=><div key={appt.id||idx} style={{...S.row,padding:'8px 0',borderBottom:idx<(records.appointments||[]).length-1?`0.5px solid ${C.bd}`:'none'}}>
             <span style={{fontSize:12,color:C.tx}}>{appt.title}</span>
-            <span style={{fontSize:10,color:C.muted}}>{appt.date}</span>
+            <span style={{fontSize:10,color:C.muted}}>{formatDate(appt.date,'primary')}</span>
           </div>)}
         </div>
       </div>}
@@ -8428,7 +8612,7 @@ function App(){
             <div style={{fontSize:12,color:C.tx}}>Week of {s.week}</div>
             <div style={{fontSize:10,color:C.muted}}>{s.workouts} workouts · {s.transactions} transactions · {s.inboxPending} inbox items</div>
           </div>
-          <span style={{fontSize:10,color:C.muted}}>{new Date(s.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+          <span style={{fontSize:10,color:C.muted}}>{formatDate(s.createdAt,'monthDayShort')}</span>
         </div>)}
       </div>
       {/* Home maintenance */}
@@ -8588,11 +8772,12 @@ function App(){
             <div style={{...S.micro,fontWeight:600,letterSpacing:'0.2px'}}>{greeting}</div>
             <button
               style={{background:'none',border:'none',padding:0,marginTop:2,cursor:'pointer',fontSize:T.hero,fontWeight:800,color:C.tx,lineHeight:1.08,textAlign:'left'}}
+              title={formatDate(NOW,'primaryWithYear')}
               onClick={()=>{
                 openTab('calendar',{calendarFocusDay:TODAY});
               }}
             >
-              {NOW.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}
+              {formatDate(NOW,'primary')}
             </button>
           </>:<>
             <div style={S.sectionTitle}>
@@ -8712,21 +8897,25 @@ function App(){
           {morningStep===3&&<div>
             <div style={{fontSize:17,fontWeight:700,color:C.tx,marginBottom:6}}>Today's priorities</div>
             <div style={{fontSize:13,color:C.muted,marginBottom:16}}>What are your top 3 for today?</div>
-            {(top3[TODAY]||['','','']).map((v,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            {Array.from({length:3},(_,i)=>normalizeDailyExecutionEntry(profile.dailyExecution?.[TODAY],TODAY,top3[TODAY]||[]).priorities[i]||createDailyExecutionTask('',{date:TODAY,id:`morning-${i}`})).map((task,i)=><div key={task.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
               <div style={{width:22,height:22,borderRadius:'50%',background:C.sageL,color:C.sageDk,fontSize:11,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</div>
-              <FieldInput defaultValue={v} onBlur={e=>{
+              <FieldInput defaultValue={task.text||''} onBlur={e=>{
                 const todayKey=getTodayKey();
-                const n=[...(top3[todayKey]||['','',''])];
-                n[i]=e.target.value;
-                updateProfile(p=>({...p,top3:{...p.top3,[todayKey]:n}}));
-                syncDailyCheckinTop3(todayKey,n);
+                const todayEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[todayKey],todayKey,top3[todayKey]||[]);
+                const nextPriorities=[...todayEntry.priorities];
+                nextPriorities[i]=normalizeDailyExecutionTask({...task,text:e.target.value},todayKey,i);
+                updateDailyExecution(todayKey,{
+                  ...todayEntry,
+                  mode:'planning',
+                  priorities:nextPriorities,
+                });
               }} placeholder={`Priority ${i+1}...`} style={{...S.inp,padding:'9px 12px'}}/>
             </div>)}
             <div style={{display:'flex',gap:8,marginTop:16}}>
               <button style={{...S.btnGhost,flex:0}} onClick={()=>setMorningStep(2)}>Back</button>
               <button style={S.btnSolid(C.sage)} onClick={()=>{
                 const todayKey=getTodayKey();
-                const completedTop3=Array.isArray(top3[todayKey])?[...top3[todayKey]]:[];
+                const completedTop3=normalizeDailyExecutionEntry(profile.dailyExecution?.[todayKey],todayKey,top3[todayKey]||[]).priorities.slice(0,3).map(task=>task.text||'');
                 const log={...(dailyLogs?.[todayKey]||{}),energyScore,sleepHours,workoutDone:wktDone,proteinMet:totPro>=(proGoal*0.9),hydrationMet:todayH>=(hydGoal*0.9),checkInDone:true};
                 saveDailyCheckin(todayKey,{completed:true,energy:energyScore,sleep:sleepHours,top3:completedTop3});
                 updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[todayKey]:log}}));
