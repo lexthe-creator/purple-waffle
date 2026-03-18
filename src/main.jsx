@@ -3245,7 +3245,8 @@ function App(){
   const plannerProteinDays=plannerWeekNutrition.filter(d=>d.proteinMet).length;
   const plannerHydrationDays=plannerWeekNutrition.filter(d=>d.hydrationMet).length;
   const maintenanceQueue=computeMaintenanceQueue(MAINTENANCE_TASKS,maintenanceHistory,maintenanceMeta||{},TODAY);
-  const maintenanceAttentionItems=maintenanceQueue.filter(item=>item.status==='overdue'||item.status==='today'||item.dueSoon);
+  const maintenanceAttentionItems=maintenanceQueue.filter(item=>item.category!=='Yearly'&&(item.status==='overdue'||item.status==='today'||item.dueSoon));
+  const annualHoldingItems=maintenanceQueue.filter(item=>item.category==='Yearly');
   const plannerMaintenanceCount=maintenanceAttentionItems.length;
   const plannerTaskCountGlobal=taskHistory.filter(t=>t.date>=currentWeekKey&&!t.done&&!t.parentId&&(t.status||'active')==='active').length;
   const plannerWorkoutStatusGlobal=weekAnalytics.sessionsLogged<plannerWeekWorkoutGoal?'Behind target':'On track';
@@ -4240,6 +4241,28 @@ function App(){
           <button style={{...S.btnGhost,flex:1}} onClick={()=>openTab('tasks',{taskTab:'next'})}>Open Tasks</button>
         </div>
       </div>
+
+      {annualHoldingItems.length>0&&<div style={{...S.card,padding:'16px 16px 12px'}}>
+        <div style={{...S.row,marginBottom:10}}>
+          <div>
+            <div style={S.lbl}>Things to Accomplish</div>
+            <div style={{fontSize:13,fontWeight:600,color:C.tx2}}>Someday / Soon</div>
+          </div>
+          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('maintenance')}>View all</button>
+        </div>
+        <div style={{display:'grid',gap:8}}>
+          {annualHoldingItems.slice(0,4).map(item=>{
+            const dueLabel=item.dueDate?new Date(item.dueDate+'T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'}):null;
+            return <div key={item.id} style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{item.label}</div>
+                {dueLabel&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>Target: {dueLabel}</div>}
+              </div>
+              <button style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>completeMaintenanceItem(item.id)}>Done</button>
+            </div>;
+          })}
+        </div>
+      </div>}
 
       <div style={{...S.card,padding:'20px 16px',borderTop:`4px solid ${todaysStatus==='recovery_override'||todaysStatus==='rest'?C.sage:recoveryState.color}`}}>
         <div style={{...S.row,alignItems:'flex-start',marginBottom:10}}>
@@ -6488,10 +6511,11 @@ function App(){
         const newCache={...calendarCache};
         for(const ev of resp.items||[]){
           const dateStr=(ev.start?.dateTime||ev.start?.date||'').slice(0,10);if(!dateStr)continue;
-          const startHour=ev.start?.dateTime?new Date(ev.start.dateTime).getHours():0;
+          const isAllDay=!!ev.start?.date&&!ev.start?.dateTime;
+          const startHour=isAllDay?null:new Date(ev.start.dateTime).getHours();
           const endDt=ev.end?.dateTime?new Date(ev.end.dateTime):null;
-          const durationMins=endDt&&ev.start?.dateTime?Math.round((endDt-new Date(ev.start.dateTime))/60000):60;
-          const entry={id:ev.id,title:ev.summary||'Event',startHour,durationMins,color:C.navy,local:false,googleEventId:ev.id};
+          const durationMins=isAllDay?null:(endDt&&ev.start?.dateTime?Math.round((endDt-new Date(ev.start.dateTime))/60000):60);
+          const entry={id:ev.id,title:ev.summary||'Event',startHour,durationMins,allDay:isAllDay,color:C.navy,local:false,googleEventId:ev.id};
           if(!newCache[dateStr])newCache[dateStr]=[];
           const idx=newCache[dateStr].findIndex(e=>e.googleEventId===ev.id);
           if(idx>=0)newCache[dateStr][idx]=entry;else newCache[dateStr].push(entry);
@@ -6511,8 +6535,9 @@ function App(){
 
     // Merge events + busy blocks + tasks into a single time-sorted list
     // Tasks float to the top (sortMins=-1) since they typically have no time
+    const allDayEvents=selEvents.filter(e=>e.allDay);
     const allItems=[
-      ...selEvents.map(e=>({...e,kind:'event',sortMins:e.startHour*60})),
+      ...selEvents.filter(e=>!e.allDay).map(e=>({...e,kind:'event',sortMins:(e.startHour||0)*60})),
       ...selBusy.map(b=>({...b,kind:'busy',sortMins:timeToMins(b.startTime)})),
       ...selTasks.map(t=>({...t,kind:'task',sortMins:-1})),
     ].sort((a,b)=>a.sortMins-b.sortMins);
@@ -6576,6 +6601,17 @@ function App(){
       {/* Google hint */}
       {!googleConnected&&<ConnectGoogle onConnect={()=>openTab('settings',{settingsSection:'google'})}/>}
 
+      {/* All-day events */}
+      {allDayEvents.length>0&&<div style={{...S.card,marginBottom:8}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>All Day</div>
+        {allDayEvents.map((ev,i)=><div key={ev.id} style={{...S.row,padding:'7px 0',borderBottom:i<allDayEvents.length-1?`0.5px solid ${C.bd}`:'none'}}>
+          <div style={{width:44,flexShrink:0,fontSize:9,color:C.muted,textAlign:'center',paddingTop:2}}>All day</div>
+          <div style={{flex:1,background:ev.color||C.navy,borderRadius:8,padding:'7px 10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.white}}>{ev.title}</div>
+            {!ev.local&&<span style={{fontSize:9,color:'rgba(255,255,255,0.55)'}}>Google</span>}
+          </div>
+        </div>)}
+      </div>}
       {/* Time list */}
       {allItems.length===0
         ?<div style={{textAlign:'center',padding:'28px 0',color:C.muted,fontSize:13}}>No events, tasks, or busy blocks. Use the buttons above to add.</div>
