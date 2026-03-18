@@ -5085,11 +5085,13 @@ function App(){
           </div>
           <span style={{fontSize:11,color:C.navy,fontWeight:700}}>Open Plan</span>
         </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
-          {weekPlannedWorkouts.slice(0,4).map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 8px'}}>
-            <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.plannedDayLabel}</div>
-            <div style={{fontSize:12,fontWeight:700,color:C.tx,marginBottom:4}}>{item.plannedName?.replace('Strength — ','')||item.name}</div>
-            <span style={S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk)}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
+        <div style={{display:'grid',gap:8,maxHeight:276,overflowY:'auto',paddingRight:2}}>
+          {weekPlannedWorkouts.map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 12px',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.plannedDayLabel}</div>
+              <div style={{fontSize:12,fontWeight:700,color:C.tx,marginBottom:4,lineHeight:1.35}}>{item.plannedName?.replace('Strength — ','')||item.name}</div>
+            </div>
+            <span style={{...S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk),flexShrink:0,marginBottom:0}}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
           </div>)}
         </div>
       </button>
