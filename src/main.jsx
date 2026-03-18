@@ -143,6 +143,117 @@ const UNITS={system:'imperial',dist:'mi',weight:'lbs',energy:'kcal',pace:'min/mi
 const fmtPaceMi=secs=>{const m=Math.floor(secs/60),s=Math.round(secs%60);return`${m}:${String(s).padStart(2,'0')} /mi`;};
 const fmtDur=mins=>{if(!mins||mins<=0)return'—';if(mins<60)return`${Math.round(mins)} min`;const h=Math.floor(mins/60),m=Math.round(mins%60);return m>0?`${h}h ${m}m`:`${h}h`;};
 
+const LEGACY_FINANCIAL_ACCOUNTS=[
+  {id:'ally_checking',institution:'Ally',name:'Checking',type:'checking',isActive:true},
+  {id:'ally_savings',institution:'Ally',name:'Savings',type:'savings',isActive:true},
+  {id:'regions_checking',institution:'Regions',name:'Checking',type:'checking',isActive:true},
+  {id:'regions_savings',institution:'Regions',name:'Savings',type:'savings',isActive:true},
+];
+const ACCOUNT_TYPE_OPTIONS=[
+  {id:'checking',label:'Checking'},
+  {id:'savings',label:'Savings'},
+  {id:'credit',label:'Credit Card'},
+  {id:'cash',label:'Cash'},
+  {id:'investment',label:'Investment'},
+  {id:'loan',label:'Loan'},
+  {id:'other',label:'Other'},
+];
+const LEGACY_ACCOUNT_REFERENCE_MAP=LEGACY_FINANCIAL_ACCOUNTS.reduce((acc,account)=>{
+  const aliases=[
+    account.id,
+    `${account.institution}_${account.name}`,
+    `${account.institution} ${account.name}`,
+    `${account.institution} - ${account.name}`,
+    `${account.institution} — ${account.name}`,
+    `${account.name} (${account.institution})`,
+  ];
+  aliases.forEach(alias=>{
+    acc[alias.toLowerCase()]=account.id;
+  });
+  return acc;
+},{});
+
+function normalizeAccountType(type){
+  const normalized=String(type||'checking').trim().toLowerCase();
+  return ACCOUNT_TYPE_OPTIONS.some(option=>option.id===normalized)?normalized:'other';
+}
+function slugifyAccountPart(value){
+  return String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+function buildAccountId(institution,name){
+  const base=[slugifyAccountPart(institution),slugifyAccountPart(name)].filter(Boolean).join('_');
+  return base||`account_${Date.now()}`;
+}
+function createFinancialAccount(account={}){
+  const institution=String(account.institution??account.institutionName??'').trim();
+  const name=String(account.name??account.accountName??'').trim()||'Account';
+  const currentBalance=account.currentBalance==null||account.currentBalance===''
+    ?null
+    :parseFloat(account.currentBalance);
+  const startingBalance=account.startingBalance==null||account.startingBalance===''
+    ?null
+    :parseFloat(account.startingBalance);
+  return{
+    id:String(account.id||buildAccountId(institution,name)),
+    name,
+    institution,
+    type:normalizeAccountType(account.type??account.accountType),
+    isActive:account.isActive!==false,
+    startingBalance:Number.isFinite(startingBalance)?startingBalance:null,
+    currentBalance:Number.isFinite(currentBalance)?currentBalance:null,
+    maskedNumber:String(account.maskedNumber||''),
+  };
+}
+function normalizeFinancialAccounts(accounts){
+  const source=Array.isArray(accounts)?accounts:[];
+  const seen=new Set();
+  return source.reduce((list,account)=>{
+    const normalized=createFinancialAccount(account);
+    if(!normalized.id||seen.has(normalized.id))return list;
+    seen.add(normalized.id);
+    list.push(normalized);
+    return list;
+  },[]);
+}
+function getDefaultAccountId(accounts,includeArchived=false){
+  const list=(Array.isArray(accounts)?accounts:[]).filter(account=>includeArchived||account.isActive!==false);
+  return list[0]?.id||'';
+}
+function formatAccountLabel(account){
+  if(!account)return'Unknown account';
+  return [account.institution,account.name].filter(Boolean).join(' — ')||account.name||account.id;
+}
+function resolveTransactionAccountId(rawAccountId,accounts){
+  const normalizedAccounts=Array.isArray(accounts)?accounts:[];
+  const value=String(rawAccountId||'').trim();
+  if(!value)return getDefaultAccountId(normalizedAccounts,true);
+  const byId=normalizedAccounts.find(account=>account.id===value);
+  if(byId)return byId.id;
+  const lowered=value.toLowerCase();
+  const legacyId=LEGACY_ACCOUNT_REFERENCE_MAP[lowered];
+  if(legacyId&&normalizedAccounts.some(account=>account.id===legacyId))return legacyId;
+  const byLabel=normalizedAccounts.find(account=>{
+    const label=formatAccountLabel(account).toLowerCase();
+    return label===lowered||label.replace(/[—-]/g,' ').replace(/\s+/g,' ').trim()===lowered.replace(/[—-]/g,' ').replace(/\s+/g,' ').trim();
+  });
+  if(byLabel)return byLabel.id;
+  return getDefaultAccountId(normalizedAccounts,true);
+}
+function ensureImportedAccount(accounts,accountInput){
+  const normalizedAccounts=normalizeFinancialAccounts(accounts);
+  const draft=createFinancialAccount({...accountInput,isActive:accountInput?.isActive!==false});
+  const existing=normalizedAccounts.find(account=>
+    account.id===draft.id
+    || (
+      account.institution.toLowerCase()===draft.institution.toLowerCase()
+      && account.name.toLowerCase()===draft.name.toLowerCase()
+      && account.type===draft.type
+    )
+  );
+  if(existing)return{accounts:normalizedAccounts,accountId:existing.id};
+  return{accounts:[...normalizedAccounts,draft],accountId:draft.id};
+}
+
 const PHASES=[
   {name:'Base',wks:'1–8',theme:'Build the engine',clr:C.sage,lClr:C.sageL,tClr:C.sageDk},
   {name:'Build',wks:'9–16',theme:'Add volume + stations',clr:C.navy,lClr:C.navyL,tClr:C.navyDk},
@@ -288,8 +399,13 @@ function getPlannedWorkoutForDate(dateStr,wkType,phIdx,programType='4-day',prefe
   const flags=getTrainingDayFlags(dow,programType,preferredTrainingDays);
   const sess=getTodayWk(wkType,phIdx,flags);
   if(!sess)return null;
+  const normalizedExercises=(sess.ex||[]).map(exercise=>{
+    const exerciseId=exercise?.exerciseId||resolveExerciseDefinition(exercise?.n||exercise?.name||'').id;
+    return{...exercise,exerciseId};
+  });
   return{
     ...sess,
+    ex:normalizedExercises,
     plannedDate:dateStr,
     plannedDayLabel:DAY_NAMES[dow],
     plannedSlot:flags.daySlot,
@@ -637,6 +753,9 @@ const EXERCISE_LIBRARY={
     logType:'duration',
   },
 };
+function resolveExerciseLibrary(customExercises=[]){
+  return mergeRecordsById(Object.values(EXERCISE_LIBRARY),customExercises||[]);
+}
 const EXERCISE_TYPE_FIELD_MAP={
   strength:['weight','reps','notes'],
   cardio:['duration','distance','notes'],
@@ -1261,6 +1380,12 @@ const DEFAULT_OPS={
   userProfile:{weight:null,height:null,age:null},
   athleteProfile:{...DEFAULT_ATHLETE},
   trainingPlan:{planId:'hyrox',startDate:'2026-03-16',raceDate:'2026-10-25',days:4},
+  accounts:[],
+  categories:[],
+  meals:{},
+  exercises:[],
+  workouts:[],
+  tasks:[],
   workoutHistory:[],
   pantryInventory:[],
   foodLibrary:[],
@@ -1281,12 +1406,7 @@ const DEFAULT_OPS={
   maintenanceMeta:{},
   lastMaintenancePromptDate:null,
   securitySettings:{analyticsEnabled:true,dataExportHistory:[]},
-  financialAccounts:[
-    {id:'ally_checking',   institutionName:'Ally',    accountName:'Checking', accountType:'checking', maskedNumber:'',currentBalance:null,isActive:false},
-    {id:'ally_savings',    institutionName:'Ally',    accountName:'Savings',  accountType:'savings',  maskedNumber:'',currentBalance:null,isActive:false},
-    {id:'regions_checking',institutionName:'Regions', accountName:'Checking', accountType:'checking', maskedNumber:'',currentBalance:null,isActive:false},
-    {id:'regions_savings', institutionName:'Regions', accountName:'Savings',  accountType:'savings',  maskedNumber:'',currentBalance:null,isActive:false},
-  ],
+  financialAccounts:[],
   transactions:[],
   merchantRules:{},
   recurringExpenses:[],
@@ -1304,21 +1424,78 @@ const DEFAULT_OPS={
   fitnessProgram:'hyrox',nutr:{},hydr:{},hydGoal:72,proGoal:140,calGoal:2000,
 };
 
+function normalizeMealEntry(entry={},slotFallback='snack'){
+  const foodIds=Array.isArray(entry.foodIds)
+    ?entry.foodIds.filter(Boolean)
+    :Array.isArray(entry.itemIds)
+      ?entry.itemIds.filter(Boolean)
+      :entry.foodId
+        ?[entry.foodId]
+        :[];
+  return{
+    ...entry,
+    id:entry.id||String(Date.now()+Math.random()),
+    slot:entry.slot||slotFallback,
+    foodId:entry.foodId||foodIds[0]||null,
+    foodIds,
+    itemIds:foodIds,
+  };
+}
+function normalizeMealsByDate(mealsByDate={}){
+  return Object.entries(mealsByDate||{}).reduce((acc,[key,value])=>{
+    const normalizedKey=normalizeDateKey(key,null);
+    if(normalizedKey)acc[normalizedKey]=Array.isArray(value)?value.map(entry=>normalizeMealEntry(entry,entry?.slot||'snack')):[];
+    return acc;
+  },{});
+}
+function syncCanonicalProfileState(profile={}){
+  const accounts=normalizeFinancialAccounts(profile.accounts||profile.financialAccounts||[]);
+  const categories=resolveCategoryLibrary(profile.categories);
+  const meals=normalizeMealsByDate(profile.meals||profile.nutr||profile.mealHistory||{});
+  const workouts=Array.isArray(profile.workouts)?profile.workouts:(Array.isArray(profile.workoutHistory)?profile.workoutHistory:[]);
+  const tasks=Array.isArray(profile.tasks)?profile.tasks:(Array.isArray(profile.taskHistory)?profile.taskHistory:[]);
+  return{
+    ...profile,
+    accounts,
+    categories,
+    meals,
+    exercises:Array.isArray(profile.exercises)?profile.exercises:[],
+    workouts,
+    tasks,
+    financialAccounts:accounts,
+    nutr:meals,
+    workoutHistory:workouts,
+    taskHistory:tasks,
+  };
+}
+
 function normalizeLoadedProfile(data={}){
-  const normalized={...DEFAULT_OPS,...(data||{})};
+  const normalized=syncCanonicalProfileState({...DEFAULT_OPS,...(data||{})});
   const legacyMeals=(data&&typeof data.mealHistory==='object'&&data.mealHistory)||null;
   if(legacyMeals&&Object.keys(legacyMeals).length>0){
-    normalized.nutr={...legacyMeals,...(normalized.nutr||{})};
+    normalized.meals=normalizeMealsByDate({...legacyMeals,...(normalized.meals||{})});
   }
-  normalized.taskHistory=Array.isArray(normalized.taskHistory)?normalized.taskHistory:[];
-  normalized.workoutHistory=Array.isArray(normalized.workoutHistory)?normalized.workoutHistory:[];
+  normalized.tasks=Array.isArray(normalized.tasks)?normalized.tasks:[];
+  normalized.workouts=Array.isArray(normalized.workouts)?normalized.workouts:[];
   normalized.dailyLogs=normalized.dailyLogs&&typeof normalized.dailyLogs==='object'?normalized.dailyLogs:{};
-  normalized.nutr=normalized.nutr&&typeof normalized.nutr==='object'?normalized.nutr:{};
+  normalized.meals=normalized.meals&&typeof normalized.meals==='object'?normalized.meals:{};
   normalized.hydr=normalized.hydr&&typeof normalized.hydr==='object'?normalized.hydr:{};
   normalized.dailyMealPlans=normalized.dailyMealPlans&&typeof normalized.dailyMealPlans==='object'?normalized.dailyMealPlans:{};
   normalized.mealTemplates=Array.isArray(normalized.mealTemplates)?normalized.mealTemplates:[];
   normalized.taskTemplates=Array.isArray(normalized.taskTemplates)?normalized.taskTemplates:[];
   normalized.top3=normalized.top3&&typeof normalized.top3==='object'?normalized.top3:{};
+  normalized.accounts=normalizeFinancialAccounts(normalized.accounts);
+  normalized.categories=resolveCategoryLibrary(normalized.categories);
+  if(normalized.accounts.length===0){
+    const legacyTransactionIds=new Set((Array.isArray(normalized.transactions)?normalized.transactions:[])
+      .map(tx=>LEGACY_ACCOUNT_REFERENCE_MAP[String(tx?.accountId||tx?.accountName||tx?.account||'').trim().toLowerCase()])
+      .filter(Boolean));
+    if(legacyTransactionIds.size>0){
+      normalized.accounts=LEGACY_FINANCIAL_ACCOUNTS
+        .filter(account=>legacyTransactionIds.has(account.id))
+        .map(account=>createFinancialAccount(account));
+    }
+  }
   normalized.lastRolloverDate=normalized.lastRolloverDate?normalizeDateKey(normalized.lastRolloverDate,null):null;
   normalized.lastWeeklyPlanKey=normalized.lastWeeklyPlanKey?normalizeDateKey(normalized.lastWeeklyPlanKey,null):null;
   normalized.lastWeeklySnapshotKey=normalized.lastWeeklySnapshotKey?normalizeDateKey(normalized.lastWeeklySnapshotKey,null):null;
@@ -1327,11 +1504,7 @@ function normalizeLoadedProfile(data={}){
     if(normalizedKey)acc[normalizedKey]={...(value||{}),date:normalizedKey};
     return acc;
   },{});
-  normalized.nutr=Object.entries(normalized.nutr).reduce((acc,[key,value])=>{
-    const normalizedKey=normalizeDateKey(key,null);
-    if(normalizedKey)acc[normalizedKey]=Array.isArray(value)?value:[];
-    return acc;
-  },{});
+  normalized.meals=normalizeMealsByDate(normalized.meals);
   normalized.hydr=Object.entries(normalized.hydr).reduce((acc,[key,value])=>{
     const normalizedKey=normalizeDateKey(key,null);
     if(normalizedKey)acc[normalizedKey]=Math.max(0,parseFloat(value)||0);
@@ -1351,11 +1524,11 @@ function normalizeLoadedProfile(data={}){
     if(normalizedKey)acc[normalizedKey]=Array.isArray(value)?value.slice(0,3):['','',''];
     return acc;
   },{});
-  normalized.taskHistory=normalized.taskHistory.map(task=>normalizeTaskEntry({
+  normalized.tasks=normalized.tasks.map(task=>normalizeTaskEntry({
     ...task,
     date:normalizeDateKey(task?.date),
   }));
-  normalized.workoutHistory=normalized.workoutHistory.map(entry=>({
+  normalized.workouts=normalized.workouts.map(entry=>({
     ...entry,
     date:normalizeDateKey(entry?.date),
     data:entry?.data&&typeof entry.data==='object'
@@ -1368,8 +1541,9 @@ function normalizeLoadedProfile(data={}){
   normalized.transactions=(Array.isArray(normalized.transactions)?normalized.transactions:[]).map(tx=>({
     ...tx,
     date:normalizeDateKey(tx?.date),
+    accountId:resolveTransactionAccountId(tx?.accountId||tx?.accountName||tx?.account,normalized.accounts),
   }));
-  return normalized;
+  return syncCanonicalProfileState(normalized);
 }
 
 const MACROS={protein:140,carbsTraining:200,carbsRest:130,fat:55};
@@ -1401,6 +1575,9 @@ const DEFAULT_FOOD_LIBRARY=[
   {id:'berries',name:'Mixed Berries',category:'Fruit',baseServingWeight:100,calories:57,protein:0.7,carbohydrates:14,fat:0.3,fiber:4,sodium:1,unitLabel:'cup',unitWeight:140,householdMeasure:'1 cup = 140g'},
   {id:'tortilla',name:'Flour Tortilla',category:'Carb',baseServingWeight:100,calories:310,protein:8,carbohydrates:52,fat:8,fiber:3,sodium:650,unitLabel:'tortilla',unitWeight:49,householdMeasure:'1 tortilla = 49g'},
 ];
+function resolveFoodLibrary(customFoods=[]){
+  return mergeRecordsById(DEFAULT_FOOD_LIBRARY,customFoods||[]);
+}
 
 const DEFAULT_RECIPE_TEMPLATES=[
   {id:'chicken_rice_bowl',name:'Chicken Rice Bowl',ingredients:[{foodId:'chicken_breast',grams:150},{foodId:'white_rice',grams:180},{foodId:'broccoli',grams:100},{foodId:'olive_oil',grams:10}],totalCookedWeight:440,servings:1,prepTime:25,isMealPrep:false,instructions:['Cook rice.','Pan-sear chicken.','Steam broccoli and combine.']},
@@ -1556,11 +1733,14 @@ function getPantryFirstMealSuggestions(mealTemplates=[],pantryInventory=[]){
 }
 function buildMealLogFromTemplate(template,slotOverride,extra={}){
   if(!template)return null;
+  const foodIds=(template.ingredients||[]).map(item=>item.foodId).filter(Boolean);
   return{
     meal:template.name,
     source:extra.source||'meal-template',
     templateId:template.id,
-    itemIds:(template.ingredients||[]).map(item=>item.foodId).filter(Boolean),
+    foodId:foodIds[0]||null,
+    foodIds,
+    itemIds:foodIds,
     grams:template.servingSizeGrams||0,
     cal:template.macros?.cal||0,
     pro:template.macros?.pro||0,
@@ -1763,7 +1943,7 @@ function fmtTimeRange(s,e){
   return`${fmt(s)} – ${fmt(e)}`;
 }
 
-const FINANCE_CATS=[
+const CATEGORY_LIBRARY=[
   {id:'groceries', label:'Groceries',      clr:C.sage,ord:1},
   {id:'dining',    label:'Dining',         clr:C.amber,ord:2},
   {id:'household', label:'Household',      clr:C.navy,ord:3},
@@ -1775,6 +1955,35 @@ const FINANCE_CATS=[
   {id:'transfer',  label:'Transfer',       clr:C.muted,ord:9},
   {id:'other',     label:'Other',          clr:C.tx2,ord:10},
 ];
+function normalizeCategoryRecord(category={}){
+  const label=String(category.label||category.name||'Other').trim()||'Other';
+  const id=String(category.id||label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||`category_${Date.now()}`);
+  return{
+    id,
+    label,
+    clr:String(category.clr||category.color||C.tx2),
+    ord:Number.isFinite(category.ord)?category.ord:999,
+    isSystem:category.isSystem===true,
+  };
+}
+function normalizeCategories(categories){
+  const seen=new Set();
+  return (Array.isArray(categories)?categories:CATEGORY_LIBRARY).reduce((list,category,idx)=>{
+    const normalized=normalizeCategoryRecord({...category,ord:category?.ord??idx+1});
+    if(!normalized.id||seen.has(normalized.id))return list;
+    seen.add(normalized.id);
+    list.push(normalized);
+    return list;
+  },[]).sort((a,b)=>(a.ord||999)-(b.ord||999)||a.label.localeCompare(b.label));
+}
+function resolveCategoryLibrary(customCategories=[]){
+  return normalizeCategories(
+    mergeRecordsById(
+      CATEGORY_LIBRARY.map((category,idx)=>({...category,isSystem:true,ord:category.ord??idx+1})),
+      (customCategories||[]).map((category,idx)=>({...category,ord:category.ord??CATEGORY_LIBRARY.length+idx+1}))
+    )
+  );
+}
 const CAT_RULES={
   groceries:['WALMART','KROGER','PUBLIX','WHOLEFOOD','TRADER JOE','ALDI','COSTCO','SAMS CLUB','INSTACART'],
   dining:['MCDONALD','CHICK-FIL','CHIPOTLE','STARBUCKS','DOORDASH','GRUBHUB','UBEREATS','DOMINO','SUBWAY','WENDY','TACO BELL','PIZZA','PANERA'],
@@ -1823,7 +2032,7 @@ function parseAllyCSV(text){
     const cols=l.match(/(".*?"|[^,]+)(?:,|$)/g)?.map(c=>c.replace(/^"|"$|,$/g,'').trim())||[];
     const [date,,desc,,amount,,balance]=cols;
     const amt=parseFloat((amount||'0').replace(/[$,]/g,''));
-    return{transactionId:`ally-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit:amt>0,accountId:'ally_checking',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:''};
+    return{transactionId:`ally-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit:amt>0,accountId:'ally_checking',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:'',_importAccount:{id:'ally_checking',institution:'Ally',name:'Checking',type:'checking',isActive:true}};
   }).filter(t=>t.date&&!isNaN(t.amount));
 }
 function parseRegionsCSV(text){
@@ -1836,7 +2045,7 @@ function parseRegionsCSV(text){
     const[date,desc,,debit,credit]=cols;
     const amt=parseFloat((credit||debit||'0').replace(/[$,]/g,''));
     const isCredit=!!credit&&!debit;
-    return{transactionId:`regions-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit,accountId:'regions_checking',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:''};
+    return{transactionId:`regions-${date}-${Math.random()}`,date:date||getCurrentDate().today,merchant:desc||'',description:desc||'',amount:Math.abs(amt),isCredit,accountId:'regions_checking',category:'',isReviewed:false,isTransfer:false,isRecurring:false,notes:'',_importAccount:{id:'regions_checking',institution:'Regions',name:'Checking',type:'checking',isActive:true}};
   }).filter(t=>t.date&&!isNaN(t.amount));
 }
 function detectRecurring(transactions){
@@ -2059,11 +2268,11 @@ const GoogleAPI={
   },
 };
 
-const T={section:16,card:15,body:12,micro:10,hero:24};
+const T={section:16,card:15,body:12,meta:11,micro:10,hero:24};
 const G={xs:4,sm:8,md:12,lg:16,xl:24};
 
 const S={
-  wrap:{background:C.bg,minHeight:'100vh',maxWidth:430,margin:'0 auto',paddingBottom:64,fontFamily:'-apple-system,BlinkMacSystemFont,system-ui,sans-serif',paddingTop:'env(safe-area-inset-top)',position:'relative'},
+  wrap:{background:C.bg,minHeight:'100vh',maxWidth:430,margin:'0 auto',paddingBottom:64,paddingTop:'env(safe-area-inset-top)',position:'relative'},
   hdr:{padding:`14px ${G.lg}px 10px`,borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center',position:'fixed',top:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:430,zIndex:250,background:C.headerBg,backdropFilter:'blur(18px)'},
   body:{padding:`${G.md}px ${G.lg}px ${G.xs}px`},
   card:{background:C.card,border:`1px solid ${C.bd}`,borderRadius:16,padding:G.lg,marginBottom:G.md,boxShadow:C.shadow},
@@ -2071,6 +2280,8 @@ const S={
   sectionTitle:{fontSize:T.section,fontWeight:700,color:C.tx,lineHeight:1.2},
   cardTitle:{fontSize:T.card,fontWeight:700,color:C.tx,lineHeight:1.25},
   support:{fontSize:T.body,color:C.tx2,lineHeight:1.45},
+  bodyText:{fontSize:T.body,color:C.tx,lineHeight:1.45},
+  metaText:{fontSize:T.meta,color:C.muted,lineHeight:1.35},
   micro:{fontSize:T.micro,color:C.muted,lineHeight:1.35},
   pill:(bg,clr)=>({display:'inline-flex',alignItems:'center',background:bg,color:clr,borderRadius:999,padding:'4px 10px',fontSize:T.micro,fontWeight:700,marginRight:G.xs,marginBottom:3}),
   btnSolid:()=>({background:C.navy,color:C.white,border:'1px solid transparent',borderRadius:12,padding:'12px 14px',fontWeight:600,fontSize:T.body,width:'100%',cursor:'pointer',textAlign:'center',lineHeight:1.2,display:'inline-flex',alignItems:'center',justifyContent:'center',boxShadow:C.shadowStrong}),
@@ -2212,7 +2423,10 @@ function App(){
   const [finCatFilter,setFinCatFilter]=useState(null);
   const [finSearch,setFinSearch]=useState('');
   const [showAddTx,setShowAddTx]=useState(false);
-  const [txForm,setTxForm]=useState(()=>({date:TODAY,merchant:'',amount:'',isCredit:false,isRecurring:false,isTransfer:false,accountId:'ally_checking',category:'other',notes:''}));
+  const [txForm,setTxForm]=useState(()=>({date:TODAY,merchant:'',amount:'',isCredit:false,isRecurring:false,isTransfer:false,accountId:'',category:'other',notes:''}));
+  const [showAccountModal,setShowAccountModal]=useState(false);
+  const [editingAccountId,setEditingAccountId]=useState(null);
+  const [accountForm,setAccountForm]=useState({name:'',institution:'',type:'checking',isActive:true,startingBalance:''});
   const [showImport,setShowImport]=useState(false);
   const [showCapture,setShowCapture]=useState(false);
   const [captureText,setCaptureText]=useState('');
@@ -2241,9 +2455,13 @@ function App(){
   const restRef=useRef(null),recRef=useRef(null),saveRef=useRef(null);
   const latestProfileRef=useRef(DEFAULT_OPS);
   const prevTodayRef=useRef(TODAY);
-  const {trainingPlan,athleteProfile,workoutHistory,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,taskHistory,taskTemplates,choreHistory,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,financialAccounts,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,nutr,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
+  const {trainingPlan,athleteProfile,accounts,categories,meals,exercises,workouts,pantryInventory,foodLibrary,recipes,quickMealTemplates,mealTemplates,dailyMealPlans,tasks,taskTemplates,choreHistory,maintenanceHistory,maintenanceMeta,calendarCache,busyBlocks,weekPatterns,transactions,merchantRules,recurringExpenses,financeSettings,dailyLogs,habits,captureNotes,inboxItems,securitySettings,top3,hydr,hydGoal,proGoal,calGoal,healthRecords,lastMaintenancePromptDate}=profile;
+  const financialAccounts=accounts;
+  const nutr=meals;
+  const workoutHistory=workouts;
+  const taskHistory=tasks;
 
-  const updateProfile=useCallback(patch=>setProfile(prev=>typeof patch==='function'?patch(prev):{...prev,...patch}),[]);
+  const updateProfile=useCallback(patch=>setProfile(prev=>syncCanonicalProfileState(typeof patch==='function'?patch(prev):{...prev,...patch})),[]);
   const openCommandBar=()=>{
     setCaptureMode('command');
     setCaptureText('');
@@ -2269,8 +2487,8 @@ function App(){
   };
   const applyUndoableProfileUpdate=(label,updater,detail='')=>{
     const snapshot=latestProfileRef.current;
-    setProfile(prev=>updater(prev));
-    showNotif(label,'success',detail||'',{label:'Undo',handler:()=>{setProfile(snapshot);showNotif('Undid last action','success');}});
+    setProfile(prev=>syncCanonicalProfileState(updater(prev)));
+    showNotif(label,'success',detail||'',{label:'Undo',handler:()=>{setProfile(syncCanonicalProfileState(snapshot));showNotif('Undid last action','success');}});
   };
 
   useEffect(()=>{
@@ -2643,6 +2861,26 @@ function App(){
   const pendingInbox=(inboxItems||[]).filter(x=>x.status==='pending');
   const recoveryToday=computeRecoveryState(dailyLogs?.[TODAY],energyScore,sleepHours);
   const adjustedTodayWorkout=suggestedWorkoutBase?adjustWorkoutForRecovery(suggestedWorkoutBase,recoveryToday):null;
+  const activeFinancialAccounts=useMemo(
+    ()=>normalizeFinancialAccounts(financialAccounts).filter(account=>account.isActive!==false),
+    [financialAccounts]
+  );
+  const archivedFinancialAccounts=useMemo(
+    ()=>normalizeFinancialAccounts(financialAccounts).filter(account=>account.isActive===false),
+    [financialAccounts]
+  );
+  const financialAccountMap=useMemo(
+    ()=>new Map(normalizeFinancialAccounts(financialAccounts).map(account=>[account.id,account])),
+    [financialAccounts]
+  );
+  const financeCategories=useMemo(
+    ()=>resolveCategoryLibrary(categories),
+    [categories]
+  );
+  const financeCategoryMap=useMemo(
+    ()=>new Map(financeCategories.map(category=>[category.id,category])),
+    [financeCategories]
+  );
   const todaysStatus=!trainingFlags.isTrainingDay
     ?(suggestedPlanEntry?'suggested':'rest')
     :adjustedTodayWorkout?.type==='recovery'
@@ -2682,16 +2920,27 @@ function App(){
     updateProfile({lastMaintenancePromptDate:TODAY});
   },[loaded,maintenanceAttentionItems.length,lastMaintenancePromptDate,TODAY,updateProfile]);
 
+  useEffect(()=>{
+    const validIds=new Set(activeFinancialAccounts.map(account=>account.id));
+    const fallbackAccountId=getDefaultAccountId(activeFinancialAccounts,true);
+    setTxForm(form=>{
+      if(form.accountId&&validIds.has(form.accountId))return form;
+      if(form.accountId===fallbackAccountId)return form;
+      return {...form,accountId:fallbackAccountId};
+    });
+  },[activeFinancialAccounts]);
+
   function addMeal(mealObj,slot){
-    const entry={...mealObj,slot:slot||'snack',id:Date.now()};
-    applyUndoableProfileUpdate('Meal logged',p=>({...p,nutr:{...p.nutr,[TODAY]:[...(p.nutr[TODAY]||[]),entry]}}),`Added to ${entry.slot}.`);
+    const entry=normalizeMealEntry({...mealObj,slot:slot||'snack',id:Date.now()},slot||'snack');
+    applyUndoableProfileUpdate('Meal logged',p=>({...p,meals:{...p.meals,[TODAY]:[...(p.meals?.[TODAY]||[]),entry]}}),`Added to ${entry.slot}.`);
   }
   function logQuickMealTemplate(template,slotOverride,photo){
     if(!template)return;
     addMeal({
       meal:template.name,
       source:'quick-template',
-      itemIds:template.itemIds||[],
+      foodIds:template.foodIds||template.itemIds||[],
+      foodId:(template.foodIds||template.itemIds||[])[0]||null,
       cal:template.cal||0,
       pro:template.pro||0,
       carb:template.carb||0,
@@ -2700,7 +2949,7 @@ function App(){
     },slotOverride||template.slot||'snack');
   }
   function rmMeal(id){
-    applyUndoableProfileUpdate('Meal removed',p=>({...p,nutr:{...p.nutr,[TODAY]:(p.nutr[TODAY]||[]).filter(m=>m.id!==id)}}),'You can undo if this was accidental.');
+    applyUndoableProfileUpdate('Meal removed',p=>({...p,meals:{...p.meals,[TODAY]:(p.meals?.[TODAY]||[]).filter(m=>m.id!==id)}}),'You can undo if this was accidental.');
   }
   function addWater(oz){
     applyUndoableProfileUpdate('Water logged',p=>({...p,hydr:{...p.hydr,[TODAY]:Math.max(0,(p.hydr[TODAY]||0)+oz)}}),`Added ${oz} oz to today.`);
@@ -2909,7 +3158,7 @@ function App(){
         }
       }else if(routed.command==='log_food'){
         const query=(routed.foodQuery||'').toLowerCase();
-        const allFoods=[...DEFAULT_FOOD_LIBRARY,...(foodLibrary||[])];
+        const allFoods=resolveFoodLibrary(foodLibrary);
         const food=allFoods.find(item=>item.name.toLowerCase()===query)
           || allFoods.find(item=>item.name.toLowerCase().includes(query))
           || allFoods.find(item=>query.includes(item.name.toLowerCase()));
@@ -2940,7 +3189,7 @@ function App(){
         showNotif('Added to grocery inbox','success');
       }
     } else if(routed?.type==='expense'){
-      const t={transactionId:`cap-${Date.now()}`,date:TODAY,merchant:routed.preview,description:routed.preview,amount:routed.amount||0,isCredit:false,accountId:'ally_checking',category:'other',isReviewed:false,isTransfer:false,isRecurring:false,notes:''};
+      const t={transactionId:`cap-${Date.now()}`,date:TODAY,merchant:routed.preview,description:routed.preview,amount:routed.amount||0,isCredit:false,accountId:getDefaultAccountId(activeFinancialAccounts,true),category:'other',isReviewed:false,isTransfer:false,isRecurring:false,notes:''};
       updateProfile(p=>({...p,transactions:[...(p.transactions||[]),t]}));
     } else if(routed?.type==='note'){
       const item={id:`inbox-${Date.now()}`,text:routed.preview,createdDate:TODAY,suggestedType:'note',status:'pending'};
@@ -2988,7 +3237,7 @@ function App(){
     } else if(type==='finance'){
       const cat=autoCategorize(item.text,profile.merchantRules||{});
       const finMatch=item.text.match(/\$?(\d+(?:\.\d{1,2})?)/);
-      const t={transactionId:`inbox-${Date.now()}`,date:TODAY,merchant:item.text,amount:parseFloat(finMatch?.[1])||0,isCredit:false,isTransfer:cat==='transfer',isRecurring:false,isReviewed:false,category:cat,accountId:(financialAccounts||[])[0]?.id||'ally_checking',notes:'From inbox'};
+      const t={transactionId:`inbox-${Date.now()}`,date:TODAY,merchant:item.text,amount:parseFloat(finMatch?.[1])||0,isCredit:false,isTransfer:cat==='transfer',isRecurring:false,isReviewed:false,category:cat,accountId:getDefaultAccountId(activeFinancialAccounts,true),notes:'From inbox'};
       updateProfile(p=>({...p,inboxItems:(p.inboxItems||[]).map(x=>x.id===id?{...x,status:'processed'}:x),transactions:[...(p.transactions||[]),t]}));
     } else if(type==='note'){
       const n={id:String(Date.now()),text:item.text,date:TODAY,createdAt:new Date().toISOString()};
@@ -3001,20 +3250,82 @@ function App(){
   function addHabit(habit){
     updateProfile(p=>({...p,habits:[...(p.habits||[]),{...habit,id:String(Date.now()),streakCount:0,createdAt:TODAY}]}));
   }
+  function editHabit(habitId,patch){
+    updateProfile(p=>({...p,habits:(p.habits||[]).map(h=>h.id===habitId?{...h,...patch,updatedAt:new Date().toISOString()}:h)}));
+  }
   function deleteHabit(id){
     updateProfile(p=>({...p,habits:(p.habits||[]).filter(h=>h.id!==id)}));
+  }
+  function openEditHabit(habit){
+    if(!habit)return;
+    const name=prompt('Habit name?',habit.name||'');
+    if(name===null||!name.trim())return;
+    const freq=prompt('Frequency: daily / weekly / x_per_week',habit.frequencyType||'daily');
+    if(freq===null||!freq.trim())return;
+    const normalizedFrequency=freq.trim();
+    const target=normalizedFrequency==='x_per_week'
+      ?parseInt(prompt('Times per week?',String(habit.targetPerWeek||3))||String(habit.targetPerWeek||3),10)
+      :1;
+    editHabit(habit.id,{name:name.trim(),frequencyType:normalizedFrequency,targetPerWeek:Number.isFinite(target)&&target>0?target:1});
+    showNotif('Habit updated','success');
+  }
+  function addCategory(){
+    const label=prompt('Category name?');
+    if(label===null||!label.trim())return;
+    const color=prompt('Color token or hex (optional)',C.navy);
+    if(color===null)return;
+    updateProfile(p=>({
+      ...p,
+      categories:[
+        ...(p.categories||[]),
+        normalizeCategoryRecord({label:label.trim(),clr:(color||C.navy).trim(),ord:(financeCategories[financeCategories.length-1]?.ord||0)+1})
+      ],
+    }));
+    showNotif('Category added','success');
+  }
+  function editCategory(category){
+    if(!category)return;
+    const label=prompt('Category name?',category.label||'');
+    if(label===null||!label.trim())return;
+    const color=prompt('Color token or hex (optional)',category.clr||C.navy);
+    if(color===null)return;
+    const nextCategory=normalizeCategoryRecord({...category,label:label.trim(),clr:(color||category.clr||C.navy).trim(),isSystem:false});
+    updateProfile(p=>({
+      ...p,
+      categories:(p.categories||[]).some(item=>item.id===category.id)
+        ?(p.categories||[]).map(item=>item.id===category.id?nextCategory:item)
+        :[...(p.categories||[]),nextCategory],
+    }));
+    showNotif('Category updated','success');
   }
 
   // Finance helpers
   function importTransactions(raw){
     const parsed=parseAllyCSV(raw)||parseRegionsCSV(raw)||[];
     if(!parsed.length){showNotif('Could not parse CSV — check format','error');return;}
-    const categorized=parsed.map(t=>({...t,category:autoCategorize(t.description,merchantRules),isTransfer:autoCategorize(t.description,merchantRules)==='transfer'}));
+    const accountSeed=parsed[0]?._importAccount||null;
+    let nextAccounts=normalizeFinancialAccounts(financialAccounts);
+    let importedAccountId=getDefaultAccountId(nextAccounts,true);
+    if(accountSeed){
+      const ensured=ensureImportedAccount(nextAccounts,accountSeed);
+      nextAccounts=ensured.accounts;
+      importedAccountId=ensured.accountId;
+    }
+    const categorized=parsed.map(t=>{
+      const {_importAccount,...transaction}=t;
+      const category=autoCategorize(t.description,merchantRules);
+      return{
+        ...transaction,
+        accountId:resolveTransactionAccountId(transaction.accountId||importedAccountId,nextAccounts),
+        category,
+        isTransfer:category==='transfer',
+      };
+    });
     const existingIds=new Set((transactions||[]).map(t=>t.transactionId));
     const fresh=categorized.filter(t=>!existingIds.has(t.transactionId));
     updateProfile(p=>{
       const allTx=[...(p.transactions||[]),...fresh];
-      return{...p,transactions:allTx,recurringExpenses:detectRecurring(allTx.filter(t=>!t.isTransfer&&!t.isCredit))};
+      return{...p,financialAccounts:nextAccounts,transactions:allTx,recurringExpenses:detectRecurring(allTx.filter(t=>!t.isTransfer&&!t.isCredit))};
     });
     showNotif(`Imported ${fresh.length} new transactions`,'success');
     setShowImport(false);
@@ -3022,6 +3333,7 @@ function App(){
   function addManualTx(form){
     const f=form||txForm;
     if(!f.merchant||!f.amount)return;
+    if(!f.accountId){showNotif('Add an active account first','warn');return;}
     const isTransfer=f.isTransfer||f.category==='transfer';
     const t={transactionId:`manual-${Date.now()}`,date:f.date,merchant:f.merchant,description:f.merchant,amount:parseFloat(f.amount)||0,isCredit:f.isCredit,accountId:f.accountId,category:f.category,isReviewed:true,isTransfer,isRecurring:f.isRecurring||false,notes:f.notes||''};
     updateProfile(p=>{
@@ -3035,11 +3347,11 @@ function App(){
   function duplicateLastTx(){
     const last=[...(transactions||[])].sort((a,b)=>b.date.localeCompare(a.date))[0];
     if(!last)return;
-    setTxForm({date:TODAY,merchant:last.merchant,amount:String(last.amount),isCredit:last.isCredit,isRecurring:last.isRecurring||false,isTransfer:last.isTransfer||false,accountId:last.accountId,category:last.category,notes:last.notes||''});
+    setTxForm({date:TODAY,merchant:last.merchant,amount:String(last.amount),isCredit:last.isCredit,isRecurring:last.isRecurring||false,isTransfer:last.isTransfer||false,accountId:resolveTransactionAccountId(last.accountId,activeFinancialAccounts),category:last.category,notes:last.notes||''});
     setShowAddTx(true);
   }
   function quickAddMerchant(template){
-    const form={date:TODAY,merchant:template.merchant,amount:'',isCredit:false,isRecurring:false,isTransfer:!!template.isTransfer,accountId:(financialAccounts||[])[0]?.id||'ally_checking',category:template.category,notes:''};
+    const form={date:TODAY,merchant:template.merchant,amount:'',isCredit:false,isRecurring:false,isTransfer:!!template.isTransfer,accountId:getDefaultAccountId(activeFinancialAccounts,true),category:template.category,notes:''};
     setTxForm(form);
     setShowAddTx(true);
   }
@@ -3054,7 +3366,71 @@ function App(){
   function reviewTx(txId){updateProfile(p=>({...p,transactions:p.transactions.map(t=>t.transactionId===txId?{...t,isReviewed:true}:t)}));}
   function deleteTx(txId){updateProfile(p=>({...p,transactions:p.transactions.filter(t=>t.transactionId!==txId)}));}
   function updateAccountBalance(accountId,balance,maskedNumber){
-    updateProfile(p=>({...p,financialAccounts:p.financialAccounts.map(a=>a.id===accountId?{...a,currentBalance:parseFloat(balance)||null,maskedNumber,isActive:true}:a)}));
+    updateProfile(p=>({...p,financialAccounts:p.financialAccounts.map(a=>a.id===accountId?{...a,currentBalance:balance==null||balance===''?null:parseFloat(balance)||null,maskedNumber,isActive:true}:a)}));
+  }
+  function openAddAccount(){
+    setEditingAccountId(null);
+    setAccountForm({name:'',institution:'',type:'checking',isActive:true,startingBalance:''});
+    setShowAccountModal(true);
+  }
+  function openEditAccount(account){
+    setEditingAccountId(account.id);
+    setAccountForm({
+      name:account.name||'',
+      institution:account.institution||'',
+      type:account.type||'checking',
+      isActive:account.isActive!==false,
+      startingBalance:account.startingBalance==null?'':String(account.startingBalance),
+    });
+    setShowAccountModal(true);
+  }
+  function saveAccount(){
+    if(!accountForm.name.trim()){showNotif('Account name is required','warn');return;}
+    let finalAccount=createFinancialAccount({
+      id:editingAccountId||undefined,
+      name:accountForm.name,
+      institution:accountForm.institution,
+      type:accountForm.type,
+      isActive:accountForm.isActive,
+      startingBalance:accountForm.startingBalance,
+    });
+    updateProfile(p=>{
+      const existingAccounts=normalizeFinancialAccounts(p.financialAccounts);
+      const conflictingId=existingAccounts.some(account=>account.id===finalAccount.id&&account.id!==editingAccountId);
+      const baseAccount=conflictingId&&!editingAccountId
+        ?createFinancialAccount({...finalAccount,id:`${finalAccount.id}_${Date.now()}`})
+        :finalAccount;
+      finalAccount=baseAccount;
+      const nextAccounts=editingAccountId
+        ?existingAccounts.map(account=>account.id===editingAccountId?{...account,...baseAccount}:account)
+        :[...existingAccounts,baseAccount];
+      return{...p,financialAccounts:nextAccounts};
+    });
+    setTxForm(form=>{
+      if(form.accountId)return form;
+      return {...form,accountId:finalAccount.isActive?finalAccount.id:form.accountId};
+    });
+    setShowAccountModal(false);
+    showNotif(editingAccountId?'Account updated':'Account added','success');
+  }
+  function archiveAccount(accountId){
+    updateProfile(p=>({...p,financialAccounts:p.financialAccounts.map(account=>account.id===accountId?{...account,isActive:false}:account)}));
+    setTxForm(form=>form.accountId===accountId?{...form,accountId:getDefaultAccountId(activeFinancialAccounts.filter(account=>account.id!==accountId),true)}:form);
+    showNotif('Account archived','success');
+  }
+  function restoreAccount(accountId){
+    updateProfile(p=>({...p,financialAccounts:p.financialAccounts.map(account=>account.id===accountId?{...account,isActive:true}:account)}));
+    showNotif('Account restored','success');
+  }
+  function deleteAccount(accountId){
+    const linkedTransactions=(transactions||[]).some(tx=>tx.accountId===accountId);
+    if(linkedTransactions){
+      archiveAccount(accountId);
+      return;
+    }
+    updateProfile(p=>({...p,financialAccounts:p.financialAccounts.filter(account=>account.id!==accountId)}));
+    setTxForm(form=>form.accountId===accountId?{...form,accountId:getDefaultAccountId(activeFinancialAccounts.filter(account=>account.id!==accountId),true)}:form);
+    showNotif('Account removed','success');
   }
 
   // Finance computed values
@@ -3067,7 +3443,7 @@ function App(){
   const monthSpend=monthTx.reduce((s,t)=>s+t.amount,0);
   const weekSpend=weekTx.reduce((s,t)=>s+t.amount,0);
   const unreviewed=(transactions||[]).filter(t=>!t.isReviewed).length;
-  const catSpend=FINANCE_CATS.map(c=>({...c,total:monthTx.filter(t=>t.category===c.id).reduce((s,t)=>s+t.amount,0)})).filter(c=>c.total>0).sort((a,b)=>b.total-a.total);
+  const catSpend=financeCategories.map(c=>({...c,total:monthTx.filter(t=>t.category===c.id).reduce((s,t)=>s+t.amount,0)})).filter(c=>c.total>0).sort((a,b)=>b.total-a.total);
   const billsDueSoon=(recurringExpenses||[]).filter(r=>{if(!r.nextExpectedDate)return false;const d=new Date(r.nextExpectedDate+'T12:00:00');return(d-now)/86400000<=7;});
 
   function connectGoogle(){
@@ -3216,7 +3592,8 @@ function App(){
         pantryItemId:entry.pantryItemId,
         recipeId:entry.recipeId,
         source:'repeat-last',
-        itemIds:entry.itemIds||[],
+        foodIds:entry.foodIds||entry.itemIds||[],
+        foodId:entry.foodId||(entry.foodIds||entry.itemIds||[])[0]||null,
         grams:entry.grams||0,
         cal:entry.cal||0,
         pro:entry.pro||0,
@@ -4295,8 +4672,8 @@ function App(){
     const todayFat=todayN.reduce((s,m)=>s+(m.fat||0),0);
     const libraryFoods=DEFAULT_FOOD_LIBRARY;
     const customFoods=foodLibrary||[];
-    const allLibraryFoods=[...libraryFoods,...customFoods];
-    const foods=[...libraryFoods,...customFoods];
+    const allLibraryFoods=resolveFoodLibrary(customFoods);
+    const foods=allLibraryFoods;
     const pantryItems=(pantryInventory||[]).map(item=>typeof item==='string'?{id:`legacy_${item}`,baseFoodId:item,name:(libraryFoods.find(food=>food.id===item)||{}).name||item,defaultServing:(libraryFoods.find(food=>food.id===item)||{}).unitWeight||100,notes:''}:item);
     const recipeTemplates=(recipes&&recipes.length?recipes:DEFAULT_RECIPE_TEMPLATES);
     const quickTemplates=(quickMealTemplates&&quickMealTemplates.length?quickMealTemplates:DEFAULT_QUICK_MEAL_TEMPLATES);
@@ -4312,7 +4689,7 @@ function App(){
     const weeklyProteinDays=weekDatesGlobal.filter(ds=>(nutr[ds]||[]).reduce((s,m)=>s+(m.pro||0),0)>=computeMacroTargets(isTrainingDayForDate(ds,athlete?.programType||'4-day',athlete?.preferredTrainingDays)).protein*0.9).length;
     const weeklyHydrationDays=weekDatesGlobal.filter(ds=>(hydr[ds]||0)>=hydGoal*0.9).length;
     const pantryBaseIdByItemId=Object.fromEntries(pantryItems.map(item=>[item.id,item.baseFoodId||item.foodId||item.id]));
-    const usageCountForFood=foodId=>weeklyMeals.filter(m=>m.foodId===foodId||m.itemIds?.includes(foodId)||pantryBaseIdByItemId[m.pantryItemId]===foodId).length;
+    const usageCountForFood=foodId=>weeklyMeals.filter(m=>m.foodId===foodId||m.foodIds?.includes(foodId)||m.itemIds?.includes(foodId)||pantryBaseIdByItemId[m.pantryItemId]===foodId).length;
     const usageCountForPantryItem=itemId=>weeklyMeals.filter(m=>m.pantryItemId===itemId).length;
     const topFoods=foods.map(food=>{
       const uses=usageCountForFood(food.id);
@@ -4497,7 +4874,8 @@ function App(){
       addMeal({
         meal:quickMeal.name||'Quick meal',
         source:'quick-meal',
-        itemIds:items.map(item=>item.food.id),
+        foodId:items[0]?.food.id||null,
+        foodIds:items.map(item=>item.food.id),
         grams:Math.round(total.grams),
         cal:Math.round(total.cal),
         pro:roundMacro(total.pro),
@@ -4715,7 +5093,8 @@ function App(){
       addMeal({
         meal:tpl.name,
         source:'saved-meal',
-        itemIds:tpl.itemIds||[],
+        foodId:(tpl.foodIds||tpl.itemIds||[])[0]||null,
+        foodIds:tpl.foodIds||tpl.itemIds||[],
         cal:tpl.cal||0,
         pro:tpl.pro||0,
         carb:tpl.carb||0,
@@ -4736,7 +5115,7 @@ function App(){
         pantryItemId:recentEntry.pantryItemId,
         recipeId:recentEntry.recipeId,
         source:'repeat-last',
-        itemIds:recentEntry.itemIds||[],
+        foodIds:recentEntry.foodIds||recentEntry.itemIds||[],
         grams:recentEntry.grams||0,
         cal:recentEntry.cal||0,
         pro:recentEntry.pro||0,
@@ -4754,7 +5133,7 @@ function App(){
     }
 
     function openMealTemplate(tpl){
-      setQuickMeal(q=>({...q,name:tpl.name,slot:tpl.slot||q.slot,items:(tpl.itemIds||[]).slice(0,4).map(id=>({foodId:id,grams:'100'}))}));
+      setQuickMeal(q=>({...q,name:tpl.name,slot:tpl.slot||q.slot,items:(tpl.foodIds||tpl.itemIds||[]).slice(0,4).map(id=>({foodId:id,grams:'100'}))}));
       setMealMode('quick');
       setNutritionOpen(prev=>({...prev,today:true,meals:true}));
     }
@@ -4841,13 +5220,13 @@ function App(){
           <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
             <div style={{...S.row,marginBottom:8}}>
               <span style={S.lbl}>Today's Macros</span>
-              <span style={{fontSize:10,color:trainingFlags.isTrainingDay?C.sage:C.amber}}>{trainingFlags.isTrainingDay?'Training day':'Rest day'}</span>
+              <span style={{...S.micro,color:trainingFlags.isTrainingDay?C.sage:C.amber}}>{trainingFlags.isTrainingDay?'Training day':'Rest day'}</span>
             </div>
             {[{l:'Calories',v:todayCal,g:targets.calories,u:'kcal',c:C.amber},{l:'Protein',v:todayPro,g:targets.protein,u:'g',c:C.sage},{l:'Carbs',v:todayCarb,g:targets.carbs,u:'g',c:C.navy},{l:'Fat',v:todayFat,g:MACROS.fat,u:'g',c:C.tx2}].map(({l,v,g,u,c})=>
               <div key={l} style={{marginBottom:8}}>
                 <div style={{...S.row,marginBottom:3}}>
-                  <span style={{fontSize:11,color:C.tx}}>{l}</span>
-                  <span style={{fontSize:11,color:C.muted}}>{v} / {g}{u}</span>
+                  <span style={S.bodyText}>{l}</span>
+                  <span style={S.metaText}>{v} / {g}{u}</span>
                 </div>
                 <ProgressBar value={v} max={g} color={c}/>
               </div>
@@ -4855,28 +5234,31 @@ function App(){
           </div>
           <div style={{display:'grid',gap:10}}>
             <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-              <div style={{...S.row,marginBottom:8}}>
-                <span style={S.cardTitle}>Hydration</span>
-                <span style={S.micro}>{todayH} / {hydGoal} oz</span>
+              <div style={{marginBottom:12}}>
+                <span style={S.lbl}>Hydration</span>
+                <div style={{display:'flex',alignItems:'baseline',gap:4,marginTop:2}}>
+                  <span style={{fontSize:28,fontWeight:700,color:C.tx,lineHeight:1}}>{todayH}</span>
+                  <span style={{fontSize:T.body,fontWeight:600,color:C.tx2,lineHeight:1.2}}>oz</span>
+                </div>
+                <div style={{...S.metaText,marginTop:4}}>Target {hydGoal} oz</div>
               </div>
-              <div style={{fontSize:18,fontWeight:700,color:C.navy,marginBottom:8}}>{todayH} / {hydGoal} oz</div>
               <ProgressBar value={todayH} max={hydGoal} color={C.navy}/>
-              <div style={{display:'flex',gap:6,marginTop:10}}>
-                {[8,12,16].map(oz=><button key={oz} style={{...S.btnSmall(C.navy),flex:1,fontSize:11,padding:'8px 10px'}} onClick={()=>addWater(oz)}>+{oz} oz</button>)}
+              <div style={{display:'flex',gap:6,marginTop:12}}>
+                {[8,12,16].map(oz=><button key={oz} style={{...S.btnGhost,flex:1,fontSize:T.meta,padding:'8px 10px',color:C.tx2}} onClick={()=>addWater(oz)}>+{oz} oz</button>)}
               </div>
             </div>
             <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
               <div style={{...S.row,marginBottom:8}}>
                 <span style={S.lbl}>Weekly Consistency</span>
-                <span style={{fontSize:10,color:C.muted}}>7-day view</span>
+                <span style={S.micro}>7-day view</span>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                 <div>
-                  <div style={{fontSize:10,color:C.muted}}>Protein target days</div>
+                  <div style={S.micro}>Protein target days</div>
                   <div style={{fontSize:18,fontWeight:700,color:C.sage}}>{weeklyProteinDays}/7</div>
                 </div>
                 <div>
-                  <div style={{fontSize:10,color:C.muted}}>Hydration target days</div>
+                  <div style={S.micro}>Hydration target days</div>
                   <div style={{fontSize:18,fontWeight:700,color:C.navy}}>{weeklyHydrationDays}/7</div>
                 </div>
               </div>
@@ -5248,6 +5630,7 @@ function App(){
               </div>
               <div style={{display:'flex',gap:6,alignItems:'center'}}>
                 {due&&<button onClick={()=>completeHabit(h.id)} style={{...S.btnSmall(done?C.muted:C.sage)}}>{done?'Done':'Mark done'}</button>}
+                <button onClick={()=>openEditHabit(h)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>edit</button>
                 <button onClick={()=>deleteHabit(h.id)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>x</button>
               </div>
             </div>
@@ -5904,6 +6287,28 @@ function App(){
     const [localFinView,setLocalFinView]=useState(finView);
     useEffect(()=>setLocalFinView(finView),[finView]);
     const [editTxId,setEditTxId]=useState(null);
+    const accountTypeLabel=type=>(ACCOUNT_TYPE_OPTIONS.find(option=>option.id===type)?.label)||'Other';
+    const getTransactionAccountLabel=tx=>{
+      const account=financialAccountMap.get(tx.accountId);
+      if(account)return formatAccountLabel(account);
+      return tx.accountId?String(tx.accountId).replace(/_/g,' '):'No account';
+    };
+    const TransactionRow=({transaction,showEditButton=false,isEditing=false,onToggleEdit})=>{
+      const cat=financeCategoryMap.get(transaction.category)||{clr:C.muted,label:'Other'};
+      return <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:'4px 12px',alignItems:'start'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+          {!transaction.isReviewed&&<div style={{width:6,height:6,borderRadius:'50%',background:C.amber,flexShrink:0,marginTop:5}}/>}
+          <div style={{fontSize:13,color:C.tx,fontWeight:500,lineHeight:1.35,minWidth:0,overflowWrap:'anywhere'}}>{transaction.merchant}</div>
+        </div>
+        <div style={{textAlign:'right',minWidth:84}}>
+          <div style={{fontSize:13,fontWeight:700,color:transaction.isCredit?C.sage:C.tx,whiteSpace:'nowrap'}}>{transaction.isCredit?'+':'-'}{fmtMoneyD(transaction.amount)}</div>
+          {showEditButton&&<button onClick={onToggleEdit} style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0,marginTop:2}}>{isEditing?'close':'edit'}</button>}
+        </div>
+        <div style={{gridColumn:'1 / -1',fontSize:10,color:C.muted,lineHeight:1.4,paddingLeft:transaction.isReviewed?0:12}}>
+          {transaction.date} · <span style={{color:cat.clr}}>{cat.label}</span> · {getTransactionAccountLabel(transaction)}{transaction.isTransfer?' · transfer':''}
+        </div>
+      </div>;
+    };
 
     // Filtered transactions
     const visibleTx=useMemo(()=>{
@@ -5925,8 +6330,8 @@ function App(){
 
     // ── OVERVIEW ─────────────────────────────────────────────────────
     if(localFinView==='overview'){
-      const totalBalance=(financialAccounts||[]).filter(a=>a.isActive&&a.currentBalance!=null).reduce((s,a)=>s+a.currentBalance,0);
-      const hasBalances=(financialAccounts||[]).some(a=>a.isActive);
+      const totalBalance=activeFinancialAccounts.filter(a=>a.currentBalance!=null).reduce((s,a)=>s+a.currentBalance,0);
+      const hasBalances=activeFinancialAccounts.some(a=>a.currentBalance!=null);
       const topCats=catSpend.slice(0,3);
       return <div style={S.body}>
         {/* Header row with sub-tabs and + button */}
@@ -5944,21 +6349,55 @@ function App(){
             <button onClick={duplicateLastTx} style={{padding:'6px 10px',borderRadius:20,border:`0.5px solid ${C.navy}`,background:'transparent',color:C.navy,fontSize:11,cursor:'pointer'}}>↩ Duplicate last</button>
           </div>
         </div>
+        <div style={S.card}>
+          <div style={{...S.row,marginBottom:8}}>
+            <span style={S.lbl}>Categories</span>
+            <button style={{...S.btnGhost,fontSize:11,padding:'4px 8px'}} onClick={addCategory}>+ Add</button>
+          </div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {financeCategories.filter(category=>category.id!=='transfer').map(category=><button key={category.id} onClick={()=>editCategory(category)} style={{padding:'6px 10px',borderRadius:20,border:`0.5px solid ${category.clr}`,background:C.surf,color:C.tx,fontSize:11,cursor:'pointer'}}>
+              {category.label}
+            </button>)}
+          </div>
+        </div>
         {/* Balances */}
         <div style={S.card}>
           <span style={S.lbl}>Accounts</span>
-          {(financialAccounts||[]).map(a=><div key={a.id} style={{...S.row,padding:'6px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <div>
-              <div style={{fontSize:13,color:C.tx,fontWeight:500}}>{a.institutionName} {a.accountName}</div>
-              <div style={{fontSize:10,color:C.muted,textTransform:'capitalize'}}>{a.accountType}</div>
+          {activeFinancialAccounts.map(a=><div key={a.id} style={{padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
+            <div style={{...S.row,alignItems:'flex-start',gap:10}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:13,color:C.tx,fontWeight:500,lineHeight:1.3,overflowWrap:'anywhere'}}>{formatAccountLabel(a)}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>{accountTypeLabel(a.type)}{a.startingBalance!=null?` · start ${fmtMoney(a.startingBalance)}`:''}</div>
+              </div>
+              <div style={{textAlign:'right',flexShrink:0}}>
+                {a.currentBalance!=null?<div style={{fontSize:14,fontWeight:700,color:C.sage}}>{fmtMoney(a.currentBalance)}</div>:<div style={{fontSize:11,color:C.muted}}>—</div>}
+                <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:4}}>
+                  <button style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>openEditAccount(a)}>edit</button>
+                  <button style={{background:'none',border:'none',color:C.red,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>archiveAccount(a.id)}>archive</button>
+                </div>
+              </div>
             </div>
-            {a.currentBalance!=null?<div style={{fontSize:14,fontWeight:700,color:C.sage}}>{fmtMoney(a.currentBalance)}</div>:<div style={{fontSize:11,color:C.muted}}>—</div>}
           </div>)}
+          {activeFinancialAccounts.length===0&&<div style={{fontSize:11,color:C.muted,marginBottom:8}}>No active accounts yet. Add one to start tracking transactions.</div>}
+          {archivedFinancialAccounts.length>0&&<div style={{marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.bd}`}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.7px',color:C.muted,textTransform:'uppercase',marginBottom:6}}>Archived</div>
+            {archivedFinancialAccounts.map(a=><div key={a.id} style={{...S.row,padding:'6px 0',gap:8}}>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:12,color:C.tx,lineHeight:1.3,overflowWrap:'anywhere'}}>{formatAccountLabel(a)}</div>
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>{accountTypeLabel(a.type)}</div>
+              </div>
+              <div style={{display:'flex',gap:6,flexShrink:0}}>
+                <button style={{background:'none',border:'none',color:C.navy,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>restoreAccount(a.id)}>restore</button>
+                <button style={{background:'none',border:'none',color:C.red,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>deleteAccount(a.id)}>delete</button>
+              </div>
+            </div>)}
+          </div>}
+          <button style={{...S.btnGhost,width:'100%',marginTop:10}} onClick={openAddAccount}>+ Add account</button>
           {hasBalances&&<div style={{...S.row,marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.bd}`}}>
             <span style={{fontSize:12,fontWeight:600,color:C.tx}}>Total</span>
             <span style={{fontSize:18,fontWeight:700,color:C.tx}}>{fmtMoney(totalBalance)}</span>
           </div>}
-          {!hasBalances&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Set balances in Settings → Finance</div>}
+          {!hasBalances&&activeFinancialAccounts.length>0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Set balances in Settings → Finance if you want totals here.</div>}
         </div>
         {/* Spend summary */}
         <div style={S.card}>
@@ -6000,18 +6439,9 @@ function App(){
             <span style={S.lbl}>Recent</span>
             <button style={{...S.btnGhost,fontSize:11,padding:'4px 8px'}} onClick={()=>{setLocalFinView('transactions');setFinView('transactions');}}>All</button>
           </div>
-          {[...(transactions||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(t=>{
-            const cat=FINANCE_CATS.find(c=>c.id===t.category)||{clr:C.muted,label:'Other'};
-            return <div key={t.transactionId} style={{...S.row,padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,color:C.tx,fontWeight:500}}>{t.merchant}</div>
-                <div style={{fontSize:10,color:C.muted}}>{t.date} · <span style={{color:cat.clr}}>{cat.label}</span></div>
-              </div>
-              <div style={{textAlign:'right'}}>
-                <div style={{fontSize:13,fontWeight:600,color:t.isCredit?C.sage:C.tx}}>{t.isCredit?'+':'-'}{fmtMoneyD(t.amount)}</div>
-              </div>
-            </div>;
-          })}
+          {[...(transactions||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map((t,i,items)=><div key={t.transactionId} style={{padding:'8px 0',borderBottom:i<items.length-1?`0.5px solid ${C.bd}`:'none'}}>
+            <TransactionRow transaction={t}/>
+          </div>)}
         </div>}
         {(transactions||[]).length===0&&<div style={{textAlign:'center',padding:'30px 0',color:C.muted,fontSize:13}}>
           No transactions yet.<br/>Import a CSV or add manually.
@@ -6037,30 +6467,17 @@ function App(){
         {/* Category filter chips */}
         <div style={{display:'flex',gap:4,overflowX:'auto',marginBottom:10,paddingBottom:2}}>
           <button onClick={()=>setFinCatFilter(null)} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`0.5px solid ${!finCatFilter?C.sage:C.bd}`,background:!finCatFilter?C.sageL:'transparent',color:!finCatFilter?C.sageDk:C.muted,fontSize:10,cursor:'pointer'}}>All</button>
-          {FINANCE_CATS.map(c=><button key={c.id} onClick={()=>setFinCatFilter(finCatFilter===c.id?null:c.id)} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`0.5px solid ${finCatFilter===c.id?c.clr:C.bd}`,background:finCatFilter===c.id?c.clr:'transparent',color:finCatFilter===c.id?C.white:C.muted,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
+          {financeCategories.map(c=><button key={c.id} onClick={()=>setFinCatFilter(finCatFilter===c.id?null:c.id)} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`0.5px solid ${finCatFilter===c.id?c.clr:C.bd}`,background:finCatFilter===c.id?c.clr:'transparent',color:finCatFilter===c.id?C.white:C.muted,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
         </div>
         {visibleTx.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:C.muted,fontSize:13}}>No transactions match.</div>}
         <div style={S.card}>
           {visibleTx.map((t,i)=>{
-            const cat=FINANCE_CATS.find(c=>c.id===t.category)||{clr:C.muted,label:'Other'};
             const isEdit=editTxId===t.transactionId;
             return <div key={t.transactionId} style={{padding:'10px 0',borderBottom:i<visibleTx.length-1?`0.5px solid ${C.bd}`:'none'}}>
-              <div style={S.row}>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    {!t.isReviewed&&<div style={{width:6,height:6,borderRadius:'50%',background:C.amber,flexShrink:0}}/>}
-                    <div style={{fontSize:13,color:C.tx,fontWeight:500}}>{t.merchant}</div>
-                  </div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:2}}>{t.date} · {t.accountId?.replace('_',' ')} · <span style={{color:cat.clr}}>{cat.label}</span>{t.isTransfer?' · transfer':''}</div>
-                </div>
-                <div style={{textAlign:'right',marginLeft:8}}>
-                  <div style={{fontSize:13,fontWeight:700,color:t.isCredit?C.sage:C.tx}}>{t.isCredit?'+':'-'}{fmtMoneyD(t.amount)}</div>
-                  <button onClick={()=>setEditTxId(isEdit?null:t.transactionId)} style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0}}>edit</button>
-                </div>
-              </div>
+              <TransactionRow transaction={t} showEditButton isEditing={isEdit} onToggleEdit={()=>setEditTxId(isEdit?null:t.transactionId)}/>
               {isEdit&&<div style={{marginTop:8,padding:'10px',background:C.surf,borderRadius:10}}>
                 <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
-                  {FINANCE_CATS.map(c=><button key={c.id} onClick={()=>{updateTxCategory(t.transactionId,c.id,true);setEditTxId(null);}} style={{padding:'4px 8px',borderRadius:6,border:`1px solid ${t.category===c.id?c.clr:C.bd}`,background:t.category===c.id?c.clr:'transparent',color:t.category===c.id?C.white:C.tx,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
+                  {financeCategories.map(c=><button key={c.id} onClick={()=>{updateTxCategory(t.transactionId,c.id,true);setEditTxId(null);}} style={{padding:'4px 8px',borderRadius:6,border:`1px solid ${t.category===c.id?c.clr:C.bd}`,background:t.category===c.id?c.clr:'transparent',color:t.category===c.id?C.white:C.tx,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
                 </div>
                 <div style={{display:'flex',gap:6}}>
                   {!t.isReviewed&&<button style={S.btnSmall(C.sage)} onClick={()=>{reviewTx(t.transactionId);setEditTxId(null);}}>Mark reviewed</button>}
@@ -6122,7 +6539,7 @@ function App(){
           No recurring expenses detected yet.<br/>Import at least 2 months of transactions.
         </div>}
         {(recurringExpenses||[]).map((r,i)=>{
-          const cat=FINANCE_CATS.find(c=>c.id===r.category)||{clr:C.muted};
+          const cat=financeCategoryMap.get(r.category)||{clr:C.muted,label:'Other'};
           const daysUntil=r.nextExpectedDate?Math.ceil((new Date(r.nextExpectedDate+'T12:00:00')-now)/86400000):null;
           const isDue=daysUntil!==null&&daysUntil<=7;
           return <div key={i} style={{...S.card,borderLeft:`3px solid ${isDue?C.amber:cat.clr}`}}>
@@ -6134,7 +6551,7 @@ function App(){
                   {r.nextExpectedDate&&<span style={{color:isDue?C.amber:C.muted}}> · due {r.nextExpectedDate}{isDue?` (${daysUntil}d)`:''}</span>}
                 </div>
               </div>
-              <span style={S.tag(cat.clr,C.surf)}>{(FINANCE_CATS.find(c=>c.id===r.category)||{label:'Other'}).label}</span>
+              <span style={S.tag(cat.clr,C.surf)}>{cat.label||'Other'}</span>
             </div>
           </div>;
         })}
@@ -6223,7 +6640,7 @@ function App(){
         </div>
         <input type="file" accept=".csv,.txt" ref={fileRef} onChange={handleFile} style={{display:'none'}}/>
         <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8}} onClick={()=>fileRef.current?.click()}>Select CSV file</button>
-        <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder="Or paste CSV text here..." style={{...S.inp,height:120,resize:'none',fontFamily:'monospace',fontSize:11,marginBottom:12}}/>
+        <textarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder="Or paste CSV text here..." style={{...S.inp,height:120,resize:'none',fontSize:11,marginBottom:12}}/>
         <div style={{display:'flex',gap:8}}>
           <button style={S.btnSolid(C.navy)} onClick={()=>importTransactions(csvText)}>Import</button>
           <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowImport(false)}>Cancel</button>
@@ -6270,17 +6687,19 @@ function App(){
 
         {/* Account */}
         <span style={S.lbl}>Account</span>
-        <select value={txForm.accountId} onChange={e=>setTxForm(f=>({...f,accountId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
-          {(financialAccounts||[]).filter(a=>a.isActive).map(a=><option key={a.id} value={a.id}>{a.institutionName} — {a.accountName}</option>)}
-          <option value="ally_checking">Ally — Checking</option>
-          <option value="ally_savings">Ally — Savings</option>
-          <option value="regions_checking">Regions — Checking</option>
-        </select>
+        {activeFinancialAccounts.length>0
+          ?<select value={txForm.accountId} onChange={e=>setTxForm(f=>({...f,accountId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+            {activeFinancialAccounts.map(a=><option key={a.id} value={a.id}>{formatAccountLabel(a)}</option>)}
+          </select>
+          :<div style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'12px',marginBottom:8}}>
+            <div style={{fontSize:12,color:C.tx,marginBottom:8}}>Add an account before saving transactions.</div>
+            <button style={S.btnSmall(C.navy)} onClick={()=>{setShowAddTx(false);openAddAccount();}}>+ Add account</button>
+          </div>}
 
         {/* Category chips */}
         <span style={S.lbl}>Category</span>
         <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:12}}>
-          {FINANCE_CATS.filter(c=>c.id!=='transfer').map(c=><button key={c.id} onClick={()=>setTxForm(f=>({...f,category:c.id,isTransfer:false}))} style={{padding:'5px 10px',borderRadius:20,border:`1.5px solid ${txForm.category===c.id?c.clr:C.bd}`,background:txForm.category===c.id?c.clr:'transparent',color:txForm.category===c.id?C.white:C.tx,fontSize:11,cursor:'pointer',fontWeight:txForm.category===c.id?600:400}}>{c.label}</button>)}
+          {financeCategories.filter(c=>c.id!=='transfer').map(c=><button key={c.id} onClick={()=>setTxForm(f=>({...f,category:c.id,isTransfer:false}))} style={{padding:'5px 10px',borderRadius:20,border:`1.5px solid ${txForm.category===c.id?c.clr:C.bd}`,background:txForm.category===c.id?c.clr:'transparent',color:txForm.category===c.id?C.white:C.tx,fontSize:11,cursor:'pointer',fontWeight:txForm.category===c.id?600:400}}>{c.label}</button>)}
         </div>
 
         {/* Toggles */}
@@ -6293,8 +6712,37 @@ function App(){
 
         {/* Actions */}
         <div style={{display:'flex',gap:8}}>
-          <button style={S.btnSolid(C.sage)} onClick={()=>addManualTx()}>Save Transaction</button>
+          <button style={{...S.btnSolid(C.sage),opacity:activeFinancialAccounts.length?1:0.6,pointerEvents:activeFinancialAccounts.length?'auto':'none'}} onClick={()=>addManualTx()}>Save Transaction</button>
           <button style={{...S.btnGhost,flex:0,padding:'11px 16px'}} onClick={()=>setShowAddTx(false)}>Cancel</button>
+        </div>
+      </div>
+    </div>;
+  }
+
+  function AccountModal(){
+    const isEdit=!!editingAccountId;
+    return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
+      <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'88vh',overflowY:'auto'}}>
+        <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>{isEdit?'Edit Account':'Add Account'}</div>
+        <span style={S.lbl}>Account Name</span>
+        <input value={accountForm.name} onChange={e=>setAccountForm(form=>({...form,name:e.target.value}))} placeholder="Checking" style={{...S.inp,marginBottom:8}} autoFocus/>
+        <span style={S.lbl}>Institution</span>
+        <input value={accountForm.institution} onChange={e=>setAccountForm(form=>({...form,institution:e.target.value}))} placeholder="Ally" style={{...S.inp,marginBottom:8}}/>
+        <span style={S.lbl}>Type</span>
+        <select value={accountForm.type} onChange={e=>setAccountForm(form=>({...form,type:e.target.value}))} style={{...S.inp,marginBottom:8}}>
+          {ACCOUNT_TYPE_OPTIONS.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
+        </select>
+        <span style={S.lbl}>Starting Balance (optional)</span>
+        <input type="number" inputMode="decimal" value={accountForm.startingBalance} onChange={e=>setAccountForm(form=>({...form,startingBalance:e.target.value}))} placeholder="0.00" style={{...S.inp,marginBottom:12}}/>
+        <div style={{...S.row,paddingBottom:10,borderBottom:`0.5px solid ${C.bd}`,marginBottom:16}}>
+          <span style={{fontSize:13,color:C.tx}}>Active for new transactions</span>
+          <button onClick={()=>setAccountForm(form=>({...form,isActive:!form.isActive}))} style={{width:44,height:26,borderRadius:13,background:accountForm.isActive?C.sage:C.surf,border:`1px solid ${C.bd}`,cursor:'pointer',position:'relative',flexShrink:0}}>
+            <div style={{width:20,height:20,borderRadius:'50%',background:C.white,boxShadow:C.shadow,position:'absolute',top:3,transition:'left 0.18s',left:accountForm.isActive?'20px':'3px'}}/>
+          </button>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button style={S.btnSolid(C.sage)} onClick={saveAccount}>{isEdit?'Save Account':'Add Account'}</button>
+          <button style={{...S.btnGhost,flex:0,padding:'11px 16px'}} onClick={()=>setShowAccountModal(false)}>Cancel</button>
         </div>
       </div>
     </div>;
@@ -6366,19 +6814,19 @@ function App(){
           </div>}
           {sec.id==='finance'&&<div>
             <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-              Track spending across Ally and Regions accounts. Import transaction CSVs exported from your bank, or enter transactions manually. No backend required — everything stays local.
+              Manage balances for your saved accounts here. Add, edit, archive, and restore accounts from the Finance tab. Everything stays local.
             </div>
             <span style={S.lbl}>Account Balances</span>
-            {(financialAccounts||[]).map(a=><div key={a.id} style={{...S.card,padding:'10px 12px',marginBottom:6}}>
+            {normalizeFinancialAccounts(financialAccounts).map(a=><div key={a.id} style={{...S.card,padding:'10px 12px',marginBottom:6}}>
               <div style={{...S.row,marginBottom:6}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{a.institutionName} {a.accountName}</div>
-                  <div style={{fontSize:10,color:C.muted,textTransform:'capitalize'}}>{a.accountType}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{formatAccountLabel(a)}</div>
+                  <div style={{fontSize:10,color:C.muted}}>{(ACCOUNT_TYPE_OPTIONS.find(option=>option.id===a.type)?.label)||'Other'}{a.isActive===false?' · archived':''}</div>
                 </div>
                 {a.currentBalance!=null&&<div style={{fontSize:15,fontWeight:700,color:C.sage}}>{fmtMoney(a.currentBalance)}</div>}
               </div>
               <div style={{display:'flex',gap:6}}>
-                <input placeholder="Balance" type="number" style={{...S.inp,flex:1,padding:'6px 8px',fontSize:12}} onBlur={e=>{if(e.target.value)updateAccountBalance(a.id,e.target.value,a.maskedNumber);}}/>
+                <input placeholder="Balance" type="number" defaultValue={a.currentBalance??''} style={{...S.inp,flex:1,padding:'6px 8px',fontSize:12}} onBlur={e=>updateAccountBalance(a.id,e.target.value,a.maskedNumber)}/>
                 <input placeholder="••••" style={{...S.inp,width:60,padding:'6px 8px',fontSize:12}} defaultValue={a.maskedNumber} onBlur={e=>updateAccountBalance(a.id,a.currentBalance,e.target.value)}/>
               </div>
             </div>)}
@@ -6528,8 +6976,8 @@ function App(){
       tasks:'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 13h14v-2H7v2zm0-6v2h14V7H7zm0 10h14v-2H7v2z',
       // Inbox tray
       inbox:'M19 3H4.99C3.88 3 3 3.9 3 5l.01 14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H5V5h14v10z',
-      // Dumbbell / fitness center
-      training:'M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43l-1.29-1.28-2.83 2.83 1.28 1.29-1.43 1.43 1.43 1.43-1.43 1.43 1.43 1.43L4 14l2.83 2.83 2.86-2.86 2.57 2.57-2.86 2.86L12 22l3.57-3.57 1.29 1.28 2.83-2.83-1.28-1.29 1.43-1.43-1.43-1.43 1.43-1.43-1.43-1.43z',
+      // Simple dumbbell silhouette sized to stay legible in the bottom nav
+      training:'M4.75 8.25h1V5.75h2.5v12.5h-2.5v-2.5h-1A1.75 1.75 0 0 1 3 14V10a1.75 1.75 0 0 1 1.75-1.75zm14.5 0A1.75 1.75 0 0 1 21 10v4a1.75 1.75 0 0 1-1.75 1.75h-1v2.5h-2.5V5.75h2.5v2.5h1zM9.75 10.75h4.5v2.5h-4.5v-2.5z',
       // Fork and knife / restaurant
       meals:'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
       // Menu / more
@@ -7092,6 +7540,7 @@ function App(){
       </nav>
       {showImport&&<ImportModal/>}
       {showAddTx&&<AddTxModal/>}
+      {showAccountModal&&<AccountModal/>}
       {demoExercise&&<ExerciseDemoModal exercise={demoExercise} onClose={()=>setDemoExercise(null)}/>}
       {showWeeklyPlanner&&<div style={{position:'fixed',inset:0,background:C.scrim,zIndex:620,display:'flex',alignItems:'flex-end'}}>
         <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'85vh',overflowY:'auto'}}>
