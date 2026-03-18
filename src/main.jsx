@@ -116,6 +116,19 @@ function getCurrentDate(){
     dow:now.getDay(),
   };
 }
+
+function createNewTaskDraft(today,overrides={}){
+  return{
+    text:'',
+    priority:1,
+    parentId:null,
+    date:today,
+    bucket:'next',
+    contextTags:'',
+    scheduledTime:'',
+    ...overrides,
+  };
+}
 function getMsUntilNextDay(now=new Date()){
   const nextMidnight=new Date(now);
   nextMidnight.setHours(24,0,0,50);
@@ -2497,7 +2510,8 @@ function App(){
   const [showReview,setShowReview]=useState(false);
   const [expandedTasks,setExpandedTasks]=useState({});
   const [showAddTask,setShowAddTask]=useState(false);
-  const [newTask,setNewTask]=useState({text:'',priority:1,parentId:null,date:TODAY,bucket:'next',contextTags:'',scheduledTime:''});
+  const [newTask,setNewTask]=useState(()=>createNewTaskDraft(TODAY));
+  const [taskDraftText,setTaskDraftText]=useState('');
   const [taskScreenTab,setTaskScreenTab]=useState('next');
   const [settingsSection,setSettingsSection]=useState(null);
   const [navFocusId,setNavFocusId]=useState(null);
@@ -2753,7 +2767,8 @@ function App(){
       }else if(key==='t'){
         e.preventDefault();
         setTab('tasks');
-        setNewTask({text:'',priority:1,parentId:null,date:getTodayKey(),bucket:'next',contextTags:'',scheduledTime:''});
+        setNewTask(createNewTaskDraft(getTodayKey()));
+        setTaskDraftText('');
         setShowAddTask(true);
       }else if(key==='w'){
         e.preventDefault();
@@ -5824,11 +5839,17 @@ function App(){
     const prioClr={1:C.sage,2:C.amber,3:C.red};
     const dueTodayUnscheduled=todayTasks.filter(task=>!task.scheduledTime);
 
+    function openTaskComposer(overrides={}){
+      setNewTask(createNewTaskDraft(TODAY,overrides));
+      setTaskDraftText(overrides.text??'');
+      setShowAddTask(true);
+    }
+
     function addTask(){
-      if(!newTask.text.trim())return;
+      if(!taskDraftText.trim())return;
       const t={
         id:String(Date.now()),
-        text:newTask.text.trim(),
+        text:taskDraftText.trim(),
         date:newTask.date||TODAY,
         priority:newTask.priority,
         parentId:newTask.parentId,
@@ -5840,7 +5861,8 @@ function App(){
         updatedAt:new Date().toISOString(),
       };
       updateProfile(p=>({...p,taskHistory:[...p.taskHistory,t]}));
-      setNewTask({text:'',priority:1,parentId:null,date:TODAY,bucket:'next',contextTags:'',scheduledTime:''});
+      setNewTask(createNewTaskDraft(TODAY));
+      setTaskDraftText('');
       setShowAddTask(false);
     }
     function toggleTask(id){
@@ -5955,7 +5977,7 @@ function App(){
             {overdue&&!t.done&&<button onClick={()=>rollTask(t.id)} style={{...S.btnGhost,fontSize:9,padding:'5px 6px'}}>Roll</button>}
             {overdue&&!t.done&&<button onClick={()=>deferTask(t.id)} style={{...S.btnGhost,fontSize:9,padding:'5px 6px'}}>Defer</button>}
             {!t.done&&<button onClick={()=>dismissTask(t.id)} style={{...S.btnGhost,fontSize:9,padding:'5px 6px'}}>Dismiss</button>}
-            <button onClick={()=>{setNewTask({text:'',priority:1,parentId:t.id,date:t.date||TODAY,bucket:t.bucket||'next',contextTags:(t.contextTags||[]).join(', '),scheduledTime:''});setShowAddTask(true);}} style={{background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer'}}>+</button>
+            <button onClick={()=>openTaskComposer({parentId:t.id,date:t.date||TODAY,bucket:t.bucket||'next',contextTags:(t.contextTags||[]).join(', '),scheduledTime:''})} style={{background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer'}}>+</button>
             <button onClick={()=>deleteTask(t.id)} style={{background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer'}}>x</button>
           </div>
         </div>
@@ -5998,7 +6020,7 @@ function App(){
         </div>}
         <div style={{...S.row,marginBottom:12}}>
           <div style={{fontSize:15,fontWeight:600,color:C.tx}}>{tasksTab==='next'?'Next Up':'Scheduled'}</div>
-          <button style={S.btnSmall(C.sage)} onClick={()=>{setNewTask({text:'',priority:1,parentId:null,date:TODAY,bucket:tasksTab==='scheduled'?'scheduled':'next',contextTags:'',scheduledTime:''});setShowAddTask(true);}}>+ Add</button>
+          <button style={S.btnSmall(C.sage)} onClick={()=>openTaskComposer({bucket:tasksTab==='scheduled'?'scheduled':'next'})}>+ Add</button>
         </div>
         {taskTemplates.length>0&&<div style={{...S.card,marginBottom:12}}>
           <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Task templates</div>
@@ -6020,8 +6042,8 @@ function App(){
         </div>}
         {showAddTask&&<div style={{...S.card,marginBottom:12}}>
           <FieldInput
-            value={newTask.text}
-            onChange={e=>setNewTask(n=>({...n,text:e.target.value}))}
+            value={taskDraftText}
+            onChange={e=>setTaskDraftText(e.target.value)}
             onKeyDown={e=>{
               if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing)return;
               e.preventDefault();
@@ -6047,7 +6069,7 @@ function App(){
           </div>
           <div style={{display:'flex',gap:6}}>
             <button style={S.btnSolid(C.sage)} onClick={addTask}>Add Task</button>
-            <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowAddTask(false)}>Cancel</button>
+            <button style={{...S.btnGhost,flex:1}} onClick={()=>{setNewTask(createNewTaskDraft(TODAY,{bucket:tasksTab==='scheduled'?'scheduled':'next'}));setTaskDraftText('');setShowAddTask(false);}}>Cancel</button>
           </div>
         </div>}
         {tasksTab==='next'&&todayTasks.length===0&&!showAddTask&&<div style={{textAlign:'center',padding:'30px 0',color:C.muted,fontSize:13}}>No next-up tasks right now. Tap + Add or use a template.</div>}
