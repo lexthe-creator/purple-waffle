@@ -85,6 +85,30 @@ const FieldTextarea=React.forwardRef(function FieldTextarea({id,name,...props},r
   return React.createElement('textarea',{...props,ref,id:fieldId,name:name??fieldId});
 });
 
+class ScreenErrorBoundary extends React.Component{
+  constructor(props){
+    super(props);
+    this.state={hasError:false};
+  }
+  static getDerivedStateFromError(){
+    return{hasError:true};
+  }
+  componentDidCatch(error){
+    console.error('Screen render failed:',error);
+  }
+  componentDidUpdate(prevProps){
+    if(prevProps.resetKey!==this.props.resetKey&&this.state.hasError){
+      this.setState({hasError:false});
+    }
+  }
+  render(){
+    if(this.state.hasError){
+      return this.props.fallback??null;
+    }
+    return this.props.children;
+  }
+}
+
 function isTypingTarget(target){
   if(!(target instanceof HTMLElement))return false;
   const tagName=target.tagName.toLowerCase();
@@ -7547,7 +7571,7 @@ function App(){
 
       {secondarySections.map(section=><div key={section.title} style={S.card}>
         <span style={S.lbl}>{section.title}</span>
-        {section.items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} style={{width:'100%',textAlign:'left',background:'transparent',border:'none',padding:'10px 0',cursor:'pointer',borderBottom:`0.5px solid ${C.bd}`}}>
+        {section.items.map(item=><button key={item.id} onClick={()=>openTab(item.id)} style={{width:'100%',textAlign:'left',background:'transparent',border:'none',padding:'10px 0',cursor:'pointer',borderBottom:`0.5px solid ${C.bd}`}}>
           <div style={{...S.row,alignItems:'flex-start',gap:10}}>
             <div style={{flex:1}}>
               <div style={{fontSize:14,fontWeight:700,color:C.tx}}>{item.label}</div>
@@ -7612,6 +7636,13 @@ function App(){
   };
   const activePrimaryTab=MORE_TAB_IDS.has(tab)?'more':(NAV_ITEMS.some(item=>item.id===tab)?tab:null);
   const ActiveScreen=SCREENS[tab]||HomeScreenV2;
+  const screenFallback=<div style={S.body}>
+    <div style={S.card}>
+      <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>Screen failed to render</div>
+      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Resetting to Today will recover the app if a screen throws during navigation.</div>
+      <button style={S.btnGhost} onClick={()=>openTab('home')}>Back to Today</button>
+    </div>
+  </div>;
 
   const hr=NOW.getHours();
   const greeting=hr>=6&&hr<12?'Good morning':hr>=12&&hr<17?'Good afternoon':'Good evening';
@@ -7660,7 +7691,9 @@ function App(){
         </div>
       </div>
       <div ref={contentRef} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
-        <ActiveScreen focusDay={calendarFocusDay}/>
+        <ScreenErrorBoundary resetKey={tab} fallback={screenFallback}>
+          <ActiveScreen focusDay={calendarFocusDay}/>
+        </ScreenErrorBoundary>
       </div>
       <nav aria-label="Primary" style={S.nav}>
         {NAV_ITEMS.map(({id,label})=>(

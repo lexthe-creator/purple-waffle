@@ -7,13 +7,9 @@ export default defineConfig(({ command }) => ({
   base: command === 'build' ? './' : '/',
   plugins: [react()],
   server: {
-    host: '127.0.0.1',
+    // Allow both localhost and 127.0.0.1 during local QA without custom HMR wiring.
+    host: true,
     port: 4173,
     strictPort: true,
-    hmr: {
-      host: '127.0.0.1',
-      protocol: 'ws',
-      clientPort: 4173,
-    },
   },
 }));
