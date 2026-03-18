@@ -144,6 +144,41 @@ function normalizeDateKey(dateLike,fallbackKey=getTodayKey()){
 function getTodayKey(){
   return formatDateKey(new Date());
 }
+function getWeekStartDate(dateLike){
+  const date=dateLike instanceof Date?new Date(dateLike.getTime()):parseDateKey(normalizeDateKey(dateLike));
+  date.setDate(date.getDate()-((date.getDay()+6)%7));
+  date.setHours(12,0,0,0);
+  return date;
+}
+function getMonthStartDate(dateLike){
+  const date=dateLike instanceof Date?new Date(dateLike.getTime()):parseDateKey(normalizeDateKey(dateLike));
+  date.setDate(1);
+  date.setHours(12,0,0,0);
+  return date;
+}
+function addWeeksToDate(dateLike,weeks){
+  const date=dateLike instanceof Date?new Date(dateLike.getTime()):parseDateKey(normalizeDateKey(dateLike));
+  date.setDate(date.getDate()+weeks*7);
+  return date;
+}
+function addMonthsToDate(dateLike,months){
+  const date=dateLike instanceof Date?new Date(dateLike.getTime()):parseDateKey(normalizeDateKey(dateLike));
+  date.setMonth(date.getMonth()+months,1);
+  return date;
+}
+function getWeekIndexForDate(dateKey,today=getTodayKey()){
+  const base=getWeekStartDate(today);
+  const target=getWeekStartDate(dateKey);
+  return Math.round((target-base)/(7*86400000));
+}
+function getMonthIndexForDate(dateKey,today=getTodayKey()){
+  const base=getMonthStartDate(today);
+  const target=getMonthStartDate(dateKey);
+  return (target.getFullYear()-base.getFullYear())*12+(target.getMonth()-base.getMonth());
+}
+function compareDateKeys(left,right){
+  return left===right?0:(left<right?-1:1);
+}
 function getCurrentDate(){
   const now=new Date();
   return{
@@ -167,6 +202,9 @@ function normalizeNavigationState(raw,today=getTodayKey()){
   return{
     tab,
     calendarFocusDay:normalizeDateKey(next.calendarFocusDay,today),
+    calendarViewMode:next.calendarViewMode==='month'?'month':'week',
+    calendarWeekIndex:Number.isFinite(next.calendarWeekIndex)?next.calendarWeekIndex:getWeekIndexForDate(normalizeDateKey(next.calendarFocusDay,today),today),
+    calendarMonthIndex:Number.isFinite(next.calendarMonthIndex)?next.calendarMonthIndex:getMonthIndexForDate(normalizeDateKey(next.calendarFocusDay,today),today),
     taskScreenTab:TASK_TAB_IDS.includes(next.taskScreenTab)?next.taskScreenTab:'next',
     finView:FINANCE_VIEW_IDS.includes(next.finView)?next.finView:'overview',
     trainSection:TRAIN_SECTION_IDS.includes(next.trainSection)?next.trainSection:'today',
@@ -2986,6 +3024,9 @@ function App(){
   const [mealShortcut,setMealShortcut]=useState(null);
   const [demoExercise,setDemoExercise]=useState(null);
   const [calendarFocusDay,setCalendarFocusDay]=useState(initialNavigationState.calendarFocusDay);
+  const [calendarViewMode,setCalendarViewMode]=useState(initialNavigationState.calendarViewMode);
+  const [calendarWeekIndex,setCalendarWeekIndex]=useState(initialNavigationState.calendarWeekIndex);
+  const [calendarMonthIndex,setCalendarMonthIndex]=useState(initialNavigationState.calendarMonthIndex);
   const [showMVD,setShowMVD]=useState(false);
   const [calOffset,setCalOffset]=useState(0);
   const [calModal,setCalModal]=useState(null);
@@ -3064,6 +3105,9 @@ function App(){
     if(options.healthTab&&HEALTH_TAB_IDS.includes(options.healthTab))setHealthScreenTab(options.healthTab);
     if(options.lifestyleTab&&LIFESTYLE_TAB_IDS.includes(options.lifestyleTab))setLifestyleScreenTab(options.lifestyleTab);
     if(options.calendarFocusDay)setCalendarFocusDay(normalizeDateKey(options.calendarFocusDay,TODAY));
+    if(options.calendarViewMode)setCalendarViewMode(options.calendarViewMode==='month'?'month':'week');
+    if(Number.isFinite(options.calendarWeekIndex))setCalendarWeekIndex(options.calendarWeekIndex);
+    if(Number.isFinite(options.calendarMonthIndex))setCalendarMonthIndex(options.calendarMonthIndex);
     setTab(nextTab);
   },[TODAY]);
   const clearNotif=()=>{
@@ -3114,6 +3158,9 @@ function App(){
     writeNavigationState({
       tab,
       calendarFocusDay,
+      calendarViewMode,
+      calendarWeekIndex,
+      calendarMonthIndex,
       taskScreenTab,
       finView,
       trainSection,
@@ -3121,7 +3168,7 @@ function App(){
       healthTab:healthScreenTab,
       lifestyleTab:lifestyleScreenTab,
     },TODAY);
-  },[tab,calendarFocusDay,taskScreenTab,finView,trainSection,settingsSection,healthScreenTab,lifestyleScreenTab,TODAY]);
+  },[tab,calendarFocusDay,calendarViewMode,calendarWeekIndex,calendarMonthIndex,taskScreenTab,finView,trainSection,settingsSection,healthScreenTab,lifestyleScreenTab,TODAY]);
 
   useEffect(()=>{
     (async()=>{
@@ -3428,6 +3475,11 @@ function App(){
   const phCode=trainingCycle.phaseCode;
   const paceProfile=computePaces(athlete.fiveKTime);
   const weekMon=getTrainingWeekAnchorDate(NOW,athlete?.trainingWeekStart||'Mon');
+  const selectedDate=normalizeDateKey(calendarFocusDay,TODAY);
+  const selectedDateRelation=compareDateKeys(selectedDate,TODAY);
+  const selectedDateObj=parseDateKey(selectedDate)||parseDateKey(TODAY);
+  const selectedWeekMon=getTrainingWeekAnchorDate(selectedDateObj,athlete?.trainingWeekStart||'Mon');
+  const selectedWeekDates=Array.from({length:7},(_,i)=>formatDateKey(addWeeksToDate(selectedWeekMon,0+0*i)));
   const currentWeekKey=formatDateKey(weekMon);
   const weekDatesGlobal=Array.from({length:7},(_,i)=>{const d=new Date(weekMon);d.setDate(d.getDate()+i);return formatDateKey(d);});
   const weekAnalytics=computeWeeklyAnalytics(workoutHistory,weekMon);
@@ -3437,28 +3489,30 @@ function App(){
   const resolvedPhaseIdx=Number.isFinite(PH_IDX)?PH_IDX:0;
   const TODAY_WK=getTodayWk(resolvedWkType,resolvedPhaseIdx,trainingFlags);
   const weekPlannedWorkouts=resolveWeeklyTrainingPlanFromProfile(weekMon,athlete,fitnessProgram,workoutHistory,TODAY);
+  const selectedWeekPlannedWorkouts=resolveWeeklyTrainingPlanFromProfile(selectedWeekMon,athlete,fitnessProgram,workoutHistory,selectedDate);
   const workoutLibrarySessions=getWorkoutLibrarySessions(fitnessProgram,athlete?.programType||'4-day',resolvedWkType,resolvedPhaseIdx);
-  const todayPlannedWorkout=weekPlannedWorkouts.find(item=>item.plannedDate===TODAY)||null;
+  const todayPlannedWorkout=selectedWeekPlannedWorkouts.find(item=>item.plannedDate===selectedDate)||null;
   const missedPlannedWorkouts=weekPlannedWorkouts.filter(item=>item.status==='missed');
+  const missedSelectedWorkouts=selectedWeekPlannedWorkouts.filter(item=>item.status==='missed');
   const suggestedPlanEntry=todayPlannedWorkout&&todayPlannedWorkout.status!=='completed'&&todayPlannedWorkout.status!=='moved'
     ?todayPlannedWorkout
-    :missedPlannedWorkouts[0]||todayPlannedWorkout||null;
+    :missedSelectedWorkouts[0]||todayPlannedWorkout||null;
   const suggestedWorkoutBase=suggestedPlanEntry?{
     ...suggestedPlanEntry,
     name:suggestedPlanEntry.name,
     plannedDate:suggestedPlanEntry.plannedDate,
     plannedDayLabel:suggestedPlanEntry.plannedDayLabel,
     plannedName:suggestedPlanEntry.plannedName||suggestedPlanEntry.name,
-    suggestedForDate:TODAY,
-    suggestedCarryover:suggestedPlanEntry.plannedDate!==TODAY,
+    suggestedForDate:selectedDate,
+    suggestedCarryover:suggestedPlanEntry.plannedDate!==selectedDate,
   }:null;
   const macros=computeMacroTargets(trainingFlags.isTrainingDay);
 
-  const todayN=nutr[TODAY]||[];
-  const todayH=hydr[TODAY]||0;
+  const todayN=nutr[selectedDate]||[];
+  const todayH=hydr[selectedDate]||0;
   const totCal=todayN.reduce((s,m)=>s+(m.cal||0),0);
   const totPro=todayN.reduce((s,m)=>s+(m.pro||0),0);
-  const wktDone=workoutHistory.some(h=>h.date===TODAY&&(h.type==='workout'||h.type==='run'||h.type==='recovery'));
+  const wktDone=workoutHistory.some(h=>h.date===selectedDate&&(h.type==='workout'||h.type==='run'||h.type==='recovery'));
   const plannerWeekWorkoutGoal=(athlete?.preferredTrainingDays?.length)||((athlete?.programType||'4-day')==='5-day'?5:4);
   const plannerWeekNutrition=weekDatesGlobal.map(ds=>{
     const meals=nutr[ds]||[];
@@ -3476,17 +3530,20 @@ function App(){
   const plannerTaskCountGlobal=taskHistory.filter(t=>t.date>=currentWeekKey&&!t.done&&!t.parentId&&(t.status||'active')==='active').length;
   const plannerWorkoutStatusGlobal=weekAnalytics.sessionsLogged<plannerWeekWorkoutGoal?'Behind target':'On track';
   const pendingInbox=(inboxItems||[]).filter(x=>x.status==='pending');
-  const recoveryToday=computeRecoveryState(dailyLogs?.[TODAY],energyScore,sleepHours);
+  const recoveryToday=selectedDateRelation>0
+    ?{level:null,readiness:null,energy:null,sleep:null}
+    :computeRecoveryState(dailyLogs?.[selectedDate],dailyLogs?.[selectedDate]?.energyScore??energyScore,dailyLogs?.[selectedDate]?.sleepHours??sleepHours);
   const restDayRecovery=RECOVERY_WORKOUT_LIBRARY[1];
   const workoutDecisionThreshold=70;
   const scheduledTodayWorkout=suggestedWorkoutBase?hydrateWorkoutSession({
     ...suggestedWorkoutBase,
     adjustmentLabel:'Planned Session',
     adjustmentReason:'Scheduled workout',
+    dateKey:selectedDate,
   }):null;
   const recoveryWorkoutOption=suggestedWorkoutBase?adjustWorkoutForRecovery(suggestedWorkoutBase,{...recoveryToday,level:'Low'}):restDayRecovery;
-  const dailyWorkoutRecommendation=profile.dailyRecommendations?.[TODAY]?.workout||null;
-  const shouldPromptWorkoutDecision=!!scheduledTodayWorkout&&recoveryToday.readiness<workoutDecisionThreshold&&!wktDone;
+  const dailyWorkoutRecommendation=profile.dailyRecommendations?.[selectedDate]?.workout||null;
+  const shouldPromptWorkoutDecision=selectedDateRelation===0&&!!scheduledTodayWorkout&&recoveryToday.readiness<workoutDecisionThreshold&&!wktDone&&!dailyWorkoutRecommendation?.action;
   const selectedTodayWorkout=shouldPromptWorkoutDecision&&dailyWorkoutRecommendation?.action==='modify'
     ?hydrateWorkoutSession(dailyWorkoutRecommendation.finalSelection||recoveryWorkoutOption)
     :scheduledTodayWorkout;
@@ -3826,8 +3883,8 @@ function App(){
   }
 
   // ── DAILY LOG ───────────────────────────────────────────────────
-  function saveDailyLog(patch){
-    updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[TODAY]:{...(p.dailyLogs?.[TODAY]||{}),date:TODAY,...patch}}}));
+  function saveDailyLog(patch,dateKey=selectedDate){
+    updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[dateKey]:{...(p.dailyLogs?.[dateKey]||{}),date:dateKey,...patch}}}));
   }
   function logEnergyCheckin(){
     saveDailyLog({energyScore,sleepHours,workoutDone:wktDone,proteinMet:totPro>=(proGoal*0.9),hydrationMet:todayH>=(hydGoal*0.9)});
@@ -3844,16 +3901,16 @@ function App(){
     }));
     syncDailyCheckinTop3(dateKey,nextTop3);
   }
-  function updateWorkoutRecommendationForToday(action,finalSelection=null){
+  function updateWorkoutRecommendationForDate(dateKey,action,finalSelection=null){
     updateProfile(current=>({
       ...current,
       dailyRecommendations:{
         ...(current.dailyRecommendations||{}),
-        [TODAY]:{
-          ...normalizeDailyRecommendationsEntry(current.dailyRecommendations?.[TODAY],TODAY),
+        [dateKey]:{
+          ...normalizeDailyRecommendationsEntry(current.dailyRecommendations?.[dateKey],dateKey),
           workout:normalizeDailyRecommendation({
             type:'workout',
-            date:TODAY,
+            date:dateKey,
             suggestion:{
               scheduledWorkout:scheduledTodayWorkout,
               recoveryWorkout:recoveryWorkoutOption,
@@ -3861,7 +3918,7 @@ function App(){
             userOverride:action==='modify',
             finalSelection,
             action,
-          },TODAY),
+          },dateKey),
         },
       },
     }));
