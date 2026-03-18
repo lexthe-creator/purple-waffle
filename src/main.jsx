@@ -406,12 +406,17 @@ const PLANS=[
 const ALL_STATIONS=['SkiErg','Sled Push','Sled Pull','Burpee Broad Jump','Row','Farmers Carry','Sandbag Lunges','Wall Ball'];
 const FITNESS_PROGRAM_OPTIONS=[
   {id:'hyrox',label:'HYROX'},
+  {id:'running',label:'Running'},
   {id:'strength',label:'Strength'},
   {id:'pilates',label:'Pilates'},
   {id:'recovery',label:'Recovery'},
 ];
-const FITNESS_PROGRAM_ALIASES={running:'strength',none:'recovery',general:'recovery'};
-const DEFAULT_ATHLETE={fiveKTime:null,hyroxFinishTime:null,weakStations:[],strongStations:[],squat5RM:null,deadlift5RM:null,wallBallMaxReps:null,preferredTrainingDays:['Mon','Wed','Fri','Sun'],programType:'4-day',trainingWeekStart:'Mon'};
+const FITNESS_PROGRAM_ALIASES={none:'recovery',general:'recovery'};
+const FITNESS_ADD_ON_OPTIONS=[
+  {id:'pilates',label:'Pilates'},
+  {id:'recovery',label:'Recovery'},
+];
+const DEFAULT_ATHLETE={fiveKTime:null,hyroxFinishTime:null,weakStations:[],strongStations:[],squat5RM:null,deadlift5RM:null,wallBallMaxReps:null,preferredTrainingDays:['Mon','Wed','Fri','Sun'],programType:'4-day',trainingWeekStart:'Mon',primaryProgram:'hyrox',secondaryAddOns:[]};
 
 function normalizeFitnessProgram(program='hyrox'){
   const normalized=String(program||'hyrox').trim().toLowerCase();
@@ -428,14 +433,54 @@ function getAnchoredTrainingDays(programType='4-day',trainingWeekStart='Mon'){
   return offsets.map(offset=>dayIndexToLabel[(startIdx+offset)%7]);
 }
 
+function orderTrainingDays(days=[],trainingWeekStart='Mon'){
+  const dayIndexToLabel=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const startIdx=dayIndexToLabel.indexOf(trainingWeekStart==='Wed'?'Wed':'Mon');
+  const rank=new Map(dayIndexToLabel.map((label,idx)=>[label,(idx-startIdx+7)%7]));
+  return [...new Set(days)].filter(label=>rank.has(label)).sort((a,b)=>rank.get(a)-rank.get(b));
+}
+
 const PROGRAM_LIBRARY_META={
   hyrox:{title:'HYROX race build',detail:'Strength, running, and station simulations with an A/B weekly rotation.'},
+  running:{title:'Running performance',detail:'Run-focused weekly structure with easy, quality, tempo, and long-run distribution.'},
   strength:{title:'Strength building',detail:'Progressive upper, lower, and full-body sessions with optional fifth-day accessories.'},
   pilates:{title:'Pilates focus',detail:'Core control, posture, glute strength, and low-impact mobility in a structured weekly cadence.'},
   recovery:{title:'Recovery reset',detail:'Low-intensity mobility, zone-2 cardio, breathwork, and nervous-system downshifting across the week.'},
 };
 
 const PROGRAM_WORKOUT_LIBRARY={
+  running:{
+    '4-day':{
+      A:{
+        mon:{type:'run',name:'Easy aerobic run',dur:'35–45 min',intensity:'Easy',purpose:'Build aerobic volume without adding much stress.',rd:{label:'Easy run',dist:'3–4 mi',effort:'Conversational and relaxed from start to finish.'}},
+        wed:{type:'run',name:'Interval run',dur:'40–50 min',intensity:'Hard',purpose:'Raise top-end speed and VO2 with controlled repeat work.',rd:{label:'Intervals',dist:'5×3 min',effort:'Hard but repeatable. Jog 2 min between efforts.'}},
+        fri:{type:'run',name:'Tempo run',dur:'40–50 min',intensity:'Moderate–Hard',purpose:'Push threshold pace while keeping form smooth.',rd:{label:'Tempo run',dist:'20 min tempo',effort:'10 min easy, 20 min comfortably hard, 10 min easy.'}},
+        sat:{type:'run',name:'Long run',dur:'55–70 min',intensity:'Easy',purpose:'Build long aerobic durability with low strain.',rd:{label:'Long run',dist:'5–7 mi',effort:'Stay controlled and conversational.'}},
+      },
+      B:{
+        mon:{type:'run',name:'Easy run + strides',dur:'35–45 min',intensity:'Easy',purpose:'Maintain easy mileage and touch turnover at the end.',rd:{label:'Easy run',dist:'3–4 mi + 4 strides',effort:'Easy throughout. Finish with 4×20s strides.'}},
+        wed:{type:'run',name:'Hill or interval session',dur:'40–50 min',intensity:'Hard',purpose:'Develop power and economy with quality running work.',rd:{label:'Hills / intervals',dist:'6 reps',effort:'Hard uphill or fast repeat with full control on recovery.'}},
+        fri:{type:'run',name:'Steady threshold run',dur:'45–55 min',intensity:'Moderate',purpose:'Hold a strong aerobic effort without overreaching.',rd:{label:'Steady run',dist:'4–5 mi',effort:'Settle into a strong but sustainable pace.'}},
+        sat:{type:'run',name:'Long progression run',dur:'60–75 min',intensity:'Easy–Moderate',purpose:'Close the long run a little stronger while staying smooth.',rd:{label:'Progression long run',dist:'5.5–7.5 mi',effort:'Start easy, finish the last 15 min steady.'}},
+      },
+    },
+    '5-day':{
+      A:{
+        mon:{type:'run',name:'Easy aerobic run',dur:'35–45 min',intensity:'Easy',purpose:'Build aerobic volume without adding much stress.',rd:{label:'Easy run',dist:'3–4 mi',effort:'Conversational and relaxed from start to finish.'}},
+        tue:{type:'run',name:'Recovery run',dur:'25–30 min',intensity:'Easy',purpose:'Add low-stress mileage between bigger sessions.',rd:{label:'Recovery run',dist:'2–3 mi',effort:'Very easy. Keep it light.'}},
+        wed:{type:'run',name:'Interval run',dur:'40–50 min',intensity:'Hard',purpose:'Raise top-end speed and VO2 with controlled repeat work.',rd:{label:'Intervals',dist:'5×3 min',effort:'Hard but repeatable. Jog 2 min between efforts.'}},
+        thu:{name:'Runner strength + mobility',dur:'30–40 min',intensity:'Moderate',purpose:'Support running with glutes, calves, and trunk stability.',ex:[{n:'Goblet squat',s:3,r:'10',note:''},{n:'Single-leg RDL',s:3,r:'8ea',note:''},{n:'Standing calf raise',s:3,r:'15',note:''},{n:'Dead bug',s:3,r:'8ea',note:''},{n:'Side plank',s:3,r:'25s ea',note:''}]},
+        sat:{type:'run',name:'Long run',dur:'55–70 min',intensity:'Easy',purpose:'Build long aerobic durability with low strain.',rd:{label:'Long run',dist:'5–7 mi',effort:'Stay controlled and conversational.'}},
+      },
+      B:{
+        mon:{type:'run',name:'Easy run + strides',dur:'35–45 min',intensity:'Easy',purpose:'Maintain easy mileage and touch turnover at the end.',rd:{label:'Easy run',dist:'3–4 mi + 4 strides',effort:'Easy throughout. Finish with 4×20s strides.'}},
+        tue:{type:'run',name:'Recovery run',dur:'25–30 min',intensity:'Easy',purpose:'Add low-stress mileage between bigger sessions.',rd:{label:'Recovery run',dist:'2–3 mi',effort:'Very easy. Keep it light.'}},
+        wed:{type:'run',name:'Hill or interval session',dur:'40–50 min',intensity:'Hard',purpose:'Develop power and economy with quality running work.',rd:{label:'Hills / intervals',dist:'6 reps',effort:'Hard uphill or fast repeat with full control on recovery.'}},
+        thu:{name:'Runner strength + mobility',dur:'30–40 min',intensity:'Moderate',purpose:'Support running with glutes, calves, and trunk stability.',ex:[{n:'Walking lunges',s:3,r:'10ea',note:''},{n:'Hip thrust',s:3,r:'10',note:''},{n:'Standing calf raise',s:3,r:'15',note:''},{n:'Bird dog',s:3,r:'8ea',note:''},{n:'Thoracic rotation',s:2,r:'6ea',note:'Smooth and easy.',exerciseType:'mobility'}]},
+        sat:{type:'run',name:'Long progression run',dur:'60–75 min',intensity:'Easy–Moderate',purpose:'Close the long run a little stronger while staying smooth.',rd:{label:'Progression long run',dist:'5.5–7.5 mi',effort:'Start easy, finish the last 15 min steady.'}},
+      },
+    },
+  },
   strength:{
     '4-day':{
       A:{
@@ -7305,49 +7350,196 @@ function App(){
             }
           </div>}
           {sec.id==='fitness'&&<div>
-                <span style={S.lbl}>Fitness Program</span>
-                <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
-                  {FITNESS_PROGRAM_OPTIONS.map(({id,label})=>(
-                    <button key={id} onClick={()=>updateProfile({fitnessProgram:id})} style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${fitnessProgram===id?C.sage:C.bd}`,background:fitnessProgram===id?C.sageL:'transparent',color:fitnessProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:fitnessProgram===id?600:400}}>{label}</button>
-                  ))}
+            {(()=>{
+              const primaryProgram=(athlete.primaryProgram&&['hyrox','running','strength'].includes(athlete.primaryProgram))
+                ?athlete.primaryProgram
+                :(['hyrox','running','strength'].includes(fitnessProgram)?fitnessProgram:'hyrox');
+              const addOns=Array.isArray(athlete.secondaryAddOns)
+                ?athlete.secondaryAddOns.filter(id=>FITNESS_ADD_ON_OPTIONS.some(option=>option.id===id))
+                :[];
+              const selectedDays=orderTrainingDays(
+                Array.isArray(athlete.preferredTrainingDays)&&athlete.preferredTrainingDays.length
+                  ?athlete.preferredTrainingDays
+                  :getAnchoredTrainingDays(athlete.programType||'4-day',athlete.trainingWeekStart||'Mon'),
+                athlete.trainingWeekStart||'Mon'
+              );
+              const raceWeeks=Math.max(0,Math.ceil((new Date((raceDate||DEFAULT_RACE)+'T12:00:00')-NOW)/604800000));
+              const phaseByWeeks=getPhaseByWeeks(raceWeeks);
+              const derivedSquat=athlete.squat5RM
+                ?[{label:'60%',value:Math.round(athlete.squat5RM*0.60)},{label:'70%',value:Math.round(athlete.squat5RM*0.70)},{label:'80%',value:Math.round(athlete.squat5RM*0.80)},{label:'85%',value:Math.round(athlete.squat5RM*0.85)}]
+                :[];
+              const derivedDeadlift=athlete.deadlift5RM
+                ?[{label:'60%',value:Math.round(athlete.deadlift5RM*0.60)},{label:'70%',value:Math.round(athlete.deadlift5RM*0.70)},{label:'80%',value:Math.round(athlete.deadlift5RM*0.80)},{label:'85%',value:Math.round(athlete.deadlift5RM*0.85)}]
+                :[];
+              const previewDays=weekPlannedWorkouts.slice(0,Math.max(4,selectedDays.length));
+              const setPrimaryProgram=nextProgram=>updateProfile(p=>({
+                ...p,
+                fitnessProgram:nextProgram,
+                athleteProfile:{...p.athleteProfile,primaryProgram:nextProgram}
+              }));
+              const toggleAddOn=id=>updateProfile(p=>{
+                const current=Array.isArray(p.athleteProfile?.secondaryAddOns)?p.athleteProfile.secondaryAddOns:[];
+                const next=current.includes(id)?current.filter(item=>item!==id):[...current,id];
+                return{...p,athleteProfile:{...p.athleteProfile,secondaryAddOns:next}};
+              });
+              const toggleTrainingDay=label=>updateProfile(p=>{
+                const anchor=p.athleteProfile?.trainingWeekStart||'Mon';
+                const current=orderTrainingDays(
+                  Array.isArray(p.athleteProfile?.preferredTrainingDays)&&p.athleteProfile.preferredTrainingDays.length
+                    ?p.athleteProfile.preferredTrainingDays
+                    :getAnchoredTrainingDays(p.athleteProfile?.programType||'4-day',anchor),
+                  anchor
+                );
+                const hasDay=current.includes(label);
+                let next=current;
+                if(hasDay&&current.length>4){
+                  next=current.filter(day=>day!==label);
+                }else if(!hasDay&&current.length<5){
+                  next=orderTrainingDays([...current,label],anchor);
+                }
+                const nextProgramType=next.length>=5?'5-day':'4-day';
+                return{...p,athleteProfile:{...p.athleteProfile,preferredTrainingDays:next,programType:nextProgramType}};
+              });
+              const setTrainingWeekStart=option=>updateProfile(p=>{
+                const currentDays=Array.isArray(p.athleteProfile?.preferredTrainingDays)&&p.athleteProfile.preferredTrainingDays.length
+                  ?p.athleteProfile.preferredTrainingDays
+                  :getAnchoredTrainingDays(p.athleteProfile?.programType||'4-day',option);
+                return{
+                  ...p,
+                  athleteProfile:{
+                    ...p.athleteProfile,
+                    trainingWeekStart:option,
+                    preferredTrainingDays:orderTrainingDays(currentDays,option),
+                  }
+                };
+              });
+              return <>
+                <div style={S.card}>
+                  <span style={S.lbl}>Program Setup</span>
+                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Choose the training system</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Primary program drives the weekly plan. Add-ons layer on support work.</div>
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Primary Program</div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {['hyrox','running','strength'].map(id=><button key={id} onClick={()=>setPrimaryProgram(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${primaryProgram===id?C.sage:C.bd}`,background:primaryProgram===id?C.sageL:'transparent',color:primaryProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:primaryProgram===id?600:400}}>{FITNESS_PROGRAM_OPTIONS.find(option=>option.id===id)?.label||id}</button>)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Secondary Add-Ons</div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {FITNESS_ADD_ON_OPTIONS.map(({id,label})=><button key={id} onClick={()=>toggleAddOn(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${addOns.includes(id)?C.navy:C.bd}`,background:addOns.includes(id)?C.navyL:'transparent',color:addOns.includes(id)?C.navyDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:addOns.includes(id)?600:400}}>{label}</button>)}
+                    </div>
+                  </div>
                 </div>
-            <span style={S.lbl}>Training Days Per Week</span>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
-              {['4-day','5-day'].map(option=>(
-                <button
-                  key={option}
-                  onClick={()=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,programType:option,preferredTrainingDays:getAnchoredTrainingDays(option,p.athleteProfile?.trainingWeekStart||'Mon')}}))}
-                  style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${(athlete.programType||'4-day')===option?C.sage:C.bd}`,background:(athlete.programType||'4-day')===option?C.sageL:'transparent',color:(athlete.programType||'4-day')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.programType||'4-day')===option?600:400}}
-                >
-                  {option==='4-day'?'4 days':'5 days'}
-                </button>
-              ))}
-            </div>
-            <span style={S.lbl}>Plan Starts</span>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
-              {['Mon','Wed'].map(option=>(
-                <button
-                  key={option}
-                  onClick={()=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,trainingWeekStart:option,preferredTrainingDays:getAnchoredTrainingDays(p.athleteProfile?.programType||'4-day',option)}}))}
-                  style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${(athlete.trainingWeekStart||'Mon')===option?C.sage:C.bd}`,background:(athlete.trainingWeekStart||'Mon')===option?C.sageL:'transparent',color:(athlete.trainingWeekStart||'Mon')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.trainingWeekStart||'Mon')===option?600:400}}
-                >
-                  {option==='Mon'?'Monday':'Wednesday'}
-                </button>
-              ))}
-            </div>
-            <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.5}}>
-              Planned sessions anchor to the selected start day. You can still complete them on any of the next 6 days and the planner will mark them as moved.
-            </div>
-            <span style={S.lbl}>5K Time (minutes)</span>
-            <FieldInput type="number" value={athlete.fiveKTime||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:parseFloat(e.target.value)||null}}))} placeholder="e.g. 28" style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Back Squat 5RM (lbs)</span>
-            <FieldInput type="number" value={athlete.squat5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,squat5RM:parseInt(e.target.value)||null}}))} placeholder="e.g. 185" style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Deadlift 5RM (lbs)</span>
-            <FieldInput type="number" value={athlete.deadlift5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,deadlift5RM:parseInt(e.target.value)||null}}))} placeholder="e.g. 225" style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Race Date</span>
-            <FieldInput type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,raceDate:e.target.value}}))} style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Plan Start Date</span>
-            <FieldInput type="date" value={startDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,startDate:e.target.value}}))} style={S.inp}/>
+
+                <div style={S.card}>
+                  <span style={S.lbl}>Schedule</span>
+                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Pick exact training days</div>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Select 4 or 5 specific days. The current planner supports either 4-day or 5-day structures.</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(label=><button key={label} onClick={()=>toggleTrainingDay(label)} style={{padding:'7px 10px',minWidth:44,borderRadius:9,border:`1.5px solid ${selectedDays.includes(label)?C.sage:C.bd}`,background:selectedDays.includes(label)?C.sageL:'transparent',color:selectedDays.includes(label)?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:selectedDays.includes(label)?600:400}}>{label}</button>)}
+                  </div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                    <span style={S.pill(C.surf,C.tx2)}>{selectedDays.length} selected</span>
+                    <span style={S.pill(C.surf,C.tx2)}>{selectedDays.length>=5?'5-day structure':'4-day structure'}</span>
+                  </div>
+                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Training Week Anchor</div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {['Mon','Wed'].map(option=><button key={option} onClick={()=>setTrainingWeekStart(option)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${(athlete.trainingWeekStart||'Mon')===option?C.sage:C.bd}`,background:(athlete.trainingWeekStart||'Mon')===option?C.sageL:'transparent',color:(athlete.trainingWeekStart||'Mon')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.trainingWeekStart||'Mon')===option?600:400}}>{option==='Mon'?'Monday Start':'Wednesday Start'}</button>)}
+                  </div>
+                </div>
+
+                <div style={S.card}>
+                  <span style={S.lbl}>Performance Inputs</span>
+                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Enter anchor metrics</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                    <div>
+                      <span style={S.lbl}>5K Time</span>
+                      <FieldInput type="number" step="0.1" inputMode="decimal" value={athlete.fiveKTime||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:parseFloat(e.target.value)||null}}))} placeholder="28.5 min" style={S.inp}/>
+                    </div>
+                    <div>
+                      <span style={S.lbl}>Wall Ball Max</span>
+                      <FieldInput type="number" step="1" inputMode="numeric" value={athlete.wallBallMaxReps||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,wallBallMaxReps:parseInt(e.target.value)||null}}))} placeholder="40 reps" style={S.inp}/>
+                    </div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <div>
+                      <span style={S.lbl}>Back Squat 5RM</span>
+                      <FieldInput type="number" step="5" inputMode="numeric" value={athlete.squat5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,squat5RM:parseInt(e.target.value)||null}}))} placeholder="185 lb" style={S.inp}/>
+                    </div>
+                    <div>
+                      <span style={S.lbl}>Deadlift 5RM</span>
+                      <FieldInput type="number" step="5" inputMode="numeric" value={athlete.deadlift5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,deadlift5RM:parseInt(e.target.value)||null}}))} placeholder="225 lb" style={S.inp}/>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={S.card}>
+                  <span style={S.lbl}>Race Timeline</span>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+                    <div>
+                      <span style={S.lbl}>Race Date</span>
+                      <FieldInput type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,raceDate:e.target.value}}))} style={S.inp}/>
+                    </div>
+                    <div>
+                      <span style={S.lbl}>Plan Start</span>
+                      <FieldInput type="date" value={startDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,trainingPlan:{...p.trainingPlan,startDate:e.target.value}}))} style={S.inp}/>
+                    </div>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                      <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Weeks to race</div>
+                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{raceWeeks}</div>
+                    </div>
+                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                      <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Training phase</div>
+                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{PH?.name||phaseByWeeks.name}</div>
+                    </div>
+                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                      <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Current week</div>
+                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{CUR_WK}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={S.card}>
+                  <span style={S.lbl}>Derived Outputs</span>
+                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Training targets and preview</div>
+                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Running Pace Zones</div>
+                  {paceProfile
+                    ?<div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8,marginBottom:12}}>
+                      {[{label:'Easy',value:paceProfile.easy},{label:'Threshold',value:paceProfile.threshold},{label:'Interval',value:paceProfile.interval},{label:'5K Pace',value:paceProfile.race5k}].map(item=><div key={item.label} style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                        <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.label}</div>
+                        <div style={{fontSize:14,fontWeight:700,color:C.tx}}>{item.value}</div>
+                      </div>)}
+                    </div>
+                    :<div style={{fontSize:11,color:C.muted,marginBottom:12}}>Add a 5K time to generate pace zones.</div>}
+
+                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Working Weights from 5RM</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                      <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Back Squat</div>
+                      {derivedSquat.length>0?derivedSquat.map(item=><div key={item.label} style={{...S.row,padding:'2px 0'}}><span style={{fontSize:11,color:C.tx2}}>{item.label}</span><span style={{fontSize:11,color:C.tx,fontWeight:600}}>{item.value} lb</span></div>):<div style={{fontSize:11,color:C.muted}}>Add a squat 5RM</div>}
+                    </div>
+                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                      <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Deadlift</div>
+                      {derivedDeadlift.length>0?derivedDeadlift.map(item=><div key={item.label} style={{...S.row,padding:'2px 0'}}><span style={{fontSize:11,color:C.tx2}}>{item.label}</span><span style={{fontSize:11,color:C.tx,fontWeight:600}}>{item.value} lb</span></div>):<div style={{fontSize:11,color:C.muted}}>Add a deadlift 5RM</div>}
+                    </div>
+                  </div>
+
+                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Weekly Training Preview</div>
+                  <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+                    {previewDays.map((item,idx)=><div key={`${item.plannedDate}-${idx}`} style={{...S.row,padding:'7px 0',borderBottom:idx<previewDays.length-1?`0.5px solid ${C.bd}`:'none',alignItems:'flex-start',gap:8}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{item.plannedDayLabel}</div>
+                        <div style={{fontSize:11,color:C.tx2,marginTop:2}}>{item.plannedName}</div>
+                      </div>
+                      <span style={S.pill(item.status==='today'?C.navyL:C.surf,item.status==='today'?C.navyDk:C.muted)}>{item.status==='today'?'Today':formatWorkoutTypeLabel(item)}</span>
+                    </div>)}
+                  </div>
+                </div>
+              </>;
+            })()}
           </div>}
           {sec.id==='goals'&&<div>
             <span style={S.lbl}>Daily Calorie Goal (kcal)</span>
