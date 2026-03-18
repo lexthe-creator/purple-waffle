@@ -3271,6 +3271,7 @@ function App(){
   const [settingsSection,setSettingsSection]=useState(initialNavigationState.settingsSection);
   const [healthScreenTab,setHealthScreenTab]=useState(initialNavigationState.healthTab);
   const [lifestyleScreenTab,setLifestyleScreenTab]=useState(initialNavigationState.lifestyleTab);
+  const [lifestyleOpen,setLifestyleOpen]=useState({daily:false,weekly:false});
   const [navFocusId,setNavFocusId]=useState(null);
   const [notif,setNotif]=useState(null);
   const [notifType,setNotifType]=useState('info');
@@ -6956,7 +6957,7 @@ function App(){
     </div>;
   }
 
-  function LifestyleScreen({activeTab='habits',onTabChange=()=>{}}){
+  function LifestyleScreen({activeTab='habits',onTabChange=()=>{},lifestyleOpen={daily:false,weekly:false},setLifestyleOpen=()=>{}}){
     const homeTab=LIFESTYLE_TAB_IDS.includes(activeTab)?activeTab:'habits';
     const choreKey=TODAY;
     const wkChoreKey=weekKey(NOW);
@@ -6991,7 +6992,6 @@ function App(){
     const activeItems=(lifestyleItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.order||0)-(b.order||0));
     const dailyDone=activeItems.filter(i=>!!todayChores[i.id]).length;
     const weekDone=WEEKLY_CHORES.filter(c=>weekChores[c.id]).length;
-    const [lifestyleOpen,setLifestyleOpen]=useState({daily:false,weekly:false});
 
     return <div style={S.body}>
       <div style={{display:'flex',gap:4,marginBottom:12,overflowX:'auto'}}>
@@ -9402,7 +9402,7 @@ function App(){
     training:TrainingScreen,
     meals:MealsScreen,
     finance:()=>React.createElement(FinanceScreen,{activeView:finView,onViewChange:setFinView}),
-    habits:()=>React.createElement(LifestyleScreen,{activeTab:lifestyleScreenTab,onTabChange:setLifestyleScreenTab}),
+    habits:()=>React.createElement(LifestyleScreen,{activeTab:lifestyleScreenTab,onTabChange:setLifestyleScreenTab,lifestyleOpen,setLifestyleOpen}),
     health:()=>React.createElement(HealthScreen,{activeTab:healthScreenTab,onTabChange:setHealthScreenTab}),
     maintenance:MaintenanceScreen,
     insights:InsightsScreen,
