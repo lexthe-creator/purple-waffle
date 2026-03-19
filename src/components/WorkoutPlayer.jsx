@@ -1,28 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 
-export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
-  const [elapsed, setElapsed] = useState(0);
-  const [completedExerciseIds, setCompletedExerciseIds] = useState([]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setElapsed(current => current + 1), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const seconds = String(elapsed % 60).padStart(2, '0');
+export default function WorkoutPlayer({
+  workout,
+  elapsedSeconds,
+  completedExerciseIds,
+  onToggleExercise,
+  onCancel,
+  onComplete,
+}) {
+  const minutes = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+  const seconds = String(elapsedSeconds % 60).padStart(2, '0');
   const progress = useMemo(() => {
     if (!workout?.exercises?.length) return 0;
     return Math.round((completedExerciseIds.length / workout.exercises.length) * 100);
   }, [completedExerciseIds.length, workout?.exercises?.length]);
-
-  function toggleExercise(exerciseId) {
-    setCompletedExerciseIds(current => (
-      current.includes(exerciseId)
-        ? current.filter(item => item !== exerciseId)
-        : [...current, exerciseId]
-    ));
-  }
 
   if (!workout) return null;
 
@@ -46,8 +37,9 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
       <div className="workout-list">
         {workout.exercises.map(exercise => {
           const done = completedExerciseIds.includes(exercise.id);
+
           return (
-            <button key={exercise.id} type="button" className={`workout-step ${done ? 'is-complete' : ''}`} onClick={() => toggleExercise(exercise.id)}>
+            <button key={exercise.id} type="button" className={`workout-step ${done ? 'is-complete' : ''}`} onClick={() => onToggleExercise(exercise.id)}>
               <div>
                 <strong>{exercise.name}</strong>
                 <p>{exercise.detail}</p>
