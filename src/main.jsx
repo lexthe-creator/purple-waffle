@@ -6,6 +6,7 @@ import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
 import { FlowRoot } from './flow/FlowRoot.jsx';
+import DayCard from './components/DayCard.jsx';
 
 const IS_DEV=import.meta.env.DEV;
 const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
@@ -355,6 +356,51 @@ function TodayList({
         :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
     </div>
   </section>;
+function InlineTaskInput({C,S,onAdd}){
+  const [text,setText]=useState('');
+  const [notesOpen,setNotesOpen]=useState(false);
+  const [notes,setNotes]=useState('');
+  const [subtasks,setSubtasks]=useState([]);
+  const [open,setOpen]=useState(false);
+
+  function submit(){
+    if(!text.trim())return;
+    onAdd({text:text.trim(),notes:notes.trim()||null,subtasks:subtasks.map(s=>({id:`sub-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,text:s.trim(),completed:false})).filter(s=>s.text)});
+    setText('');setNotes('');setSubtasks([]);setNotesOpen(false);setOpen(false);
+  }
+
+  if(!open){
+    return <button type="button" style={{...S.btnGhost,fontSize:12,justifyContent:'flex-start',padding:'8px 12px'}} onClick={()=>setOpen(true)}>+ Add task</button>;
+  }
+
+  return <div style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gap:8}}>
+    <input
+      value={text}
+      onChange={e=>setText(e.target.value)}
+      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();submit();}if(e.key==='Escape')setOpen(false);}}
+      placeholder="Task name"
+      style={{...S.inp,margin:0}}
+      autoFocus
+    />
+    {subtasks.map((st,i)=><div key={i} style={{display:'flex',gap:8,paddingLeft:14,alignItems:'center'}}>
+      <div style={{width:5,height:5,borderRadius:999,background:C.muted,flexShrink:0}}/>
+      <input
+        value={st}
+        onChange={e=>{const next=[...subtasks];next[i]=e.target.value;setSubtasks(next);}}
+        placeholder={`Subtask ${i+1}`}
+        style={{...S.inp,margin:0,flex:1,fontSize:12}}
+      />
+      <button type="button" onClick={()=>setSubtasks(subtasks.filter((_,j)=>j!==i))} style={{...S.btnGhost,padding:'3px 7px',fontSize:11}}>×</button>
+    </div>)}
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      <button type="button" onClick={()=>setSubtasks([...subtasks,''])} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>+ Subtask</button>
+      <button type="button" onClick={()=>setNotesOpen(o=>!o)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>{notesOpen?'▾ Notes':'▸ Notes'}</button>
+      <div style={{flex:1}}/>
+      <button type="button" onClick={()=>setOpen(false)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>Cancel</button>
+      <button type="button" onClick={submit} disabled={!text.trim()} style={{...S.btnSmall(),fontSize:11,padding:'5px 9px',opacity:text.trim()?1:0.45}}>Add</button>
+    </div>
+    {notesOpen&&<textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes…" rows={2} style={{...S.inp,margin:0,resize:'vertical',fontSize:12}}/>}
+  </div>;
 }
 
 function QuickActions({
@@ -2500,20 +2546,25 @@ function normalizeLoadedProfile(data={}){
   return syncCanonicalProfileState(normalized);
 }
 
-function createDailyExecutionTask(text='',overrides={}){
+function createDailyExecutionTask(title='',overrides={}){
+  const resolvedTitle=String(overrides.title??overrides.text??title??'');
   return{
     id:overrides.id||`dx-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-    text,
     completed:!!overrides.completed,
+    subtasks:Array.isArray(overrides.subtasks)?overrides.subtasks:[],
+    notes:typeof overrides.notes==='string'?overrides.notes:'',
+    createdAt:overrides.createdAt||overrides.timestamp||new Date().toISOString(),
     date:overrides.date||getTodayKey(),
     timestamp:overrides.timestamp||new Date().toISOString(),
     updatedAt:overrides.updatedAt||new Date().toISOString(),
     ...overrides,
+    title:resolvedTitle,
+    text:resolvedTitle,
   };
 }
 
 function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
-  return createDailyExecutionTask(typeof task==='string'?task:(task?.text||''),{
+  return createDailyExecutionTask(typeof task==='string'?task:(task?.title||task?.text||''),{
     ...((task&&typeof task==='object'&&!Array.isArray(task))?task:{}),
     id:task?.id||`dx-${dateKey}-${index}`,
     date:normalizeDateKey(task?.date||dateKey,dateKey),
@@ -4462,9 +4513,10 @@ function App(){
   function updateDailyExecution(dateKey,updater){
     const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
     const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
-    const existingCount=existing.priorities.filter(task=>task.text.trim()).length;
-    const nextCount=nextEntry.priorities.filter(task=>task.text.trim()).length;
-    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>task.text||'');
+    const getTaskTitle=task=>String(task?.title||task?.text||'');
+    const existingCount=existing.priorities.filter(task=>getTaskTitle(task).trim()).length;
+    const nextCount=nextEntry.priorities.filter(task=>getTaskTitle(task).trim()).length;
+    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>getTaskTitle(task));
     updateProfile(current=>({
       ...current,
       dailyExecution:{...(current.dailyExecution||{}),[dateKey]:nextEntry},
@@ -4839,7 +4891,7 @@ function App(){
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
     function setDailyExecutionMode(nextMode){
-      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>task.text.trim())){
+      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>String(task.title||task.text||'').trim())){
         showNotif('Add at least one priority before moving to execution.','warn');
         return;
       }
@@ -4866,7 +4918,7 @@ function App(){
 
     function addPriorityTask(taskData={}){
       updateDailyExecution(activeDate,entry=>{
-        const nextTask=createDailyExecutionTask(taskData.text||'',{date:activeDate,...taskData});
+        const nextTask=createDailyExecutionTask(taskData.title||taskData.text||'',{date:activeDate,...taskData});
         return{
           ...entry,
           mode:entry.mode==='execution'?entry.mode:'planning',
@@ -5173,11 +5225,11 @@ function App(){
         <div style={{fontSize:11,color:C.tx2,lineHeight:1.4,marginBottom:shouldShowInstallCta?10:0}}>{installHelpText}</div>
         {shouldShowInstallCta&&<button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openInstallPrompt}>Install</button>}
       </div>}
-      <TodayList
+      <DayCard
         C={C}
         S={S}
         FieldInput={FieldInput}
-        dailyExecutionEntry={dailyExecutionEntry}
+        dayEntry={dailyExecutionEntry}
         selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):'Today'}
         isViewingToday={isViewingToday}
         updatePriorityTask={updatePriorityTask}
