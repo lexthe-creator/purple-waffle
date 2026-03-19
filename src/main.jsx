@@ -1,18 +1,22 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
+import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
-import WorkoutPlayer from './components/WorkoutPlayer.jsx';
-import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
+import PlanningCard from './components/PlanningCard.jsx';
+import ExecutionCard from './components/ExecutionCard.jsx';
+import InboxView from './views/InboxView.jsx';
+import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import './styles.css';
-import { FlowRoot } from './flow/FlowRoot.jsx';
 
-const IS_DEV=import.meta.env.DEV;
-const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
+function TaskApp() {
+  const { tasks, setTasks, createTask, generateId, sortTasks } = useTaskContext();
+  const [activeView, setActiveView] = useState('planning');
+  const [brainDumpOpen, setBrainDumpOpen] = useState(false);
 
-window.__PERSONAL_HUB_PWA__={
-  isSecureOrigin:window.isSecureContext||location.hostname==='localhost'||location.hostname==='127.0.0.1'
-};
+  const inboxTasks = useMemo(() => tasks.filter(task => task.status === 'inbox'), [tasks]);
+  const plannedTasks = useMemo(() => tasks.filter(task => task.status === 'planned'), [tasks]);
+  const activeTasks = useMemo(() => tasks.filter(task => task.status === 'active'), [tasks]);
+  const doneTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
 
 if('serviceWorker' in navigator){
   if(IS_DEV){
@@ -7760,1901 +7764,118 @@ function App(){
         </div>
       </div>}
     </div>;
+  function updateTask(taskId, updater) {
+    setTasks(current => sortTasks(current.map(task => (task.id === taskId ? updater(task) : task))));
   }
 
-  function CalendarScreen({focusDay,onSelectDay=()=>{}}){
-    const selDay=normalizeDateKey(focusDay,TODAY);
-    const gestureRef=useRef({x:0,y:0});
-    const displayedWeekStart=addWeeksToDate(getWeekStartDate(TODAY),calendarWeekIndex);
-    const displayedWeekDays=Array.from({length:7},(_,i)=>addDaysIso(formatDateKey(displayedWeekStart),i)).map(parseDateKey);
-    const displayedMonthStart=addMonthsToDate(getMonthStartDate(TODAY),calendarMonthIndex);
-    const monthGridStart=getWeekStartDate(displayedMonthStart);
-    const monthGridDays=Array.from({length:42},(_,i)=>parseDateKey(addDaysIso(formatDateKey(monthGridStart),i)));
-    const activeRangeStart=calendarViewMode==='month'?monthGridStart:displayedWeekStart;
-    const activeRangeEnd=calendarViewMode==='month'?monthGridDays[monthGridDays.length-1]:displayedWeekDays[6];
-    const weekReferenceMonth=displayedWeekDays[3]?.getMonth();
-    const monthHeaderLabel=formatDate(displayedMonthStart,'monthYear');
-
-    function getDayEvents(dateStr){
-      return (calendarCache[dateStr]||[]).sort((a,b)=>(a.startHour||0)-(b.startHour||0));
-    }
-    function getTasksForDay(dateStr){
-      return taskHistory.filter(t=>t.date===dateStr&&!t.parentId&&(t.status||'active')!=='dismissed');
-    }
-    function getCalendarDay(dateStr){
-      const parts=getDateParts(dateStr);
-      const executionEntry=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateStr],dateStr,top3?.[dateStr]||[]);
-      const executionTasks=executionEntry.priorities.filter(task=>task.text.trim());
-      const explicitTasks=getTasksForDay(dateStr).filter(task=>!task.done);
-      const completedTasks=executionTasks.filter(task=>task.completed).length+getTasksForDay(dateStr).filter(task=>task.done).length;
-      const totalTasks=executionTasks.length+getTasksForDay(dateStr).length;
-      const completionRate=totalTasks>0?Math.round((completedTasks/totalTasks)*100):0;
-      const workoutLogged=workoutHistory.some(entry=>entry.date===dateStr&&(entry.type==='workout'||entry.type==='run'||entry.type==='recovery'));
-      const recoveryEntry=compareDateKeys(dateStr,TODAY)>0?null:computeRecoveryState(dailyLogs?.[dateStr],dailyLogs?.[dateStr]?.energyScore??energyScore,dailyLogs?.[dateStr]?.sleepHours??sleepHours);
-      return{
-        date:dateStr,
-        dayOfWeek:parts?.dayOfWeek||'',
-        month:parts?.monthName||'',
-        dayNumber:parts?.day||0,
-        year:parts?.year||new Date().getFullYear(),
-        hasTasks:executionTasks.length>0||explicitTasks.length>0,
-        hasWorkout:workoutLogged,
-        recoveryStatus:recoveryEntry?.level==='Low'?'low':recoveryEntry?'ok':null,
-        completionRate,
-      };
-    }
-    function selectCalendarDate(dateStr){
-      onSelectDay(dateStr);
-      setCalendarWeekIndex(getWeekIndexForDate(dateStr,TODAY));
-      setCalendarMonthIndex(getMonthIndexForDate(dateStr,TODAY));
-      setCalendarViewMode('week');
-      openTab('home',{calendarFocusDay:dateStr});
-    }
-    function moveCalendar(delta){
-      if(calendarViewMode==='month'){
-        setCalendarMonthIndex(index=>index+delta);
-        return;
-      }
-      setCalendarWeekIndex(index=>index+delta);
-    }
-    function resetCalendarToToday(){
-      onSelectDay(TODAY);
-      setCalendarViewMode('week');
-      setCalendarWeekIndex(0);
-      setCalendarMonthIndex(0);
-    }
-    function handleCalendarTouchStart(event){
-      const touch=event.touches?.[0];
-      if(!touch)return;
-      gestureRef.current={x:touch.clientX,y:touch.clientY};
-    }
-    function handleCalendarTouchEnd(event){
-      const touch=event.changedTouches?.[0];
-      if(!touch)return;
-      const dx=touch.clientX-gestureRef.current.x;
-      const dy=touch.clientY-gestureRef.current.y;
-      if(calendarViewMode==='week'&&Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)){
-        moveCalendar(dx<0?1:-1);
-      }
-      if(calendarViewMode==='month'&&Math.abs(dy)>50&&Math.abs(dy)>Math.abs(dx)){
-        moveCalendar(dy<0?1:-1);
-      }
-    }
-    function createLocalEvent(){
-      if(!calForm.title.trim())return;
-      const event={id:String(Date.now()),title:calForm.title,startHour:calForm.hour,durationMins:calForm.dur,local:true,color:C.sage};
-      updateProfile(p=>({...p,calendarCache:{...p.calendarCache,[selDay]:[...(p.calendarCache[selDay]||[]),event]}}));
-      setCalForm({title:'',hour:9,dur:60,allDay:false});setCalModal(null);
-    }
-    function deleteEvent(dateStr,id){
-      updateProfile(p=>({...p,calendarCache:{...p.calendarCache,[dateStr]:(p.calendarCache[dateStr]||[]).filter(e=>e.id!==id)}}));
-    }
-    async function syncGoogleCal(){
-      if(!googleConnected){showNotif('Connect Google in Settings first');return;}
-      try{
-        const start=new Date(activeRangeStart);start.setHours(0,0,0,0);
-        const end=new Date(activeRangeEnd);end.setHours(23,59,59,999);
-        const resp=await GoogleAPI.listEvents(start.toISOString(),end.toISOString());
-        const newCache={...calendarCache};
-        for(const ev of resp.items||[]){
-          const dateStr=(ev.start?.dateTime||ev.start?.date||'').slice(0,10);if(!dateStr)continue;
-          const isAllDay=!!ev.start?.date&&!ev.start?.dateTime;
-          const startHour=isAllDay?null:new Date(ev.start.dateTime).getHours();
-          const endDt=ev.end?.dateTime?new Date(ev.end.dateTime):null;
-          const durationMins=isAllDay?null:(endDt&&ev.start?.dateTime?Math.round((endDt-new Date(ev.start.dateTime))/60000):60);
-          const entry={id:ev.id,title:ev.summary||'Event',startHour,durationMins,allDay:isAllDay,color:C.navy,local:false,googleEventId:ev.id};
-          if(!newCache[dateStr])newCache[dateStr]=[];
-          const idx=newCache[dateStr].findIndex(e=>e.googleEventId===ev.id);
-          if(idx>=0)newCache[dateStr][idx]=entry;else newCache[dateStr].push(entry);
-        }
-        updateProfile({calendarCache:newCache});showNotif('Calendar synced!','success');
-      }catch(e){showNotif('Sync failed: '+e.message,'error');}
-    }
-    function applyPreset(preset){
-      setBusyForm(f=>({...f,title:preset.label,startTime:preset.startTime,endTime:preset.endTime,category:preset.category,date:selDay}));
-      setBusyModal('new');
-    }
-
-    const selEvents=getDayEvents(selDay);
-    const selBusy=getBusyForDay(selDay);
-    const selTasks=getTasksForDay(selDay);
-    const catClr=id=>(BUSY_CATEGORIES.find(c=>c.id===id)||{clr:C.muted}).clr;
-    const selectedCalendarDay=getCalendarDay(selDay);
-    const renderDots=(calendarDay,maxDots=3)=>{
-      const dots=[];
-      if(calendarDay.hasTasks)dots.push({id:'tasks',color:C.amber});
-      if(calendarDay.recoveryStatus==='low')dots.push({id:'recovery',color:C.red});
-      if(calendarDay.completionRate>=80)dots.push({id:'completion',color:C.sage});
-      if(calendarDay.hasWorkout)dots.push({id:'workout',color:'#4D7EA8'});
-      return dots.slice(0,maxDots);
-    };
-
-    // Merge events + busy blocks + tasks into a single time-sorted list
-    // Tasks float to the top (sortMins=-1) since they typically have no time
-    const allDayEvents=selEvents.filter(e=>e.allDay);
-    const allItems=[
-      ...selEvents.filter(e=>!e.allDay).map(e=>({...e,kind:'event',sortMins:(e.startHour||0)*60})),
-      ...selBusy.map(b=>({...b,kind:'busy',sortMins:timeToMins(b.startTime)})),
-      ...selTasks.map(t=>({...t,kind:'task',sortMins:-1})),
-    ].sort((a,b)=>a.sortMins-b.sortMins);
-
-    return <div style={S.body}>
-      <div style={{...S.card,marginBottom:10,padding:'14px 14px 12px'}}>
-        <div style={{...S.row,marginBottom:10,alignItems:'center'}}>
-          <button style={S.btnGhost} onClick={()=>moveCalendar(-1)}>Prev</button>
-          <button style={{background:'none',border:'none',color:C.tx,fontSize:15,fontWeight:700,cursor:'pointer'}} onClick={()=>setCalendarViewMode(mode=>mode==='week'?'month':'week')}>
-            {monthHeaderLabel} {calendarViewMode==='month'?'▲':'▼'}
-          </button>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={resetCalendarToToday}>Today</button>
-            <button style={S.btnGhost} onClick={()=>moveCalendar(1)}>Next</button>
-          </div>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6,marginBottom:8}}>
-          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(label=><div key={label} style={{fontSize:10,color:C.muted,textAlign:'center',fontWeight:600}}>{label}</div>)}
-        </div>
-        <div onTouchStart={handleCalendarTouchStart} onTouchEnd={handleCalendarTouchEnd} style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
-          {(calendarViewMode==='month'?monthGridDays:displayedWeekDays).map(dayDate=>{
-            const dateStr=formatDateKey(dayDate);
-            const calendarDay=getCalendarDay(dateStr);
-            const isSelected=dateStr===selDay;
-            const isToday=dateStr===TODAY;
-            const isOutsideMonth=calendarViewMode==='month'
-              ?dayDate.getMonth()!==displayedMonthStart.getMonth()
-              :dayDate.getMonth()!==weekReferenceMonth;
-            const dots=renderDots(calendarDay,calendarViewMode==='month'?2:4);
-            return <button
-              key={dateStr}
-              onClick={()=>selectCalendarDate(dateStr)}
-              style={{
-                minHeight:calendarViewMode==='month'?74:86,
-                borderRadius:14,
-                border:`1px solid ${isSelected?C.navy:isToday?C.sage:C.bd}`,
-                background:isSelected?C.navyL:C.card,
-                color:isOutsideMonth?C.muted:C.tx,
-                cursor:'pointer',
-                padding:calendarViewMode==='month'?'8px 6px':'10px 6px',
-                opacity:isOutsideMonth?0.7:1,
-                display:'flex',
-                flexDirection:'column',
-                alignItems:'center',
-                justifyContent:'space-between',
-              }}>
-              <div style={{fontSize:calendarViewMode==='month'?20:11,fontWeight:calendarViewMode==='month'?700:600}}>
-                {calendarViewMode==='month'?calendarDay.dayNumber:formatDate(dateStr,'weekdayShort')}
-              </div>
-              {calendarViewMode==='week'&&<div style={{fontSize:24,fontWeight:800,lineHeight:1}}>{calendarDay.dayNumber}</div>}
-              <div style={{display:'flex',gap:4,justifyContent:'center',minHeight:8,flexWrap:'wrap'}}>
-                {dots.map(dot=><span key={dot.id} style={{width:6,height:6,borderRadius:'50%',background:dot.color,display:'inline-block'}} />)}
-              </div>
-            </button>;
-          })}
-        </div>
-      </div>
-      {/* Day header + actions */}
-      <div style={{...S.row,marginBottom:10}}>
-        <div>
-          <div style={{fontSize:14,fontWeight:600,color:C.tx}}>{formatDate(selDay,'primary')}</div>
-          <div style={{fontSize:10,color:C.muted,marginTop:2}}>
-            {selectedCalendarDay.completionRate}% complete
-            {selectedCalendarDay.recoveryStatus==='low'?' · recovery low':''}
-            {selectedCalendarDay.hasWorkout?' · workout logged':''}
-          </div>
-        </div>
-        <div style={{display:'flex',gap:5}}>
-          <button style={{...S.btnGhost,fontSize:11,padding:'6px 10px'}} onClick={()=>openTab('home',{calendarFocusDay:selDay})}>Open Daily</button>
-          {googleConnected&&<button style={S.btnSmall(C.navy)} onClick={syncGoogleCal}>Sync</button>}
-          <button style={S.btnSmall(C.amber)} onClick={()=>{setBusyForm(f=>({...f,date:selDay}));setBusyModal('new');}}>+ Busy</button>
-          <button style={S.btnSmall(C.sage)} onClick={()=>setCalModal('new')}>+ Event</button>
-        </div>
-      </div>
-
-      {/* Quick busy presets */}
-      <div style={{marginBottom:10}}>
-        <div style={{fontSize:10,color:C.muted,fontWeight:500,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>Quick busy blocks</div>
-        <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-          {BUSY_PRESETS.map(p=><button key={p.label} style={{...S.btnGhost,fontSize:10,padding:'5px 10px',color:C.tx}} onClick={()=>applyPreset(p)}>{p.label}</button>)}
-        </div>
-      </div>
-
-      {/* Week patterns */}
-      {Object.keys(weekPatterns||{}).length>0&&<div style={{...S.card,marginBottom:10,padding:'10px 14px'}}>
-        <div style={{fontSize:10,color:C.muted,fontWeight:500,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:8}}>Saved patterns</div>
-        <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-          {Object.keys(weekPatterns).map(name=><button key={name} style={S.btnSmall(C.navy)} onClick={()=>applyWeekPattern(name,selDay)}>{name}</button>)}
-        </div>
-      </div>}
-
-      {/* Google hint */}
-      {!googleConnected&&<ConnectGoogle onConnect={()=>openTab('settings',{settingsSection:'google'})}/>}
-
-      {/* All-day events */}
-      {allDayEvents.length>0&&<div style={{...S.card,marginBottom:8}}>
-        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6}}>All Day</div>
-        {allDayEvents.map((ev,i)=><div key={ev.id} style={{...S.row,padding:'7px 0',borderBottom:i<allDayEvents.length-1?`0.5px solid ${C.bd}`:'none'}}>
-          <div style={{width:44,flexShrink:0,fontSize:9,color:C.muted,textAlign:'center',paddingTop:2}}>All day</div>
-          <div style={{flex:1,background:ev.color||C.navy,borderRadius:8,padding:'7px 10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.white}}>{ev.title}</div>
-            {!ev.local&&<span style={{fontSize:9,color:'rgba(255,255,255,0.55)'}}>Google</span>}
-          </div>
-        </div>)}
-      </div>}
-      {/* Time list */}
-      {allItems.length===0
-        ?<div style={{textAlign:'center',padding:'28px 0',color:C.muted,fontSize:13}}>No events, tasks, or busy blocks. Use the buttons above to add.</div>
-        :<div style={S.card}>
-          {allItems.map((item,i)=>{
-            const isLast=i===allItems.length-1;
-            if(item.kind==='task'){
-              const priBorder=item.priority===3?C.red:item.priority===2?C.amber:C.sage;
-              return <div key={item.id} style={{...S.row,padding:'9px 0',borderBottom:isLast?'none':`0.5px solid ${C.bd}`,alignItems:'center',opacity:item.done?0.5:1}}>
-                <div style={{width:44,flexShrink:0,fontSize:9,color:C.muted,textAlign:'center',paddingTop:2}}>Task</div>
-                <div style={{flex:1,background:C.surf,borderRadius:8,padding:'7px 10px',borderLeft:`3px solid ${priBorder}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,color:C.tx,textDecoration:item.done?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.text}</div>
-                    {item.priority>1&&<div style={{fontSize:9,color:priBorder,marginTop:1}}>{'!'.repeat(item.priority)} priority</div>}
-                  </div>
-                  <button onClick={()=>updateProfile(p=>({...p,taskHistory:p.taskHistory.map(t=>t.id===item.id?{...t,done:!t.done,status:!t.done?'done':'active',updatedAt:new Date().toISOString()}:t)}))} style={{width:22,height:22,borderRadius:5,border:`1.5px solid ${item.done?C.sage:C.bd}`,background:item.done?C.sage:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:8}}>
-                    {item.done&&<svg width="11" height="11" viewBox="0 0 24 24" fill="var(--white)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>}
-                  </button>
-                </div>
-              </div>;
-            }
-            if(item.kind==='busy'){
-              const cat=BUSY_CATEGORIES.find(c=>c.id===item.category)||{clr:C.muted,label:item.category};
-              return <div key={item.id} style={{...S.row,padding:'9px 0',borderBottom:isLast?'none':`0.5px solid ${C.bd}`,alignItems:'flex-start'}}>
-                <div style={{width:44,flexShrink:0}}>
-                  <div style={{fontSize:10,color:C.muted}}>{fmtTimeRange(item.startTime,item.endTime).split(' – ')[0]}</div>
-                  <div style={{fontSize:9,color:C.muted}}>{fmtTimeRange(item.startTime,item.endTime).split(' – ')[1]}</div>
-                </div>
-                <div style={{flex:1,background:C.surf,borderRadius:8,padding:'7px 10px',borderLeft:`3px solid ${cat.clr}`}}>
-                  <div style={{...S.row}}>
-                    <div>
-                      <div style={{fontSize:12,fontWeight:600,color:C.tx}}>{item.title}</div>
-                      <div style={{fontSize:10,color:C.muted,marginTop:1}}>
-                        {fmtTimeRange(item.startTime,item.endTime)} · <span style={{color:cat.clr}}>{cat.label}</span>
-                        {item.recurring&&' · repeats'}
-                      </div>
-                      {item.notes&&<div style={{fontSize:10,color:C.muted,marginTop:2}}>{item.notes}</div>}
-                    </div>
-                    <button onClick={()=>deleteBusyBlock(item.id)} style={{background:'none',border:'none',color:C.muted,fontSize:14,cursor:'pointer',padding:'0 0 0 8px'}}>x</button>
-                  </div>
-                </div>
-              </div>;
-            }
-            return <div key={item.id} style={{...S.row,padding:'9px 0',borderBottom:isLast?'none':`0.5px solid ${C.bd}`,alignItems:'flex-start'}}>
-              <div style={{width:44,flexShrink:0,fontSize:10,color:C.muted,paddingTop:4}}>
-                {(()=>{const h=item.startHour;return`${h>12?h-12:h||12}${h>=12?'pm':'am'}`;})()}
-              </div>
-              <div style={{flex:1,background:item.color||C.sage,borderRadius:8,padding:'7px 10px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  <div style={{fontSize:12,fontWeight:600,color:C.white}}>{item.title}</div>
-                  <div style={{fontSize:10,color:C.whiteSoft4}}>{item.durationMins}min</div>
-                </div>
-                {item.local&&<button onClick={()=>deleteEvent(selDay,item.id)} style={{background:'none',border:'none',color:C.whiteSoft5,fontSize:14,cursor:'pointer'}}>x</button>}
-              </div>
-            </div>;
-          })}
-        </div>
-      }
-
-      {/* Busy block summary for week (below day view) */}
-      {selBusy.length>0&&<div style={{...S.card,marginTop:4}}>
-        <div style={{...S.row,marginBottom:8}}>
-          <span style={{fontSize:11,fontWeight:600,color:C.tx}}>Busy today</span>
-          <span style={{fontSize:10,color:C.muted}}>{selBusy.length} block{selBusy.length>1?'s':''}</span>
-        </div>
-        <div style={{fontSize:11,color:C.muted}}>
-          Free windows: {(()=>{
-            const sorted=selBusy.sort((a,b)=>timeToMins(a.startTime)-timeToMins(b.startTime));
-            const windows=[];let cursor=480; // 8am
-            for(const b of sorted){const sm=timeToMins(b.startTime);if(sm-cursor>=30)windows.push(`${minsToTime(cursor)}–${minsToTime(sm)}`);cursor=Math.max(cursor,timeToMins(b.endTime));}
-            if(1080-cursor>=30)windows.push(`${minsToTime(cursor)}–6pm`); // up to 6pm
-            return windows.length?windows.join(', '):'None today';
-          })()}
-        </div>
-      </div>}
-
-      {/* Save pattern prompt */}
-      <div style={{...S.card,marginTop:4,padding:'10px 14px'}}>
-        <div style={{fontSize:11,fontWeight:500,color:C.tx,marginBottom:8}}>Save this week as a pattern</div>
-        <div style={{display:'flex',gap:6}}>
-          <FieldInput value={patternName} onChange={e=>setPatternName(e.target.value)} placeholder="Pattern name (e.g. Typical Mon)" style={{...S.inp,flex:1,padding:'7px 10px'}}/>
-          <button style={S.btnSmall(C.navy)} onClick={()=>saveWeekPattern(selDay)}>Save</button>
-        </div>
-      </div>
-
-      {/* Add Busy Block modal */}
-      {busyModal==='new'&&<div style={{position:'fixed',inset:0,background:C.scrim,zIndex:500,display:'flex',alignItems:'flex-end'}}>
-        <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'85vh',overflowY:'auto'}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>Add Busy Block</div>
-          <span style={S.lbl}>Title</span>
-          <FieldInput value={busyForm.title} onChange={e=>setBusyForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Team standup" style={{...S.inp,marginBottom:8}} autoFocus/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-            <div><span style={S.lbl}>Start time</span>
-              <FieldInput type="time" value={busyForm.startTime} onChange={e=>setBusyForm(f=>({...f,startTime:e.target.value}))} style={S.inp}/>
-            </div>
-            <div><span style={S.lbl}>End time</span>
-              <FieldInput type="time" value={busyForm.endTime} onChange={e=>setBusyForm(f=>({...f,endTime:e.target.value}))} style={S.inp}/>
-            </div>
-          </div>
-          <span style={S.lbl}>Category</span>
-          <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
-            {BUSY_CATEGORIES.map(cat=><button key={cat.id} onClick={()=>setBusyForm(f=>({...f,category:cat.id}))} style={{padding:'5px 10px',borderRadius:8,border:`1.5px solid ${busyForm.category===cat.id?cat.clr:C.bd}`,background:busyForm.category===cat.id?cat.clr:'transparent',color:busyForm.category===cat.id?C.white:C.tx,fontSize:11,cursor:'pointer'}}>{cat.label}</button>)}
-          </div>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={{fontSize:12,color:C.tx}}>Recurring (same day each week)</span>
-            <button onClick={()=>setBusyForm(f=>({...f,recurring:!f.recurring}))} style={{width:40,height:24,borderRadius:12,background:busyForm.recurring?C.sage:C.surf,border:`1px solid ${C.bd}`,cursor:'pointer',position:'relative'}}>
-              <div style={{width:18,height:18,borderRadius:'50%',background:C.white,position:'absolute',top:2,transition:'left 0.2s',left:busyForm.recurring?'18px':'2px'}}/>
-            </button>
-          </div>
-          {!busyForm.recurring&&<>
-            <span style={S.lbl}>Date</span>
-            <FieldInput type="date" value={busyForm.date} onChange={e=>setBusyForm(f=>({...f,date:e.target.value}))} style={{...S.inp,marginBottom:8}}/>
-          </>}
-          {busyForm.recurring&&<>
-            <span style={S.lbl}>Day of week</span>
-            <div style={{display:'flex',gap:5,marginBottom:8}}>
-              {['Su','Mo','Tu','We','Th','Fr','Sa'].map((d,i)=><button key={i} onClick={()=>setBusyForm(f=>({...f,dow:i}))} style={{width:34,height:34,borderRadius:8,border:`1.5px solid ${busyForm.dow===i?C.sage:C.bd}`,background:busyForm.dow===i?C.sage:'transparent',color:busyForm.dow===i?C.white:C.tx,fontSize:11,cursor:'pointer'}}>{d}</button>)}
-            </div>
-          </>}
-          <span style={S.lbl}>Notes (optional)</span>
-          <FieldInput value={busyForm.notes} onChange={e=>setBusyForm(f=>({...f,notes:e.target.value}))} placeholder="Optional context..." style={{...S.inp,marginBottom:14}}/>
-          <div style={{display:'flex',gap:8}}>
-            <button style={S.btnSolid(C.amber)} onClick={addBusyBlock}>Add Block</button>
-            <button style={{...S.btnGhost,flex:1}} onClick={()=>setBusyModal(null)}>Cancel</button>
-          </div>
-        </div>
-      </div>}
-
-      {/* Add Event modal */}
-      {calModal==='new'&&<div style={{position:'fixed',inset:0,background:C.scrim,zIndex:500,display:'flex',alignItems:'flex-end'}}>
-        <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto'}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>New Event — {selDay}</div>
-          <FieldInput value={calForm.title} onChange={e=>setCalForm(f=>({...f,title:e.target.value}))} placeholder="Event title" style={{...S.inp,marginBottom:8}} autoFocus/>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-            <div><span style={S.lbl}>Start hour</span>
-              <FieldInput type="number" min={0} max={23} value={calForm.hour} onChange={e=>setCalForm(f=>({...f,hour:parseInt(e.target.value)||9}))} style={S.inp}/>
-            </div>
-            <div><span style={S.lbl}>Duration (min)</span>
-              <FieldInput type="number" min={15} step={15} value={calForm.dur} onChange={e=>setCalForm(f=>({...f,dur:parseInt(e.target.value)||60}))} style={S.inp}/>
-            </div>
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <button style={S.btnSolid(C.sage)} onClick={createLocalEvent}>Add Event</button>
-            <button style={{...S.btnGhost,flex:1}} onClick={()=>setCalModal(null)}>Cancel</button>
-          </div>
-        </div>
-      </div>}
-    </div>;
+  function deleteTask(taskId) {
+    setTasks(current => current.filter(task => task.id !== taskId));
   }
 
-  function FinanceScreen({activeView='overview',onViewChange=()=>{}}){
-    const localFinView=FINANCE_VIEW_IDS.includes(activeView)?activeView:'overview';
-    const [editTxId,setEditTxId]=useState(null);
-    const [finOverviewOpen,setFinOverviewOpen]=useState({accounts:false,spending:false});
-    const accountTypeLabel=type=>(ACCOUNT_TYPE_OPTIONS.find(option=>option.id===type)?.label)||'Other';
-    const getTransactionAccountLabel=tx=>{
-      const account=financialAccountMap.get(tx.accountId);
-      if(account)return formatAccountLabel(account);
-      return tx.accountId?String(tx.accountId).replace(/_/g,' '):'No account';
-    };
-    const TransactionRow=({transaction,showEditButton=false,isEditing=false,onToggleEdit})=>{
-      const cat=financeCategoryMap.get(transaction.category)||{clr:C.muted,label:'Other'};
-      return <div style={{display:'flex',flexWrap:'wrap',alignItems:'flex-start',gap:8}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0,flex:'1 1 180px'}}>
-          {!transaction.isReviewed&&<div style={{width:6,height:6,borderRadius:'50%',background:C.amber,flexShrink:0,marginTop:5}}/>}
-          <div style={{fontSize:13,color:C.tx,fontWeight:500,lineHeight:1.35,minWidth:0,overflowWrap:'anywhere'}}>{transaction.merchant}</div>
-        </div>
-        <div style={{marginLeft:'auto',textAlign:'right',minWidth:84,flex:'0 0 auto'}}>
-          <div style={{fontSize:13,fontWeight:700,color:transaction.isCredit?C.sage:C.tx,whiteSpace:'nowrap'}}>{transaction.isCredit?'+':'-'}{fmtMoneyD(transaction.amount)}</div>
-          {showEditButton&&<button onClick={onToggleEdit} style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0,marginTop:2}}>{isEditing?'close':'edit'}</button>}
-        </div>
-        <div style={{width:'100%',fontSize:10,color:C.muted,lineHeight:1.4,paddingLeft:transaction.isReviewed?0:12,overflowWrap:'anywhere'}}>
-          {formatDate(transaction.date,'monthDayShort')} · <span style={{color:cat.clr}}>{cat.label}</span> · {getTransactionAccountLabel(transaction)}{transaction.isTransfer?' · transfer':''}
-        </div>
-      </div>;
-    };
+  function moveTask(taskId, direction) {
+    setTasks(current => {
+      const currentTask = current.find(task => task.id === taskId);
+      if (!currentTask) return current;
 
-    // Filtered transactions
-    const visibleTx=useMemo(()=>{
-      let list=[...(transactions||[])].sort((a,b)=>b.date.localeCompare(a.date));
-      if(finSearch)list=list.filter(t=>(t.merchant+(t.description||'')+(t.notes||'')).toLowerCase().includes(finSearch.toLowerCase()));
-      if(finCatFilter)list=list.filter(t=>t.category===finCatFilter);
-      return list;
-    },[transactions,finSearch,finCatFilter]);
+      const sameStatusTasks = sortTasks(current.filter(task => task.status === currentTask.status));
+      const index = sameStatusTasks.findIndex(task => task.id === taskId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= sameStatusTasks.length) return current;
 
-    const sub=()=>{
-      const labels={overview:'Overview',transactions:'Feed',categories:'By Category',recurring:'Recurring',trends:'Trends'};
-      return <div style={{display:'flex',gap:4,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {Object.entries(labels).map(([k,v])=><button key={k} onClick={()=>onViewChange(k)} style={{flexShrink:0,padding:'6px 12px',borderRadius:10,border:`0.5px solid ${localFinView===k?C.sage:C.bd}`,background:localFinView===k?C.sageL:'transparent',color:localFinView===k?C.sageDk:C.muted,fontSize:11,fontWeight:localFinView===k?600:400,cursor:'pointer'}}>{v}</button>)}
-      </div>;
-    };
+      const reordered = [...sameStatusTasks];
+      const [movedTask] = reordered.splice(index, 1);
+      reordered.splice(nextIndex, 0, movedTask);
 
-    // Sticky + Transaction button rendered in every sub-view header
-    const addBtn=<button style={{...S.btnSmall(C.sage),padding:'8px 16px',fontSize:13,fontWeight:600}} onClick={()=>setShowAddTx(true)}>+ Transaction</button>;
+      const updatedById = new Map(
+        reordered.map((task, orderIndex) => [task.id, { ...task, order: orderIndex + 1 }]),
+      );
 
-    // ── OVERVIEW ─────────────────────────────────────────────────────
-    if(localFinView==='overview'){
-      const totalBalance=activeFinancialAccounts.filter(a=>a.currentBalance!=null).reduce((s,a)=>s+a.currentBalance,0);
-      const hasBalances=activeFinancialAccounts.some(a=>a.currentBalance!=null);
-      const topCats=catSpend.slice(0,3);
-      return <div style={S.body}>
-        {/* Header row with sub-tabs and + button */}
-        <div style={{...S.row,marginBottom:10,gap:8}}>
-          <div style={{flex:1,overflowX:'auto'}}>{sub()}</div>
-          {addBtn}
-        </div>
-        {/* Quick add templates */}
-        <div style={S.card}>
-          <span style={S.lbl}>Quick Add</span>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {QUICK_MERCHANTS.map(m=><button key={m.label} onClick={()=>quickAddMerchant(m)} style={{padding:'6px 10px',borderRadius:20,border:`0.5px solid ${C.bd}`,background:C.surf,color:C.tx,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
-              <span>{m.icon}</span><span>{m.label}</span>
-            </button>)}
-            <button onClick={duplicateLastTx} style={{padding:'6px 10px',borderRadius:20,border:`0.5px solid ${C.navy}`,background:'transparent',color:C.navy,fontSize:11,cursor:'pointer'}}>↩ Duplicate last</button>
-          </div>
-        </div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Categories</span>
-            <button style={{...S.btnGhost,fontSize:11,padding:'4px 8px'}} onClick={addCategory}>+ Add</button>
-          </div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {financeCategories.filter(category=>category.id!=='transfer').map(category=><button key={category.id} onClick={()=>editCategory(category)} style={{padding:'6px 10px',borderRadius:20,border:`0.5px solid ${category.clr}`,background:C.surf,color:C.tx,fontSize:11,cursor:'pointer'}}>
-              {category.label}
-            </button>)}
-          </div>
-        </div>
-        {/* Accounts */}
-        <CollapsibleCard
-          title="Accounts"
-          summary={hasBalances?`${fmtMoney(totalBalance)} total · ${activeFinancialAccounts.length} account${activeFinancialAccounts.length!==1?'s':''}`:`${activeFinancialAccounts.length} account${activeFinancialAccounts.length!==1?'s':''}`}
-          open={finOverviewOpen.accounts}
-          onToggle={()=>setFinOverviewOpen(s=>({...s,accounts:!s.accounts}))}>
-          {activeFinancialAccounts.map(a=><div key={a.id} style={{padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <div style={{...S.row,alignItems:'flex-start',gap:10}}>
-              <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:13,color:C.tx,fontWeight:500,lineHeight:1.3,overflowWrap:'anywhere'}}>{formatAccountLabel(a)}</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:2}}>{accountTypeLabel(a.type)}{a.startingBalance!=null?` · start ${fmtMoney(a.startingBalance)}`:''}</div>
-              </div>
-              <div style={{textAlign:'right',flexShrink:0}}>
-                {a.currentBalance!=null?<div style={{fontSize:14,fontWeight:700,color:C.sage}}>{fmtMoney(a.currentBalance)}</div>:<div style={{fontSize:11,color:C.muted}}>—</div>}
-                <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:4}}>
-                  <button style={{background:'none',border:'none',color:C.muted,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>openEditAccount(a)}>edit</button>
-                  <button style={{background:'none',border:'none',color:C.red,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>archiveAccount(a.id)}>archive</button>
-                </div>
-              </div>
-            </div>
-          </div>)}
-          {activeFinancialAccounts.length===0&&<div style={{fontSize:11,color:C.muted,marginBottom:8}}>No active accounts yet. Add one to start tracking transactions.</div>}
-          {archivedFinancialAccounts.length>0&&<div style={{marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.bd}`}}>
-            <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.7px',color:C.muted,textTransform:'uppercase',marginBottom:6}}>Archived</div>
-            {archivedFinancialAccounts.map(a=><div key={a.id} style={{...S.row,padding:'6px 0',gap:8}}>
-              <div style={{minWidth:0,flex:1}}>
-                <div style={{fontSize:12,color:C.tx,lineHeight:1.3,overflowWrap:'anywhere'}}>{formatAccountLabel(a)}</div>
-                <div style={{fontSize:10,color:C.muted,marginTop:2}}>{accountTypeLabel(a.type)}</div>
-              </div>
-              <div style={{display:'flex',gap:6,flexShrink:0}}>
-                <button style={{background:'none',border:'none',color:C.navy,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>restoreAccount(a.id)}>restore</button>
-                <button style={{background:'none',border:'none',color:C.red,fontSize:10,cursor:'pointer',padding:0}} onClick={()=>deleteAccount(a.id)}>delete</button>
-              </div>
-            </div>)}
-          </div>}
-          <button style={{...S.btnGhost,width:'100%',marginTop:10}} onClick={openAddAccount}>+ Add account</button>
-          {hasBalances&&<div style={{...S.row,marginTop:10,paddingTop:10,borderTop:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:12,fontWeight:600,color:C.tx}}>Total</span>
-            <span style={{fontSize:18,fontWeight:700,color:C.tx}}>{fmtMoney(totalBalance)}</span>
-          </div>}
-          {!hasBalances&&activeFinancialAccounts.length>0&&<div style={{fontSize:11,color:C.muted,marginTop:6}}>Set balances in Settings → Finance if you want totals here.</div>}
-        </CollapsibleCard>
-        {/* Spend summary */}
-        <CollapsibleCard
-          title="Spending"
-          summary={`${fmtMoney(weekSpend)} this week · ${fmtMoney(monthSpend)} this month`}
-          open={finOverviewOpen.spending}
-          onToggle={()=>setFinOverviewOpen(s=>({...s,spending:!s.spending}))}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-            {[{l:'This week',v:weekSpend},{l:'This month',v:monthSpend}].map(({l,v})=>
-              <div key={l} style={{background:C.surf,borderRadius:10,padding:'10px',textAlign:'center'}}>
-                <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{l}</div>
-                <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{fmtMoney(v)}</div>
-              </div>
-            )}
-          </div>
-          {topCats.length>0&&topCats.map(c=><div key={c.id} style={{marginBottom:6}}>
-            <div style={{...S.row,marginBottom:3}}>
-              <span style={{fontSize:11,color:C.tx}}>{c.label}</span>
-              <span style={{fontSize:11,color:C.muted}}>{fmtMoney(c.total)}</span>
-            </div>
-            <ProgressBar value={c.total} max={monthSpend} color={c.clr}/>
-          </div>)}
-        </CollapsibleCard>
-        {/* Alerts */}
-        {(unreviewed>0||billsDueSoon.length>0)&&<div style={S.card}>
-          <span style={S.lbl}>Attention</span>
-          {unreviewed>0&&<div style={{...S.row,padding:'8px 0',borderBottom:billsDueSoon.length?`0.5px solid ${C.bd}`:'none'}}>
-            <span style={{fontSize:13,color:C.tx}}>{unreviewed} unreviewed transaction{unreviewed>1?'s':''}</span>
-            <button style={S.btnSmall(C.amber)} onClick={()=>{setFinCatFilter(null);onViewChange('transactions');}}>Review</button>
-          </div>}
-          {billsDueSoon.map(r=><div key={r.merchant} style={{...S.row,padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <div>
-              <div style={{fontSize:13,color:C.tx}}>{r.merchant}</div>
-              <div style={{fontSize:10,color:C.amber}}>Due {formatDate(r.nextExpectedDate,'monthDayLong')} · {fmtMoney(r.averageAmount)}</div>
-            </div>
-            <span style={{fontSize:10,color:C.muted}}>{r.frequency}</span>
-          </div>)}
-        </div>}
-        {/* Recent transactions */}
-        {(transactions||[]).length>0&&<div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Recent</span>
-            <button style={{...S.btnGhost,fontSize:11,padding:'4px 8px'}} onClick={()=>onViewChange('transactions')}>All</button>
-          </div>
-          {[...(transactions||[])].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map((t,i,items)=><div key={t.transactionId} style={{padding:'8px 0',borderBottom:i<items.length-1?`0.5px solid ${C.bd}`:'none'}}>
-            <TransactionRow transaction={t}/>
-          </div>)}
-        </div>}
-        {(transactions||[]).length===0&&<div style={{textAlign:'center',padding:'30px 0',color:C.muted,fontSize:13}}>
-          No transactions yet.<br/>Import a CSV or add manually.
-          <div style={{marginTop:12,display:'flex',gap:8,justifyContent:'center'}}>
-            <button style={S.btnSmall(C.navy)} onClick={()=>setShowImport(true)}>Import CSV</button>
-            <button style={S.btnSmall(C.sage)} onClick={()=>setShowAddTx(true)}>+ Manual</button>
-          </div>
-        </div>}
-      </div>;
-    }
-
-    // ── TRANSACTIONS ──────────────────────────────────────────────────
-    if(localFinView==='transactions'){
-      return <div style={S.body}>
-        <div style={{...S.row,marginBottom:8,gap:8}}>
-          <div style={{flex:1,overflowX:'auto'}}>{sub()}</div>
-          {addBtn}
-        </div>
-        <div style={{...S.row,marginBottom:8,gap:6}}>
-          <FieldInput value={finSearch} onChange={e=>setFinSearch(e.target.value)} placeholder="Search transactions..." style={{...S.inp,flex:1,padding:'7px 10px'}}/>
-          <button style={S.btnSmall(C.navy)} onClick={()=>setShowImport(true)}>Import CSV</button>
-        </div>
-        {/* Category filter chips */}
-        <div style={{display:'flex',gap:4,overflowX:'auto',marginBottom:10,paddingBottom:2}}>
-          <button onClick={()=>setFinCatFilter(null)} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`0.5px solid ${!finCatFilter?C.sage:C.bd}`,background:!finCatFilter?C.sageL:'transparent',color:!finCatFilter?C.sageDk:C.muted,fontSize:10,cursor:'pointer'}}>All</button>
-          {financeCategories.map(c=><button key={c.id} onClick={()=>setFinCatFilter(finCatFilter===c.id?null:c.id)} style={{flexShrink:0,padding:'4px 10px',borderRadius:20,border:`0.5px solid ${finCatFilter===c.id?c.clr:C.bd}`,background:finCatFilter===c.id?c.clr:'transparent',color:finCatFilter===c.id?C.white:C.muted,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
-        </div>
-        {visibleTx.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:C.muted,fontSize:13}}>No transactions match.</div>}
-        <div style={S.card}>
-          {visibleTx.map((t,i)=>{
-            const isEdit=editTxId===t.transactionId;
-            return <div key={t.transactionId} style={{padding:'10px 0',borderBottom:i<visibleTx.length-1?`0.5px solid ${C.bd}`:'none'}}>
-              <TransactionRow transaction={t} showEditButton isEditing={isEdit} onToggleEdit={()=>setEditTxId(isEdit?null:t.transactionId)}/>
-              {isEdit&&<div style={{marginTop:8,padding:'10px',background:C.surf,borderRadius:10}}>
-                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
-                  {financeCategories.map(c=><button key={c.id} onClick={()=>{updateTxCategory(t.transactionId,c.id,true);setEditTxId(null);}} style={{padding:'4px 8px',borderRadius:6,border:`1px solid ${t.category===c.id?c.clr:C.bd}`,background:t.category===c.id?c.clr:'transparent',color:t.category===c.id?C.white:C.tx,fontSize:10,cursor:'pointer'}}>{c.label}</button>)}
-                </div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {!t.isReviewed&&<button style={S.btnSmall(C.sage)} onClick={()=>{reviewTx(t.transactionId);setEditTxId(null);}}>Mark reviewed</button>}
-                  <button style={{...S.btnGhost,fontSize:11,color:C.red,borderColor:C.red}} onClick={()=>{deleteTx(t.transactionId);setEditTxId(null);}}>Delete</button>
-                </div>
-              </div>}
-            </div>;
-          })}
-        </div>
-      </div>;
-    }
-
-    // ── CATEGORIES ────────────────────────────────────────────────────
-    if(localFinView==='categories'){
-      const prev=formatDateKey(new Date(now.getFullYear(),now.getMonth()-1,1));
-      const prevEnd=formatDateKey(new Date(now.getFullYear(),now.getMonth(),0));
-      const prevTx=spendTx.filter(t=>t.date>=prev&&t.date<=prevEnd);
-      const prevSpend=prevTx.reduce((s,t)=>s+t.amount,0);
-      return <div style={S.body}>
-        <div style={{...S.row,marginBottom:10,gap:8}}><div style={{flex:1,overflowX:'auto'}}>{sub()}</div>{addBtn}</div>
-        <div style={{...S.row,marginBottom:10}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{formatDate(monthStart,'monthYear')}</span>
-          <span style={{fontSize:13,fontWeight:700,color:C.tx}}>{fmtMoney(monthSpend)}</span>
-        </div>
-        {catSpend.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:C.muted,fontSize:13}}>No spending data yet.</div>}
-        {catSpend.map(c=><div key={c.id} style={{...S.card,marginBottom:8}}>
-          <div style={{...S.row,marginBottom:6}}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <div style={{width:10,height:10,borderRadius:'50%',background:c.clr}}/>
-              <span style={{fontSize:13,fontWeight:500,color:C.tx}}>{c.label}</span>
-            </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontSize:14,fontWeight:700,color:C.tx}}>{fmtMoney(c.total)}</div>
-              <div style={{fontSize:10,color:C.muted}}>{monthSpend>0?Math.round(c.total/monthSpend*100):0}% of spend</div>
-            </div>
-          </div>
-          <ProgressBar value={c.total} max={monthSpend} color={c.clr}/>
-          <button style={{...S.btnGhost,marginTop:8,fontSize:11,padding:'4px 8px'}} onClick={()=>{setFinCatFilter(c.id);onViewChange('transactions');}}>View transactions</button>
-        </div>)}
-        {prevSpend>0&&<div style={{...S.card,background:C.surf}}>
-          <span style={S.lbl}>Prior month</span>
-          <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{fmtMoney(prevSpend)}</div>
-          <div style={{fontSize:11,color:monthSpend>prevSpend?C.red:C.sage,marginTop:4}}>
-            {monthSpend>prevSpend?'+':`-`}{fmtMoney(Math.abs(monthSpend-prevSpend))} vs last month
-          </div>
-        </div>}
-      </div>;
-    }
-
-    // ── RECURRING ─────────────────────────────────────────────────────
-    if(localFinView==='recurring'){
-      return <div style={S.body}>
-        <div style={{...S.row,marginBottom:10,gap:8}}><div style={{flex:1,overflowX:'auto'}}>{sub()}</div>{addBtn}</div>
-        <div style={{...S.row,marginBottom:10}}>
-          <span style={{fontSize:13,fontWeight:600,color:C.tx}}>Recurring Expenses</span>
-          <span style={{fontSize:11,color:C.muted}}>{(recurringExpenses||[]).length} detected</span>
-        </div>
-        {(recurringExpenses||[]).length===0&&<div style={{textAlign:'center',padding:'24px 0',color:C.muted,fontSize:13}}>
-          No recurring expenses detected yet.<br/>Import at least 2 months of transactions.
-        </div>}
-        {(recurringExpenses||[]).map((r,i)=>{
-          const cat=financeCategoryMap.get(r.category)||{clr:C.muted,label:'Other'};
-          const daysUntil=r.nextExpectedDate?Math.ceil((new Date(r.nextExpectedDate+'T12:00:00')-now)/86400000):null;
-          const isDue=daysUntil!==null&&daysUntil<=7;
-          return <div key={i} style={{...S.card,borderLeft:`3px solid ${isDue?C.amber:cat.clr}`}}>
-            <div style={S.row}>
-              <div>
-                <div style={{fontSize:14,fontWeight:600,color:C.tx}}>{r.merchant}</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:2}}>
-                  {fmtMoney(r.averageAmount)} · {r.frequency}
-                  {r.nextExpectedDate&&<span style={{color:isDue?C.amber:C.muted}}> · due {formatDate(r.nextExpectedDate,'monthDayLong')}{isDue?` (${daysUntil}d)`:''}</span>}
-                </div>
-              </div>
-              <span style={S.tag(cat.clr,C.surf)}>{cat.label||'Other'}</span>
-            </div>
-          </div>;
-        })}
-        <div style={{...S.card,background:C.surf,marginTop:4}}>
-          <span style={S.lbl}>Recurring total</span>
-          <div style={{fontSize:18,fontWeight:700,color:C.tx}}>{fmtMoney((recurringExpenses||[]).reduce((s,r)=>s+r.averageAmount,0))}/mo est.</div>
-        </div>
-      </div>;
-    }
-
-    // ── TRENDS ────────────────────────────────────────────────────────
-    if(localFinView==='trends'){
-      // Build last 4 weeks
-      const weeks=Array.from({length:4},(_,i)=>{
-        const d=new Date(weekMon);d.setDate(d.getDate()-i*7);
-        const wk=formatDateKey(d);
-        const wkEnd=new Date(d);wkEnd.setDate(d.getDate()+6);
-        const total=spendTx.filter(t=>t.date>=wk&&t.date<=formatDateKey(wkEnd)).reduce((s,t)=>s+t.amount,0);
-        return{label:formatDate(d,'monthDayShort'),total,wk};
-      }).reverse();
-      const maxWeek=Math.max(...weeks.map(w=>w.total),1);
-      return <div style={S.body}>
-        <div style={{...S.row,marginBottom:10,gap:8}}><div style={{flex:1,overflowX:'auto'}}>{sub()}</div>{addBtn}</div>
-        <div style={S.card}>
-          <span style={S.lbl}>Weekly spend — last 4 weeks</span>
-          {weeks.map(w=><div key={w.wk} style={{marginBottom:10}}>
-            <div style={{...S.row,marginBottom:4}}>
-              <span style={{fontSize:11,color:C.tx}}>{w.label}</span>
-              <span style={{fontSize:11,fontWeight:600,color:C.tx}}>{fmtMoney(w.total)}</span>
-            </div>
-            <ProgressBar value={w.total} max={maxWeek} color={C.navy}/>
-          </div>)}
-        </div>
-        <div style={S.card}>
-          <span style={S.lbl}>This month by category</span>
-          {catSpend.length===0&&<div style={{fontSize:11,color:C.muted}}>No data yet.</div>}
-          {catSpend.map(c=><div key={c.id} style={{marginBottom:8}}>
-            <div style={{...S.row,marginBottom:3}}>
-              <span style={{fontSize:11,color:C.tx}}>{c.label}</span>
-              <span style={{fontSize:11,color:C.muted}}>{fmtMoney(c.total)}</span>
-            </div>
-            <ProgressBar value={c.total} max={monthSpend} color={c.clr}/>
-          </div>)}
-        </div>
-        <div style={S.card}>
-          <span style={S.lbl}>Income vs spend this month</span>
-          {(()=>{
-            const income=(transactions||[]).filter(t=>t.isCredit&&!t.isTransfer&&t.date>=monthStart).reduce((s,t)=>s+t.amount,0);
-            const net=income-monthSpend;
-            return <div>
-              <div style={{...S.row,marginBottom:6}}>
-                <span style={{fontSize:12,color:C.tx}}>Income</span><span style={{fontSize:14,fontWeight:700,color:C.sage}}>+{fmtMoney(income)}</span>
-              </div>
-              <div style={{...S.row,marginBottom:6}}>
-                <span style={{fontSize:12,color:C.tx}}>Spend</span><span style={{fontSize:14,fontWeight:700,color:C.tx}}>-{fmtMoney(monthSpend)}</span>
-              </div>
-              <div style={{height:'0.5px',background:C.bd,margin:'6px 0'}}/>
-              <div style={S.row}>
-                <span style={{fontSize:12,fontWeight:600,color:C.tx}}>Net</span>
-                <span style={{fontSize:16,fontWeight:700,color:net>=0?C.sage:C.red}}>{net>=0?'+':''}{fmtMoney(net)}</span>
-              </div>
-            </div>;
-          })()}
-        </div>
-      </div>;
-    }
-
-    return <div style={S.body}>
-      <div style={S.card}>
-        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:6}}>Finance view unavailable</div>
-        <div style={{fontSize:11,color:C.muted}}>Resetting to Overview will restore the finance workspace.</div>
-        <button style={{...S.btnGhost,marginTop:10}} onClick={()=>onViewChange('overview')}>Open Overview</button>
-      </div>
-    </div>;
+      return sortTasks(current.map(task => updatedById.get(task.id) || task));
+    });
   }
 
-  // ── IMPORT CSV MODAL (rendered at App level) ──────────────────────
-  function ImportModal(){
-    const [csvText,setCsvText]=useState('');
-    const [targetAccountId,setTargetAccountId]=useState(getDefaultAccountId(activeFinancialAccounts,true)||IMPORT_ACCOUNT_AUTO);
-    const fileRef=useRef(null);
-    const handleFile=e=>{
-      const f=e.target.files?.[0];if(!f)return;
-      const reader=new FileReader();
-      reader.onload=ev=>setCsvText(ev.target.result||'');
-      reader.readAsText(f);
-    };
-    return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
-      <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'80vh',overflowY:'auto'}}>
-        <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:12}}>Import Transactions</div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-          Export CSV from Ally (Account → Transactions → Export) or Regions (Online Banking → Download). Paste the CSV text below or select the file.
-        </div>
-        {activeFinancialAccounts.length>0&&<>
-          <span style={S.lbl}>Import Into</span>
-          <FieldSelect value={targetAccountId} onChange={e=>setTargetAccountId(e.target.value)} style={{...S.inp,marginBottom:10}}>
-            <option value={IMPORT_ACCOUNT_AUTO}>Match or create from CSV source</option>
-            {activeFinancialAccounts.map(account=><option key={account.id} value={account.id}>{formatAccountLabel(account)}</option>)}
-          </FieldSelect>
-        </>}
-        <FieldInput type="file" accept=".csv,.txt" ref={fileRef} onChange={handleFile} style={{display:'none'}}/>
-        <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8}} onClick={()=>fileRef.current?.click()}>Select CSV file</button>
-        <FieldTextarea value={csvText} onChange={e=>setCsvText(e.target.value)} placeholder="Or paste CSV text here..." style={{...S.inp,height:120,resize:'none',fontSize:11,marginBottom:12}}/>
-        <div style={{display:'flex',gap:8}}>
-          <button style={S.btnSolid(C.navy)} onClick={()=>importTransactions(csvText,targetAccountId===IMPORT_ACCOUNT_AUTO?'':targetAccountId)}>Import</button>
-          <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowImport(false)}>Cancel</button>
-        </div>
-      </div>
-    </div>;
+  function commitTitle(taskId, title) {
+    updateTask(taskId, task => ({ ...task, title, shouldFocusTitle: false }));
   }
 
-  // ── ADD MANUAL TX MODAL (rendered at App level) ───────────────────
-  function AddTxModal(){
-    // Toggle helper renders a labeled switch
-    function Toggle({label,on,onToggle,activeColor=C.sage}){
-      return <div style={{...S.row,paddingBottom:10,borderBottom:`0.5px solid ${C.bd}`,marginBottom:10}}>
-        <span style={{fontSize:13,color:C.tx}}>{label}</span>
-        <button onClick={onToggle} style={{width:44,height:26,borderRadius:13,background:on?activeColor:C.surf,border:`1px solid ${C.bd}`,cursor:'pointer',position:'relative',flexShrink:0}}>
-          <div style={{width:20,height:20,borderRadius:'50%',background:C.white,boxShadow:C.shadow,position:'absolute',top:3,transition:'left 0.18s',left:on?'20px':'3px'}}/>
-        </button>
-      </div>;
-    }
-    const lastTx=[...(transactions||[])].sort((a,b)=>b.date.localeCompare(a.date))[0];
-    return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
-      <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'88vh',overflowY:'auto'}}>
-        {/* Header */}
-        <div style={{...S.row,marginBottom:16}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.tx}}>Add Transaction</div>
-          {lastTx&&<button style={{...S.btnGhost,fontSize:11,padding:'4px 10px',color:C.navy,borderColor:C.navy}} onClick={duplicateLastTx}>↩ Dup last: {lastTx.merchant.substring(0,12)}</button>}
-        </div>
-
-        {/* Merchant */}
-        <span style={S.lbl}>Merchant</span>
-        <FieldInput value={txForm.merchant} onChange={e=>setTxForm(f=>({...f,merchant:e.target.value}))} placeholder="e.g. Aldi" style={{...S.inp,marginBottom:8}} autoFocus/>
-
-        {/* Amount + Date */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-          <div>
-            <span style={S.lbl}>Amount ($)</span>
-            <FieldInput type="number" inputMode="decimal" value={txForm.amount} onChange={e=>setTxForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" style={S.inp}/>
-          </div>
-          <div>
-            <span style={S.lbl}>Date</span>
-            <FieldInput type="date" value={txForm.date} onChange={e=>setTxForm(f=>({...f,date:e.target.value}))} style={S.inp}/>
-          </div>
-        </div>
-
-        {/* Account */}
-        <span style={S.lbl}>Account</span>
-        {activeFinancialAccounts.length>0
-          ?<FieldSelect value={txForm.accountId} onChange={e=>setTxForm(f=>({...f,accountId:e.target.value}))} style={{...S.inp,marginBottom:8}}>
-            {activeFinancialAccounts.map(a=><option key={a.id} value={a.id}>{formatAccountLabel(a)}</option>)}
-          </FieldSelect>
-          :<div style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'12px',marginBottom:8}}>
-            <div style={{fontSize:12,color:C.tx,marginBottom:8}}>Add an account before saving transactions.</div>
-            <button style={S.btnSmall(C.navy)} onClick={()=>{setShowAddTx(false);openAddAccount();}}>+ Add account</button>
-          </div>}
-
-        {/* Category chips */}
-        <span style={S.lbl}>Category</span>
-        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:12}}>
-          {financeCategories.filter(c=>c.id!=='transfer').map(c=><button key={c.id} onClick={()=>setTxForm(f=>({...f,category:c.id,isTransfer:false}))} style={{padding:'5px 10px',borderRadius:20,border:`1.5px solid ${txForm.category===c.id?c.clr:C.bd}`,background:txForm.category===c.id?c.clr:'transparent',color:txForm.category===c.id?C.white:C.tx,fontSize:11,cursor:'pointer',fontWeight:txForm.category===c.id?600:400}}>{c.label}</button>)}
-        </div>
-
-        {/* Toggles */}
-        <Toggle label="Income / credit" on={txForm.isCredit} onToggle={()=>setTxForm(f=>({...f,isCredit:!f.isCredit}))} activeColor={C.sage}/>
-        <Toggle label="Recurring bill or subscription" on={txForm.isRecurring} onToggle={()=>setTxForm(f=>({...f,isRecurring:!f.isRecurring}))} activeColor={C.navy}/>
-        <Toggle label="Transfer between accounts (excluded from spend totals)" on={txForm.isTransfer} onToggle={()=>setTxForm(f=>({...f,isTransfer:!f.isTransfer,category:!f.isTransfer?'transfer':f.category}))} activeColor={C.amber}/>
-
-        {/* Notes */}
-        <FieldInput value={txForm.notes} onChange={e=>setTxForm(f=>({...f,notes:e.target.value}))} placeholder="Note (optional)..." style={{...S.inp,marginBottom:16}}/>
-
-        {/* Actions */}
-        <div style={{display:'flex',gap:8}}>
-          <button style={{...S.btnSolid(C.sage),opacity:activeFinancialAccounts.length?1:0.6,pointerEvents:activeFinancialAccounts.length?'auto':'none'}} onClick={()=>addManualTx()}>Save Transaction</button>
-          <button style={{...S.btnGhost,flex:0,padding:'11px 16px'}} onClick={()=>setShowAddTx(false)}>Cancel</button>
-        </div>
-      </div>
-    </div>;
+  function toggleDone(taskId) {
+    updateTask(taskId, task => ({
+      ...task,
+      status: task.status === 'done' ? 'active' : 'done',
+      shouldFocusTitle: false,
+    }));
   }
 
-  function AccountModal(){
-    const isEdit=!!editingAccountId;
-    return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
-      <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px 32px',width:'100%',maxWidth:430,margin:'0 auto',maxHeight:'88vh',overflowY:'auto'}}>
-        <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:16}}>{isEdit?'Edit Account':'Add Account'}</div>
-        <span style={S.lbl}>Account Name</span>
-        <FieldInput value={accountForm.name} onChange={e=>setAccountForm(form=>({...form,name:e.target.value}))} placeholder="Checking" style={{...S.inp,marginBottom:8}} autoFocus/>
-        <span style={S.lbl}>Institution</span>
-        <FieldInput value={accountForm.institution} onChange={e=>setAccountForm(form=>({...form,institution:e.target.value}))} placeholder="Ally" style={{...S.inp,marginBottom:8}}/>
-        <span style={S.lbl}>Type</span>
-        <FieldSelect value={accountForm.type} onChange={e=>setAccountForm(form=>({...form,type:e.target.value}))} style={{...S.inp,marginBottom:8}}>
-          {ACCOUNT_TYPE_OPTIONS.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
-        </FieldSelect>
-        <span style={S.lbl}>Starting Balance (optional)</span>
-        <FieldInput type="number" inputMode="decimal" value={accountForm.startingBalance} onChange={e=>setAccountForm(form=>({...form,startingBalance:e.target.value}))} placeholder="0.00" style={{...S.inp,marginBottom:12}}/>
-        <div style={{...S.row,paddingBottom:10,borderBottom:`0.5px solid ${C.bd}`,marginBottom:16}}>
-          <span style={{fontSize:13,color:C.tx}}>Active for new transactions</span>
-          <button onClick={()=>setAccountForm(form=>({...form,isActive:!form.isActive}))} style={{width:44,height:26,borderRadius:13,background:accountForm.isActive?C.sage:C.surf,border:`1px solid ${C.bd}`,cursor:'pointer',position:'relative',flexShrink:0}}>
-            <div style={{width:20,height:20,borderRadius:'50%',background:C.white,boxShadow:C.shadow,position:'absolute',top:3,transition:'left 0.18s',left:accountForm.isActive?'20px':'3px'}}/>
-          </button>
-        </div>
-        <div style={{display:'flex',gap:8}}>
-          <button style={S.btnSolid(C.sage)} onClick={saveAccount}>{isEdit?'Save Account':'Add Account'}</button>
-          <button style={{...S.btnGhost,flex:0,padding:'11px 16px'}} onClick={()=>setShowAccountModal(false)}>Cancel</button>
-        </div>
-      </div>
-    </div>;
+  function addSubtask(taskId) {
+    updateTask(taskId, task => ({
+      ...task,
+      subtasks: [...task.subtasks, { id: generateId('subtask'), title: '', done: false }],
+    }));
   }
 
-  function SettingsScreen({activeSection=null,onSectionChange=()=>{}}){
-    const [clientIdInput,setClientIdInput]=useState(profile.googleClientId||'');
-    const restoreFileRef=useRef(null);
-    function exportAllData(){
-      const data=JSON.stringify(profile,null,2);
-      const blob=new Blob([data],{type:'application/json'});
-      const url=URL.createObjectURL(blob);
-      const a=document.createElement('a');a.href=url;a.download=`personal-hub-backup-${TODAY}.json`;a.click();
-      URL.revokeObjectURL(url);
-      updateProfile(p=>({...p,securitySettings:{...p.securitySettings,dataExportHistory:[...(p.securitySettings?.dataExportHistory||[]),TODAY]}}));
-      showNotif('Backup exported','success');
-    }
-    function restoreAllData(e){
-      const file=e.target.files?.[0];
-      if(!file)return;
-      const reader=new FileReader();
-      reader.onload=ev=>{
-        try{
-          const parsed=JSON.parse(ev.target?.result||'{}');
-          if(!confirm('Restore this backup and replace current local data?'))return;
-          const restored=normalizeLoadedProfile(parsed);
-          setProfile(restored);
-          storage.setJSON(STORAGE_KEYS.profile,restored);
-          showNotif('Backup restored','success');
-        }catch{
-          showNotif('Backup restore failed','error');
-        }finally{
-          e.target.value='';
-        }
-      };
-      reader.readAsText(file);
-    }
-    const sections=[
-      {id:'app', label:'App'},
-      {id:'workcal', label:'Work Calendar'},
-      {id:'finance', label:'Finance'},
-      {id:'google',  label:'Google Integration'},
-      {id:'fitness', label:'Fitness Profile'},
-      {id:'goals',   label:'Goals and Targets'},
-      {id:'meals',   label:'Meal Preferences'},
-      {id:'notifications',label:'Notifications'},
-      {id:'security',    label:'Security & Data'},
-    ];
-    return <div style={S.body}>
-      {sections.map(sec=><div key={sec.id} style={S.card}>
-        <button style={{...S.row,width:'100%',background:'none',border:'none',cursor:'pointer',padding:0}} onClick={()=>onSectionChange(activeSection===sec.id?null:sec.id)}>
-          <span style={{fontSize:14,fontWeight:600,color:C.tx}}>{sec.label}</span>
-          <span style={{color:C.muted,fontSize:16}}>{activeSection===sec.id?'^':'v'}</span>
-        </button>
-        {activeSection===sec.id&&<div style={{marginTop:12,paddingTop:12,borderTop:`0.5px solid ${C.bd}`}}>
-          {sec.id==='app'&&<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-              Install controls now live on the Home screen when this browser makes them available. PWA installability and service workers only work when the app is served from localhost or HTTPS, not when opened from file://.
-            </div>
-            {isInstalled
-              ?<div style={{...S.card,padding:'10px 12px',background:C.sageL,borderColor:'transparent'}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.sageDk,marginBottom:4}}>Installed</div>
-                <div style={{fontSize:11,color:C.tx2}}>This device is already running the standalone app.</div>
-              </div>
-              :<div style={{fontSize:11,color:C.muted,lineHeight:1.5}}>
-                  Installation is not available right now. Open the app from a supported browser on localhost or HTTPS, then use the browser install or Add to Home Screen action if prompted.
-                </div>
-            }
-          </div>}
-          {sec.id==='finance'&&<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-              Manage balances for your saved accounts here. Add, edit, archive, and restore accounts from the Finance tab. Everything stays local.
-            </div>
-            <span style={S.lbl}>Account Balances</span>
-            {normalizeFinancialAccounts(financialAccounts).map(a=><div key={a.id} style={{...S.card,padding:'10px 12px',marginBottom:6}}>
-              <div style={{...S.row,marginBottom:6}}>
-                <div>
-                  <div style={{fontSize:13,fontWeight:600,color:C.tx}}>{formatAccountLabel(a)}</div>
-                  <div style={{fontSize:10,color:C.muted}}>{(ACCOUNT_TYPE_OPTIONS.find(option=>option.id===a.type)?.label)||'Other'}{a.isActive===false?' · archived':''}</div>
-                </div>
-                {a.currentBalance!=null&&<div style={{fontSize:15,fontWeight:700,color:C.sage}}>{fmtMoney(a.currentBalance)}</div>}
-              </div>
-              <div style={{display:'flex',gap:6}}>
-                <FieldInput placeholder="Balance" type="number" defaultValue={a.currentBalance??''} style={{...S.inp,flex:1,padding:'6px 8px',fontSize:12}} onBlur={e=>updateAccountBalance(a.id,e.target.value,a.maskedNumber)}/>
-                <FieldInput placeholder="••••" style={{...S.inp,width:60,padding:'6px 8px',fontSize:12}} defaultValue={a.maskedNumber} onBlur={e=>updateAccountBalance(a.id,a.currentBalance,e.target.value)}/>
-              </div>
-            </div>)}
-            <div style={{height:8}}/>
-            <span style={S.lbl}>Import Transactions (CSV)</span>
-            <div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.5}}>
-              Export from Ally: Account → Transactions → Export → CSV<br/>
-              Export from Regions: Online Banking → Transactions → Download → CSV
-            </div>
-            <button style={S.btnSolid(C.navy)} onClick={()=>setShowImport(true)}>Import CSV</button>
-            <div style={{height:8}}/>
-            <div style={{fontSize:11,color:C.muted}}>
-              {(transactions||[]).length} transactions stored · {unreviewed} unreviewed
-            </div>
-          </div>}
-          {sec.id==='workcal'&&<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>
-              Manually enter work-unavailable windows so the app can plan workouts, meals, and tasks around them. Busy blocks are locked — the planner treats them like fixed meetings.
-            </div>
-            <div style={{fontSize:11,fontWeight:600,color:C.tx,marginBottom:6}}>Priority order</div>
-            {[
-              {n:'1',l:'Fixed Google events',c:C.navy},
-              {n:'2',l:'Manual busy blocks',c:C.amber},
-              {n:'3',l:'Meal prep',c:C.sage},
-              {n:'4',l:'Workout',c:C.sage},
-              {n:'5',l:'Tasks',c:C.muted},
-            ].map(r=><div key={r.n} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-              <span style={{width:18,height:18,borderRadius:'50%',background:r.c,color:C.white,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{r.n}</span>
-              <span style={{fontSize:12,color:C.tx}}>{r.l}</span>
-            </div>)}
-            <div style={{marginTop:12,fontSize:11,color:C.muted,lineHeight:1.5}}>
-              Add busy blocks from the Calendar tab. Use the quick presets for common patterns, or save a weekly pattern and apply it each Sunday.
-            </div>
-            <div style={{marginTop:10,fontSize:11,fontWeight:500,color:C.tx,marginBottom:4}}>Current busy blocks</div>
-            {(busyBlocks||[]).length===0
-              ?<div style={{fontSize:11,color:C.muted}}>None yet. Go to Calendar to add blocks.</div>
-              :<div style={{maxHeight:180,overflowY:'auto'}}>
-                {(busyBlocks||[]).map(b=>{
-                  const cat=BUSY_CATEGORIES.find(c=>c.id===b.category)||{clr:C.muted,label:b.category};
-                  return <div key={b.id} style={{...S.row,padding:'6px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-                    <div>
-                      <div style={{fontSize:12,color:C.tx}}>{b.title}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{b.recurring?`Every ${'SMTWTFS'[b.dow||0]}`:formatDate(b.date,'weekdayMonthDayShort')} · {fmtTimeRange(b.startTime,b.endTime)} · <span style={{color:cat.clr}}>{cat.label}</span></div>
-                    </div>
-                    <button onClick={()=>deleteBusyBlock(b.id)} style={{background:'none',border:'none',color:C.muted,fontSize:13,cursor:'pointer'}}>x</button>
-                  </div>;
-                })}
-              </div>
-            }
-          </div>}
-          {sec.id==='google'&&<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.5}}>
-              Enter your Google OAuth Client ID to enable Calendar + Tasks sync. Serve this file via python3 -m http.server 8080 and add http://localhost:8080 to your GCP authorized origins.
-            </div>
-            <span style={S.lbl}>Google Client ID</span>
-            <FieldInput value={clientIdInput} onChange={e=>setClientIdInput(e.target.value)} placeholder="123456789.apps.googleusercontent.com" style={{...S.inp,marginBottom:8}}/>
-            <button style={S.btnSolid(C.navy)} onClick={()=>{updateProfile({googleClientId:clientIdInput});GoogleAPI.init(clientIdInput);showNotif('Client ID saved','success');}}>Save Client ID</button>
-            <div style={{height:8}}/>
-            {googleConnected
-              ?<div>
-                <div style={{fontSize:12,color:C.sage,marginBottom:8,fontWeight:500}}>Google connected</div>
-                <button style={{...S.btnGhost,fontSize:12}} onClick={disconnectGoogle}>Disconnect Google</button>
-              </div>
-              :<button style={S.btnSolid(C.sage)} onClick={connectGoogle}>Connect Google Account</button>
-            }
-          </div>}
-          {sec.id==='fitness'&&<div>
-            {(()=>{
-              const primaryProgram=(athlete.primaryProgram&&['hyrox','running','strength'].includes(athlete.primaryProgram))
-                ?athlete.primaryProgram
-                :(['hyrox','running','strength'].includes(fitnessProgram)?fitnessProgram:'hyrox');
-              const addOns=Array.isArray(athlete.secondaryAddOns)
-                ?athlete.secondaryAddOns.filter(id=>FITNESS_ADD_ON_OPTIONS.some(option=>option.id===id))
-                :[];
-              const selectedDays=orderTrainingDays(
-                Array.isArray(athlete.preferredTrainingDays)&&athlete.preferredTrainingDays.length
-                  ?athlete.preferredTrainingDays
-                  :getAnchoredTrainingDays(athlete.programType||'4-day',athlete.trainingWeekStart||'Mon'),
-                athlete.trainingWeekStart||'Mon'
-              );
-              const raceWeeks=trainingCycle.weeksToRace;
-              const derivedSquat=athlete.squat5RM
-                ?[{label:'60%',value:Math.round(athlete.squat5RM*0.60)},{label:'70%',value:Math.round(athlete.squat5RM*0.70)},{label:'80%',value:Math.round(athlete.squat5RM*0.80)},{label:'85%',value:Math.round(athlete.squat5RM*0.85)}]
-                :[];
-              const derivedDeadlift=athlete.deadlift5RM
-                ?[{label:'60%',value:Math.round(athlete.deadlift5RM*0.60)},{label:'70%',value:Math.round(athlete.deadlift5RM*0.70)},{label:'80%',value:Math.round(athlete.deadlift5RM*0.80)},{label:'85%',value:Math.round(athlete.deadlift5RM*0.85)}]
-                :[];
-              const previewDays=weekPlannedWorkouts.slice(0,Math.max(4,selectedDays.length));
-              const setPrimaryProgram=nextProgram=>updateProfile(p=>({
-                ...p,
-                fitnessProgram:nextProgram,
-                athleteProfile:{...p.athleteProfile,primaryProgram:nextProgram}
-              }));
-              const toggleAddOn=id=>updateProfile(p=>{
-                const current=Array.isArray(p.athleteProfile?.secondaryAddOns)?p.athleteProfile.secondaryAddOns:[];
-                const next=current.includes(id)?current.filter(item=>item!==id):[...current,id];
-                return{...p,athleteProfile:{...p.athleteProfile,secondaryAddOns:next}};
-              });
-              const toggleTrainingDay=label=>updateProfile(p=>{
-                const anchor=p.athleteProfile?.trainingWeekStart||'Mon';
-                const current=orderTrainingDays(
-                  Array.isArray(p.athleteProfile?.preferredTrainingDays)&&p.athleteProfile.preferredTrainingDays.length
-                    ?p.athleteProfile.preferredTrainingDays
-                    :getAnchoredTrainingDays(p.athleteProfile?.programType||'4-day',anchor),
-                  anchor
-                );
-                const hasDay=current.includes(label);
-                let next=current;
-                if(hasDay&&current.length>4){
-                  next=current.filter(day=>day!==label);
-                }else if(!hasDay&&current.length<5){
-                  next=orderTrainingDays([...current,label],anchor);
-                }
-                const nextProgramType=next.length>=5?'5-day':'4-day';
-                return{...p,athleteProfile:{...p.athleteProfile,preferredTrainingDays:next,programType:nextProgramType}};
-              });
-              const setTrainingWeekStart=option=>updateProfile(p=>{
-                const currentDays=Array.isArray(p.athleteProfile?.preferredTrainingDays)&&p.athleteProfile.preferredTrainingDays.length
-                  ?p.athleteProfile.preferredTrainingDays
-                  :getAnchoredTrainingDays(p.athleteProfile?.programType||'4-day',option);
-                return{
-                  ...p,
-                  athleteProfile:{
-                    ...p.athleteProfile,
-                    trainingWeekStart:option,
-                    preferredTrainingDays:orderTrainingDays(currentDays,option),
-                  }
-                };
-              });
-              return <>
-                <div style={S.card}>
-                  <span style={S.lbl}>Program Setup</span>
-                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Choose the training system</div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Primary program drives the weekly plan. Add-ons layer on support work.</div>
-                  <div style={{marginBottom:12}}>
-                    <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Primary Program</div>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {['hyrox','running','strength','pilates','recovery'].map(id=><button key={id} type="button" onClick={()=>setPrimaryProgram(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${primaryProgram===id?C.sage:C.bd}`,background:primaryProgram===id?C.sageL:'transparent',color:primaryProgram===id?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:primaryProgram===id?600:400}}>{FITNESS_PROGRAM_OPTIONS.find(option=>option.id===id)?.label||id}</button>)}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Secondary Add-Ons</div>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {FITNESS_ADD_ON_OPTIONS.map(({id,label})=><button key={id} onClick={()=>toggleAddOn(id)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${addOns.includes(id)?C.navy:C.bd}`,background:addOns.includes(id)?C.navyL:'transparent',color:addOns.includes(id)?C.navyDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:addOns.includes(id)?600:400}}>{label}</button>)}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={S.card}>
-                  <span style={S.lbl}>Schedule</span>
-                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Pick exact training days</div>
-                  <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Select 4 or 5 specific days. The current planner supports either 4-day or 5-day structures.</div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-                    {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(label=><button key={label} onClick={()=>toggleTrainingDay(label)} style={{padding:'7px 10px',minWidth:44,borderRadius:9,border:`1.5px solid ${selectedDays.includes(label)?C.sage:C.bd}`,background:selectedDays.includes(label)?C.sageL:'transparent',color:selectedDays.includes(label)?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:selectedDays.includes(label)?600:400}}>{label}</button>)}
-                  </div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-                    <span style={S.pill(C.surf,C.tx2)}>{selectedDays.length} selected</span>
-                    <span style={S.pill(C.surf,C.tx2)}>{selectedDays.length>=5?'5-day structure':'4-day structure'}</span>
-                  </div>
-                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Training Week Anchor</div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                    {['Sun','Mon','Wed'].map(option=><button key={option} onClick={()=>setTrainingWeekStart(option)} style={{padding:'7px 12px',borderRadius:9,border:`1.5px solid ${(athlete.trainingWeekStart||'Mon')===option?C.sage:C.bd}`,background:(athlete.trainingWeekStart||'Mon')===option?C.sageL:'transparent',color:(athlete.trainingWeekStart||'Mon')===option?C.sageDk:C.muted,fontSize:12,cursor:'pointer',fontWeight:(athlete.trainingWeekStart||'Mon')===option?600:400}}>{option==='Sun'?'Sunday Start':option==='Mon'?'Monday Start':'Wednesday Start'}</button>)}
-                  </div>
-                </div>
-
-                <div style={S.card}>
-                  <span style={S.lbl}>Performance Inputs</span>
-                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Enter anchor metrics</div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-                    <div>
-                      <span style={S.lbl}>5K Time</span>
-                      <FieldInput type="number" step="0.1" inputMode="decimal" value={athlete.fiveKTime||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:parseFloat(e.target.value)||null}}))} placeholder="28.5 min" style={S.inp}/>
-                    </div>
-                    <div>
-                      <span style={S.lbl}>Wall Ball Max</span>
-                      <FieldInput type="number" step="1" inputMode="numeric" value={athlete.wallBallMaxReps||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,wallBallMaxReps:parseInt(e.target.value)||null}}))} placeholder="40 reps" style={S.inp}/>
-                    </div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                    <div>
-                      <span style={S.lbl}>Back Squat 5RM</span>
-                      <FieldInput type="number" step="5" inputMode="numeric" value={athlete.squat5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,squat5RM:parseInt(e.target.value)||null}}))} placeholder="185 lb" style={S.inp}/>
-                    </div>
-                    <div>
-                      <span style={S.lbl}>Deadlift 5RM</span>
-                      <FieldInput type="number" step="5" inputMode="numeric" value={athlete.deadlift5RM||''} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,deadlift5RM:parseInt(e.target.value)||null}}))} placeholder="225 lb" style={S.inp}/>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={S.card}>
-                  <span style={S.lbl}>Race Timeline</span>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
-                    <div>
-                      <span style={S.lbl}>Race Date</span>
-                      <FieldInput type="date" value={raceDate||DEFAULT_RACE} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,raceDate:e.target.value}}))} style={S.inp}/>
-                    </div>
-                    <div>
-                      <span style={S.lbl}>Plan Start</span>
-                      <FieldInput type="date" value={planStartDate||DEFAULT_START} onChange={e=>updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,planStartDate:e.target.value}}))} style={S.inp}/>
-                    </div>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                      <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Weeks to race</div>
-                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{raceWeeks}</div>
-                    </div>
-                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                      <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Training phase</div>
-                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{PH?.name||trainingCycle.phase?.name}</div>
-                    </div>
-                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                      <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Current week</div>
-                      <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{CUR_WK}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={S.card}>
-                  <span style={S.lbl}>Derived Outputs</span>
-                  <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:10}}>Training targets and preview</div>
-                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Running Pace Zones</div>
-                  {paceProfile
-                    ?<div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8,marginBottom:12}}>
-                      {[{label:'Easy',value:paceProfile.easy},{label:'Threshold',value:paceProfile.threshold},{label:'Interval',value:paceProfile.interval},{label:'5K Pace',value:paceProfile.race5k}].map(item=><div key={item.label} style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                        <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.label}</div>
-                        <div style={{fontSize:14,fontWeight:700,color:C.tx}}>{item.value}</div>
-                      </div>)}
-                    </div>
-                    :<div style={{fontSize:11,color:C.muted,marginBottom:12}}>Add a 5K time to generate pace zones.</div>}
-
-                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Working Weights from 5RM</div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                      <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Back Squat</div>
-                      {derivedSquat.length>0?derivedSquat.map(item=><div key={item.label} style={{...S.row,padding:'2px 0'}}><span style={{fontSize:11,color:C.tx2}}>{item.label}</span><span style={{fontSize:11,color:C.tx,fontWeight:600}}>{item.value} lb</span></div>):<div style={{fontSize:11,color:C.muted}}>Add a squat 5RM</div>}
-                    </div>
-                    <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                      <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Deadlift</div>
-                      {derivedDeadlift.length>0?derivedDeadlift.map(item=><div key={item.label} style={{...S.row,padding:'2px 0'}}><span style={{fontSize:11,color:C.tx2}}>{item.label}</span><span style={{fontSize:11,color:C.tx,fontWeight:600}}>{item.value} lb</span></div>):<div style={{fontSize:11,color:C.muted}}>Add a deadlift 5RM</div>}
-                    </div>
-                  </div>
-
-                  <div style={{fontSize:11,color:C.tx,marginBottom:6,fontWeight:600}}>Weekly Training Preview</div>
-                  <div style={{background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-                    {previewDays.map((item,idx)=><div key={`${item.plannedDate}-${idx}`} style={{...S.row,padding:'7px 0',borderBottom:idx<previewDays.length-1?`0.5px solid ${C.bd}`:'none',alignItems:'flex-start',gap:8}}>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:12,fontWeight:700,color:C.tx}}>{item.plannedDayLabel}</div>
-                        <div style={{fontSize:11,color:C.tx2,marginTop:2}}>{item.plannedName}</div>
-                      </div>
-                      <span style={S.pill(item.status==='today'?C.navyL:C.surf,item.status==='today'?C.navyDk:C.muted)}>{item.status==='today'?'Today':formatWorkoutTypeLabel(item)}</span>
-                    </div>)}
-                  </div>
-                </div>
-              </>;
-            })()}
-          </div>}
-          {sec.id==='goals'&&<div>
-            <span style={S.lbl}>Daily Calorie Goal (kcal)</span>
-            <FieldInput type="number" value={calGoal} onChange={e=>updateProfile({calGoal:parseInt(e.target.value)||2000})} style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Daily Protein Goal (g)</span>
-            <FieldInput type="number" value={proGoal} onChange={e=>updateProfile({proGoal:parseInt(e.target.value)||140})} style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Daily Water Goal (oz)</span>
-            <FieldInput type="number" value={hydGoal} onChange={e=>updateProfile({hydGoal:parseInt(e.target.value)||72})} style={S.inp}/>
-          </div>}
-          {sec.id==='meals'&&<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:8}}>Training day macros: {MACROS.protein}g protein · {MACROS.carbsTraining}g carbs · {MACROS.fat}g fat</div>
-            <div style={{fontSize:12,color:C.muted}}>Rest day macros: {MACROS.protein}g protein · {MACROS.carbsRest}g carbs · {MACROS.fat}g fat</div>
-          </div>}
-          {sec.id==='notifications'&&<div>
-            <span style={S.lbl}>Morning Reminder</span>
-            <FieldInput type="time" value={profile.notifications?.morningTime||'07:00'} onChange={e=>updateProfile(p=>({...p,notifications:{...p.notifications,morningTime:e.target.value}}))} style={{...S.inp,marginBottom:8}}/>
-            <span style={S.lbl}>Evening Reminder</span>
-            <FieldInput type="time" value={profile.notifications?.eveningTime||'21:00'} onChange={e=>updateProfile(p=>({...p,notifications:{...p.notifications,eveningTime:e.target.value}}))} style={S.inp}/>
-          </div>}
-          {sec.id==='security'&&<div>
-            <div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.6}}>All data is stored locally on this device. Nothing is transmitted except optional Google OAuth tokens (session-only) and Plaid connections when configured.</div>
-            <div style={{...S.row,marginBottom:12,paddingBottom:12,borderBottom:`0.5px solid ${C.bd}`}}>
-              <div>
-                <div style={{fontSize:13,color:C.tx,fontWeight:500}}>Analytics tracking</div>
-                <div style={{fontSize:10,color:C.muted}}>Correlations across energy, sleep, workouts, spend</div>
-              </div>
-              <button onClick={()=>updateProfile(p=>({...p,securitySettings:{...p.securitySettings,analyticsEnabled:!p.securitySettings?.analyticsEnabled}}))} style={{width:40,height:24,borderRadius:12,background:(securitySettings?.analyticsEnabled!==false)?C.sage:C.surf,border:`1px solid ${C.bd}`,cursor:'pointer',position:'relative',flexShrink:0}}>
-                <div style={{width:18,height:18,borderRadius:'50%',background:C.white,position:'absolute',top:2,transition:'left 0.2s',left:(securitySettings?.analyticsEnabled!==false)?'18px':'2px'}}/>
-              </button>
-            </div>
-            <div style={{fontSize:11,fontWeight:500,color:C.tx,marginBottom:8}}>Connected services</div>
-            <div style={{...S.row,padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-              <div style={{fontSize:12,color:C.tx}}>Google Calendar / Tasks</div>
-              {googleConnected?<button style={{...S.btnSmall(C.red)}} onClick={disconnectGoogle}>Disconnect</button>:<span style={{fontSize:11,color:C.muted}}>Not connected</span>}
-            </div>
-            <div style={{...S.row,padding:'8px 0',borderBottom:`0.5px solid ${C.bd}`,marginBottom:12}}>
-              <div style={{fontSize:12,color:C.tx}}>Financial data</div>
-              <button style={{...S.btnSmall(C.amber)}} onClick={()=>{if(confirm('Delete all transaction data?'))updateProfile(p=>({...p,transactions:[],recurringExpenses:[],merchantRules:{}}));}}>Clear</button>
-            </div>
-            <FieldInput ref={restoreFileRef} type="file" accept=".json,application/json" onChange={restoreAllData} style={{display:'none'}}/>
-            <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8,fontSize:12}} onClick={exportAllData}>Export all data (JSON)</button>
-            <button style={{...S.btnGhost,width:'100%',textAlign:'center',marginBottom:8,fontSize:12}} onClick={()=>restoreFileRef.current?.click()}>Restore backup (JSON)</button>
-            {(securitySettings?.dataExportHistory||[]).length>0&&<div style={{fontSize:10,color:C.muted,textAlign:'center'}}>Last export: {securitySettings.dataExportHistory.slice(-1)[0]}</div>}
-          </div>}
-        </div>}
-      </div>)}
-      <div style={{...S.card,borderColor:C.red}}>
-        <span style={{...S.lbl,color:C.red}}>Data</span>
-        <button style={{...S.btnGhost,color:C.red,borderColor:C.red,width:'100%',textAlign:'center',fontSize:12}} onClick={()=>{
-          if(!confirm('Clear all data? This cannot be undone.'))return;
-          Promise.all([
-            storage.setJSON(STORAGE_KEYS.profile,DEFAULT_OPS),
-            storage.remove(STORAGE_KEYS.navigation),
-            storage.remove(STORAGE_KEYS.activeWorkout),
-            storage.remove(STORAGE_KEYS.dailyCheckin),
-            storage.remove(STORAGE_KEYS.growth),
-          ]).then(()=>window.location.reload());
-        }}>Reset All Data</button>
-      </div>
-      <div style={{textAlign:'center',padding:'16px 0',fontSize:10,color:C.muted}}>Personal Ops Hub · v1.0 · {TODAY}</div>
-    </div>;
+  function commitSubtaskTitle(taskId, subtaskId, title) {
+    updateTask(taskId, task => ({
+      ...task,
+      subtasks: task.subtasks.map(subtask => (subtask.id === subtaskId ? { ...subtask, title } : subtask)),
+    }));
   }
 
-  function NavIcon({id,active}){
-    const clr=active?C.white:C.muted;
-    // All paths are Material Design 24x24 viewBox
-    const p={
-      // House outline → filled on active
-      home:'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-      // Calendar grid
-      calendar:'M19 3h-1V1h-2v2H8V1H6v2H5C3.9 3 3 3.9 3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z',
-      // Checklist with dots
-      tasks:'M4 10.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm0-6c-.83 0-1.5.67-1.5 1.5S3.17 7.5 4 7.5 5.5 6.83 5.5 6 4.83 4.5 4 4.5zm0 12c-.83 0-1.5.68-1.5 1.5s.68 1.5 1.5 1.5 1.5-.68 1.5-1.5-.67-1.5-1.5-1.5zM7 13h14v-2H7v2zm0-6v2h14V7H7zm0 10h14v-2H7v2z',
-      // Inbox tray
-      inbox:'M19 3H4.99C3.88 3 3 3.9 3 5l.01 14c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.34 3-3 3s-3-1.34-3-3H5V5h14v10z',
-      // Dumbbell diagonal (Material Design fitness_center)
-      training:'M20.57 14.86L22 13.43 20.57 12 17 15.57 8.43 7 12 3.43 10.57 2 9.14 3.43 7.71 2 5.57 4.14 4.14 5.57 2 7.71 3.43 9.14 2 10.57 3.43 12 7 8.43 15.57 17 12 20.57 13.43 22 14.86 20.57 16.28 22 18.43 19.86 19.85 18.43 22 16.28 20.57 14.86z',
-      // Fork and knife / restaurant
-      meals:'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z',
-      // Menu / more
-      more:'M4 10.5c-.83 0-1.5.67-1.5 1.5S3.17 13.5 4 13.5s1.5-.67 1.5-1.5S4.83 10.5 4 10.5zm8 0c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5zm8 0c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z',
-      // Heart pulse / ECG line (health monitoring)
-      health:'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z',
-      // Wallet
-      finance:'M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z',
-      maintenance:'M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.4l4.3 4.3-3 3-4.2-4.2c-1.1 2.4-.6 5.3 1.4 7.3 1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1 2.5-2.6z',
-      // Line chart / show_chart
-      insights:'M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z',
-      // Habit check circle
-      habits:'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
-      // Gear / settings
-      settings:'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
-    };
-    return <svg width="24" height="24" viewBox="0 0 24 24" fill={clr}><path d={p[id]||''}/></svg>;
+  function toggleSubtask(taskId, subtaskId) {
+    updateTask(taskId, task => ({
+      ...task,
+      subtasks: task.subtasks.map(subtask => (subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask)),
+    }));
   }
 
-  function HealthScreen({activeTab='recovery',onTabChange=()=>{}}){
-    const hTab=HEALTH_TAB_IDS.includes(activeTab)?activeTab:'recovery';
-    const todayLog=dailyLogs?.[TODAY]||{};
-    const records=healthRecords||{cycle:{currentDay:null,phase:''},medications:[],appointments:[],labs:[],notes:''};
-
-    // Last 7 days for vitals history
-    const last7=Array.from({length:7},(_,i)=>{
-      const d=new Date(NOW);d.setDate(d.getDate()-i);
-      const ds=formatDateKey(d);
-      return {ds,label:['Su','Mo','Tu','We','Th','Fr','Sa'][d.getDay()],log:dailyLogs?.[ds]||null};
-    }).reverse();
-    const soreness=todayLog.soreness||3;
-    const mobility=todayLog.mobility||3;
-    const symptoms=todayLog.symptoms||'';
-    const cycleDay=records.cycle?.currentDay||'';
-    const cyclePhase=records.cycle?.phase||'';
-    const HTABS=['recovery','wellness','body','care','library'];
-
-    return <div style={S.body}>
-      <div style={{display:'flex',gap:4,marginBottom:12,overflowX:'auto'}}>
-        {HTABS.map(t=><button key={t} onClick={()=>onTabChange(t)} style={{flexShrink:0,padding:'7px 14px',borderRadius:10,border:`0.5px solid ${hTab===t?C.sage:C.bd}`,background:hTab===t?C.sageL:'transparent',color:hTab===t?C.sageDk:C.muted,fontSize:11,fontWeight:hTab===t?600:400,cursor:'pointer',textTransform:'capitalize'}}>{t}</button>)}
-      </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:12}}>
-        <button style={{...S.btnGhost,fontSize:11,padding:'8px 10px'}} onClick={()=>openTab('training')}>Open Fitness</button>
-        <button style={{...S.btnGhost,fontSize:11,padding:'8px 10px'}} onClick={()=>openTab('meals')}>Open Nutrition</button>
-        <button style={{...S.btnGhost,fontSize:11,padding:'8px 10px'}} onClick={()=>openTab('habits')}>Open Lifestyle</button>
-      </div>
-
-      {hTab==='recovery'&&<div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:10}}>
-            <div>
-              <span style={S.lbl}>Recovery Today</span>
-              <div style={{fontSize:17,fontWeight:700,color:C.tx}}>{recoveryToday.level}</div>
-            </div>
-            <span style={S.pill(recoveryToday.level==='Low'?C.redL:recoveryToday.level==='Moderate'?C.amberL:C.sageL,recoveryToday.level==='Low'?C.red:recoveryToday.level==='Moderate'?C.amberDk:C.sageDk)}>{recoveryToday.readiness}</span>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Sleep</div>
-              <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{todayLog.sleepHours||'—'}h</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Energy</div>
-              <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{todayLog.energyScore||'—'}/10</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Soreness</div>
-              <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{soreness}/5</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Mobility</div>
-              <div style={{fontSize:16,fontWeight:700,color:C.tx}}>{mobility}/5</div>
-            </div>
-          </div>
-        </div>
-        <div style={S.card}>
-          <span style={S.lbl}>Body feedback</span>
-          <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Keep body-state inputs here. Behavior tracking lives in Lifestyle.</div>
-          <div style={{display:'flex',gap:6,marginBottom:8}}>
-            {[1,2,3,4,5].map(val=><button key={val} style={{...S.btnGhost,flex:1,fontSize:11,borderColor:soreness===val?C.red:C.bd,color:soreness===val?C.red:C.muted,background:soreness===val?C.redL:'transparent'}} onClick={()=>saveDailyLog({soreness:val})}>S{val}</button>)}
-          </div>
-          <div style={{display:'flex',gap:6}}>
-            {[1,2,3,4,5].map(val=><button key={val} style={{...S.btnGhost,flex:1,fontSize:11,borderColor:mobility===val?C.navy:C.bd,color:mobility===val?C.navy:C.muted,background:mobility===val?C.navyL:'transparent'}} onClick={()=>saveDailyLog({mobility:val})}>M{val}</button>)}
-          </div>
-        </div>
-      </div>}
-
-      {hTab==='wellness'&&<div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Hydration today</span>
-            <span style={{fontSize:12,color:C.muted}}>{todayH} / {hydGoal} oz</span>
-          </div>
-          <ProgressBar value={todayH} max={hydGoal} color={C.navy}/>
-          <div style={{display:'flex',gap:5,marginTop:10,flexWrap:'wrap'}}>
-            {[8,12,16,20].map(oz=><button key={oz} style={S.btnSmall(C.navy)} onClick={()=>updateProfile(p=>({...p,hydr:{...p.hydr,[TODAY]:Math.max(0,(p.hydr[TODAY]||0)+oz)}}))}>+{oz} oz</button>)}
-          </div>
-        </div>
-        <div style={S.card}>
-          <span style={S.lbl}>Energy and sleep — last 7 days</span>
-          {last7.every(d=>!d.log)?<div style={{fontSize:12,color:C.muted,padding:'12px 0',textAlign:'center'}}>No data yet. Log your energy from the Home screen.</div>
-          :<div>
-            {last7.map(({ds,label,log})=><div key={ds} style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-              <div style={{width:28,flexShrink:0}}>
-                <div style={{fontSize:9,color:C.muted}}>{label}</div>
-                <div style={{fontSize:10,color:C.muted}}>{ds.slice(5)}</div>
-              </div>
-              {log?.energyScore?<div style={{flex:1,display:'flex',gap:6,alignItems:'center'}}>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',gap:2}}>
-                    {[1,2,3,4,5,6,7,8,9,10].map(n=><div key={n} style={{flex:1,height:6,borderRadius:2,background:n<=log.energyScore?C.sage:C.surf}}/>)}
-                  </div>
-                </div>
-                <span style={{fontSize:11,fontWeight:600,color:C.tx,width:20,textAlign:'right'}}>{log.energyScore}</span>
-                {log.sleepHours&&<span style={{fontSize:10,color:C.muted,width:28,textAlign:'right'}}>{log.sleepHours}h</span>}
-              </div>:<div style={{flex:1,fontSize:11,color:C.muted}}>not logged</div>}
-            </div>)}
-          </div>}
-        </div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Symptoms</span>
-            <button style={{...S.btnGhost,fontSize:11}} onClick={()=>{
-              const next=prompt('Symptoms or notes for today?',symptoms)||'';
-              saveDailyLog({symptoms:next});
-            }}>Update</button>
-          </div>
-          <div style={{fontSize:12,color:C.tx}}>{symptoms||'No symptoms logged today.'}</div>
-        </div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Cycle</span>
-            <button style={{...S.btnGhost,fontSize:11}} onClick={()=>{
-              const currentDay=prompt('Cycle day?',cycleDay)||'';
-              const phase=prompt('Cycle phase?',cyclePhase)||'';
-              updateProfile(p=>({...p,healthRecords:{...(p.healthRecords||{}),cycle:{currentDay,phase}}}));
-            }}>Update</button>
-          </div>
-          <div style={{fontSize:12,color:C.tx}}>Day {cycleDay||'—'}{cyclePhase?` · ${cyclePhase}`:''}</div>
-        </div>
-      </div>}
-
-      {hTab==='body'&&<div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Biometrics</span>
-            <button style={{...S.btnGhost,fontSize:11}} onClick={()=>{
-              const weight=prompt('Body weight (lb)?',todayLog.weight||profile.userProfile?.weight||'')||'';
-              const restingHr=prompt('Resting HR?',todayLog.restingHr||'')||'';
-              const hrv=prompt('HRV?',todayLog.hrv||'')||'';
-              saveDailyLog({weight:parseFloat(weight)||null,restingHr:parseInt(restingHr)||null,hrv:parseInt(hrv)||null});
-            }}>Log</button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Weight</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{todayLog.weight||profile.userProfile?.weight||'—'}</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>Resting HR</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{todayLog.restingHr||'—'}</div>
-            </div>
-            <div style={{background:C.surf,borderRadius:12,padding:'10px'}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>HRV</div>
-              <div style={{fontSize:15,fontWeight:700,color:C.tx}}>{todayLog.hrv||'—'}</div>
-            </div>
-          </div>
-        </div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Labs</span>
-            <button style={{...S.btnGhost,fontSize:11}} onClick={()=>{
-              const label=prompt('Lab result label?');
-              if(!label)return;
-              const value=prompt('Value / note?')||'';
-              updateProfile(p=>({...p,healthRecords:{...(p.healthRecords||{}),labs:[{id:Date.now(),label,value,date:TODAY},...((p.healthRecords?.labs)||[])].slice(0,8)}}));
-            }}>Add</button>
-          </div>
-          {((records.labs)||[]).length===0?<div style={{fontSize:12,color:C.muted}}>No labs logged yet.</div>:(records.labs||[]).map((lab,idx)=><div key={lab.id||idx} style={{...S.row,padding:'8px 0',borderBottom:idx<(records.labs||[]).length-1?`0.5px solid ${C.bd}`:'none'}}>
-            <div>
-              <div style={{fontSize:12,color:C.tx}}>{lab.label}</div>
-              <div style={{fontSize:10,color:C.muted}}>{lab.value} · {formatDate(lab.date,'monthDayShort')}</div>
-            </div>
-          </div>)}
-        </div>
-      </div>}
-
-      {hTab==='care'&&<div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Medications</span>
-            <button style={{...S.btnGhost,fontSize:11}} onClick={()=>{
-              const name=prompt('Medication or supplement name?');
-              if(!name)return;
-              const dose=prompt('Dose / instructions?')||'';
-              updateProfile(p=>({...p,healthRecords:{...(p.healthRecords||{}),medications:[{id:Date.now(),name,dose},...((p.healthRecords?.medications)||[])].slice(0,10)}}));
-            }}>Add</button>
-          </div>
-          {((records.medications)||[]).length===0?<div style={{fontSize:12,color:C.muted}}>No medications logged.</div>:(records.medications||[]).map((med,idx)=><div key={med.id||idx} style={{padding:'8px 0',borderBottom:idx<(records.medications||[]).length-1?`0.5px solid ${C.bd}`:'none'}}>
-            <div style={{fontSize:12,color:C.tx}}>{med.name}</div>
-            <div style={{fontSize:10,color:C.muted}}>{med.dose}</div>
-          </div>)}
-        </div>
-        <div style={S.card}>
-          <div style={{...S.row,marginBottom:8}}>
-            <span style={S.lbl}>Appointments</span>
-            <button style={{...S.btnGhost,fontSize:11}} onClick={()=>{
-              const title=prompt('Appointment title?');
-              if(!title)return;
-              const date=prompt('Date?',TODAY)||TODAY;
-              updateProfile(p=>({...p,healthRecords:{...(p.healthRecords||{}),appointments:[{id:Date.now(),title,date},...((p.healthRecords?.appointments)||[])].slice(0,10)}}));
-            }}>Add</button>
-          </div>
-          {((records.appointments)||[]).length===0?<div style={{fontSize:12,color:C.muted}}>No appointments scheduled.</div>:(records.appointments||[]).map((appt,idx)=><div key={appt.id||idx} style={{...S.row,padding:'8px 0',borderBottom:idx<(records.appointments||[]).length-1?`0.5px solid ${C.bd}`:'none'}}>
-            <span style={{fontSize:12,color:C.tx}}>{appt.title}</span>
-            <span style={{fontSize:10,color:C.muted}}>{formatDate(appt.date,'primary')}</span>
-          </div>)}
-        </div>
-      </div>}
-
-      {hTab==='library'&&<div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:12}}>On-demand sessions for recovery days. Tap Start to launch in Training.</div>
-        {['Pilates','Mobility','Recovery','Stretching'].map(cat=>{
-          const sessions=RECOVERY_LIBRARY_SESSIONS.filter(s=>s.libraryCategory===cat);
-          if(!sessions.length)return null;
-          const accent=cat==='Pilates'?C.sage:cat==='Mobility'?C.amber:cat==='Recovery'?C.navy:C.sageDk;
-          const accentL=cat==='Pilates'?C.sageL:cat==='Mobility'?C.amberL:cat==='Recovery'?C.navyL:C.sageL;
-          return <div key={cat} style={{marginBottom:14}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:'0.5px',textTransform:'uppercase',marginBottom:6,paddingLeft:2}}>{cat}</div>
-            {sessions.map(session=><div key={session.id||session.name} style={{...S.card,padding:'12px',marginBottom:6,borderLeft:`3px solid ${accent}`}}>
-              <div style={{...S.row,alignItems:'flex-start',gap:8}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.tx}}>{session.name}</div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:2}}>{session.duration||session.dur} · {cat}</div>
-                  <div style={{fontSize:11,color:C.tx2,marginTop:4,lineHeight:1.4}}>{session.purpose}</div>
-                </div>
-                <button style={{...S.btnSmall(accent),flexShrink:0}} onClick={()=>{
-                  const hydrated=hydrateWorkoutSession({...session,warmup:getWarmupForCategory(session.warmupKey||'mobility'),cooldown:getCooldownForCategory(session.cooldownKey||'mobility')});
-                  launchWorkout(hydrated);
-                  openTab('training');
-                }}>Start</button>
-              </div>
-            </div>)}
-          </div>;
-        })}
-      </div>}
-    </div>;
+  function commitNotes(taskId, notes) {
+    updateTask(taskId, task => ({ ...task, notes }));
   }
 
-  function InsightsScreen(){
-    const [weekReviewCard,setWeekReviewCard]=useState(null);
-    const growthEvents=Array.isArray(growthState.events)?growthState.events:[];
-    const growthCount=type=>growthEvents.filter(event=>event.type===type).length;
-    const activationSummary=[
-      {label:'App opens',value:growthCount('app_open')},
-      {label:'Onboarding shown',value:growthCount('onboarding_shown')},
-      {label:'Install CTA shown',value:growthCount('install_cta_shown')},
-      {label:'Installs accepted',value:growthCount('install_accepted')},
-      {label:'First value reached',value:growthState.firstValueAt?1:0},
-    ];
-    function generateWeeklyReview(){
-      const wkStart=weekKey(NOW);
-      const wkEnd=addDaysIso(wkStart,7);
-      const weekDays=Array.from({length:7},(_,i)=>addDaysIso(wkStart,i));
-      const tasksCompleted=(taskHistory||[]).filter(t=>t.done&&t.updatedAt&&t.updatedAt.slice(0,10)>=wkStart&&t.updatedAt.slice(0,10)<wkEnd).length;
-      const tasksTotal=(taskHistory||[]).filter(t=>!t.parentId&&t.date>=wkStart&&t.date<wkEnd).length;
-      const workoutsCount=(workoutHistory||[]).filter(h=>h.date>=wkStart&&h.date<wkEnd).length;
-      const dailyHabitCount=(habits||[]).filter(h=>h.frequencyType==='daily').length;
-      const habitDueCounts=weekDays.length*dailyHabitCount;
-      const habitDone=weekDays.reduce((s,d)=>s+((dailyLogs[d]?.habitsCompleted||[]).length),0);
-      const habitRate=habitDueCounts>0?Math.round((habitDone/habitDueCounts)*100):null;
-      const energyLogs=weekDays.map(d=>dailyLogs[d]?.energyScore).filter(Boolean);
-      const avgEnergyWk=energyLogs.length?+(energyLogs.reduce((s,n)=>s+n,0)/energyLogs.length).toFixed(1):null;
-      const snapshot={
-        week:wkStart,
-        weekLabel:`Week of ${wkStart}`,
-        createdAt:new Date().toISOString(),
-        workouts:workoutsCount,
-        inboxPending:(inboxItems||[]).filter(x=>x.status==='pending').length,
-        transactions:(transactions||[]).filter(t=>t.date>=wkStart&&t.date<wkEnd).length,
-        habitsCompleted:weekDays.filter(d=>(dailyLogs[d]?.habitsCompleted||[]).length>0).length,
-        tasksCompleted,
-        tasksTotal,
-        workoutsCount,
-        habitRate,
-        avgEnergy:avgEnergyWk,
-      };
-      updateProfile(p=>({...p,weeklySnapshots:[snapshot,...(p.weeklySnapshots||[])]}));
-      setWeekReviewCard(snapshot);
-      showNotif('Weekly review saved','success');
-    }
-    const logs=Object.values(dailyLogs||{}).filter(l=>l.energyScore);
-    const withSleep7=logs.filter(l=>l.sleepHours>=7);
-    const withSleep6=logs.filter(l=>l.sleepHours<6);
-    const avgEnergy=logs.length?+(logs.reduce((s,l)=>s+l.energyScore,0)/logs.length).toFixed(1):null;
-    const avgE7=withSleep7.length?+(withSleep7.reduce((s,l)=>s+l.energyScore,0)/withSleep7.length).toFixed(1):null;
-    const avgE6=withSleep6.length?+(withSleep6.reduce((s,l)=>s+l.energyScore,0)/withSleep6.length).toFixed(1):null;
-    const withWkt=logs.filter(l=>l.workoutDone);
-    const withoutWkt=logs.filter(l=>!l.workoutDone);
-    const avgEWkt=withWkt.length?+(withWkt.reduce((s,l)=>s+l.energyScore,0)/withWkt.length).toFixed(1):null;
-    const avgENoWkt=withoutWkt.length?+(withoutWkt.reduce((s,l)=>s+l.energyScore,0)/withoutWkt.length).toFixed(1):null;
-    const totalWorkouts=workoutHistory.length;
-    const totalMiles=workoutHistory.filter(h=>h.type==='run').reduce((s,h)=>s+(parseFloat(h.data?.dist2)||0),0);
-    const longestStreak=(habits||[]).reduce((best,h)=>Math.max(best,computeStreak(h,dailyLogs)),0);
-    const snapshots=[...(profile.weeklySnapshots||[])].slice().reverse();
-    const lowRecoveryRuns=workoutHistory.filter(h=>h.type==='run'&&h.data?.recoveryState==='Low');
-    const strongRecoveryRuns=workoutHistory.filter(h=>h.type==='run'&&h.data?.recoveryState==='High');
-    const avgRunDistance=(entries)=>entries.length?entries.reduce((s,h)=>s+(parseFloat(h.data?.dist2)||0),0)/entries.length:null;
-    const lowVsHighRunDelta=avgRunDistance(strongRecoveryRuns)&&avgRunDistance(lowRecoveryRuns)
-      ?Math.round((1-(avgRunDistance(lowRecoveryRuns)/avgRunDistance(strongRecoveryRuns)))*100)
-      :null;
-    const insightItems=[];
-    if(avgE7&&avgE6){
-      const diff=+(avgE7-avgE6).toFixed(1);
-      insightItems.push(diff>0
-        ?`Your energy is ${diff} points higher when sleep reaches 7+ hours.`
-        :`Sleep consistency is not yet showing a clear energy benefit.`);
-    }
-    if(lowVsHighRunDelta!=null){
-      insightItems.push(lowVsHighRunDelta>0
-        ?`Low recovery days reduce logged run output by about ${lowVsHighRunDelta}% versus high recovery days.`
-        :`Run output stays relatively stable even on lower recovery days.`);
-    }
-    if((athlete?.weakStations||[]).length>0){
-      insightItems.push(`${athlete.weakStations[0]} is currently your weakest station. Build drills around it.`);
-    }
-    if(!insightItems.length){
-      insightItems.push('Log more recovery and workout data to unlock stronger pattern detection.');
-    }
-    return <div style={S.body}>
-      <div style={S.card}>
-        <span style={S.lbl}>Activation Funnel</span>
-        <div style={{fontSize:15,fontWeight:700,color:C.tx,marginBottom:10}}>Local growth metrics</div>
-        {activationSummary.map((item,idx)=><div key={item.label} style={{...S.row,padding:'7px 0',borderBottom:idx<activationSummary.length-1?`0.5px solid ${C.bd}`:'none'}}>
-          <span style={{fontSize:12,color:C.muted}}>{item.label}</span>
-          <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{item.value}</span>
-        </div>)}
-        <div style={{display:'grid',gap:6,marginTop:12}}>
-          {[
-            {label:'Morning check-in',done:growthState.activationChecklist.checkInCompleted},
-            {label:'Set priorities',done:growthState.activationChecklist.prioritiesSet},
-            {label:'Complete one action',done:growthState.activationChecklist.actionCompleted},
-          ].map(item=><div key={item.label} style={{display:'flex',alignItems:'center',gap:8,fontSize:11,color:C.tx2}}>
-            <span style={{width:16,height:16,borderRadius:999,background:item.done?C.sage:C.surf,color:item.done?C.white:C.muted,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,flexShrink:0}}>{item.done?'✓':'•'}</span>
-            <span>{item.label}</span>
-          </div>)}
-        </div>
-      </div>
-      <div style={S.card}>
-        <div style={{...S.row,marginBottom:weekReviewCard?12:0}}>
-          <div><span style={S.lbl}>Weekly Review</span><div style={{fontSize:14,fontWeight:600,color:C.tx}}>Capture this week's data</div></div>
-          <button style={S.btnSmall(C.sage)} onClick={generateWeeklyReview}>Generate</button>
-        </div>
-        {weekReviewCard&&<div style={{background:C.surf,borderRadius:12,padding:'12px 14px'}}>
-          <div style={{fontSize:13,fontWeight:700,color:C.tx,marginBottom:6}}>{weekReviewCard.weekLabel}</div>
-          <div style={{...S.row,padding:'4px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:11,color:C.muted}}>Tasks completed</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{weekReviewCard.tasksCompleted} / {weekReviewCard.tasksTotal}</span>
-          </div>
-          <div style={{...S.row,padding:'4px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:11,color:C.muted}}>Workouts</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.sage}}>{weekReviewCard.workoutsCount}</span>
-          </div>
-          {weekReviewCard.habitRate!=null&&<div style={{...S.row,padding:'4px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:11,color:C.muted}}>Habit completion</span>
-            <span style={{fontSize:13,fontWeight:600,color:weekReviewCard.habitRate>=70?C.sage:C.amber}}>{weekReviewCard.habitRate}%</span>
-          </div>}
-          {weekReviewCard.avgEnergy!=null&&<div style={{...S.row,padding:'4px 0'}}>
-            <span style={{fontSize:11,color:C.muted}}>Avg energy</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{weekReviewCard.avgEnergy}/10</span>
-          </div>}
-        </div>}
-      </div>
-      <div style={S.card}>
-        <span style={S.lbl}>Interpretation</span>
-        <div style={{fontSize:15,fontWeight:700,color:C.tx,marginBottom:8}}>Auto-generated patterns</div>
-        {insightItems.map((item,idx)=><div key={idx} style={{fontSize:12,color:C.tx,marginBottom:idx<insightItems.length-1?8:0}}>{item}</div>)}
-      </div>
-      {/* Health trends */}
-      <div style={S.card}>
-        <span style={S.lbl}>Health Trends</span>
-        {logs.length<3?<div style={{fontSize:12,color:C.muted}}>Log energy for 3+ days to see correlations.</div>:<div>
-          <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:12,color:C.muted}}>Avg energy score</span>
-            <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{avgEnergy}/10</span>
-          </div>
-          {avgE7&&<div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:11,color:C.muted}}>Energy w/ 7+ hrs sleep</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.sage}}>{avgE7}</span>
-          </div>}
-          {avgE6&&<div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:11,color:C.muted}}>Energy w/ &lt;6 hrs sleep</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.red}}>{avgE6}</span>
-          </div>}
-          {avgEWkt&&<div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-            <span style={{fontSize:11,color:C.muted}}>Energy on workout days</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.sage}}>{avgEWkt}</span>
-          </div>}
-          {avgENoWkt&&<div style={{...S.row,padding:'7px 0'}}>
-            <span style={{fontSize:11,color:C.muted}}>Energy on rest days</span>
-            <span style={{fontSize:13,fontWeight:600,color:C.muted}}>{avgENoWkt}</span>
-          </div>}
-        </div>}
-      </div>
-      {/* Fitness summary */}
-      <div style={S.card}>
-        <span style={S.lbl}>Fitness</span>
-        <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <span style={{fontSize:12,color:C.muted}}>Total workouts logged</span>
-          <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{totalWorkouts}</span>
-        </div>
-        <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <span style={{fontSize:12,color:C.muted}}>Total miles run</span>
-          <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{totalMiles.toFixed(1)}</span>
-        </div>
-        <div style={{...S.row,padding:'7px 0'}}>
-          <span style={{fontSize:12,color:C.muted}}>Days to race</span>
-          <span style={{fontSize:14,fontWeight:700,color:PH.clr}}>{DTR}</span>
-        </div>
-      </div>
-      {/* Finance summary */}
-      {(transactions||[]).length>0&&<div style={S.card}>
-        <span style={S.lbl}>Finance Trends</span>
-        <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <span style={{fontSize:12,color:C.muted}}>This month spend</span>
-          <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{fmtMoney(monthSpend)}</span>
-        </div>
-        <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <span style={{fontSize:12,color:C.muted}}>Recurring total / mo</span>
-          <span style={{fontSize:14,fontWeight:700,color:C.tx}}>{fmtMoney((recurringExpenses||[]).reduce((s,r)=>s+r.averageAmount,0))}</span>
-        </div>
-        {catSpend.slice(0,1).map(c=><div key={c.id} style={{...S.row,padding:'7px 0'}}>
-          <span style={{fontSize:12,color:C.muted}}>Top category</span>
-          <span style={{fontSize:13,fontWeight:600,color:c.clr}}>{c.label} {fmtMoney(c.total)}</span>
-        </div>)}
-      </div>}
-      {/* Habits */}
-      {(habits||[]).length>0&&<div style={S.card}>
-        <span style={S.lbl}>Habit Trends</span>
-        <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <span style={{fontSize:12,color:C.muted}}>Longest current streak</span>
-          <span style={{fontSize:14,fontWeight:700,color:C.sage}}>{longestStreak}d</span>
-        </div>
-        {(habits||[]).map(h=><div key={h.id} style={{...S.row,padding:'6px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <span style={{fontSize:12,color:C.tx}}>{h.name}</span>
-          <span style={{fontSize:12,fontWeight:600,color:C.muted}}>{computeStreak(h,dailyLogs)}d</span>
-        </div>)}
-      </div>}
-      <div style={S.card}>
-        <span style={S.lbl}>History Timeline</span>
-        {snapshots.length===0?<div style={{fontSize:12,color:C.muted}}>No weekly snapshots yet.</div>:snapshots.slice(0,8).map(s=><div key={s.week} style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-          <div>
-            <div style={{fontSize:12,color:C.tx}}>Week of {s.week}</div>
-            <div style={{fontSize:10,color:C.muted}}>{s.workouts} workouts · {s.transactions} transactions · {s.inboxPending} inbox items</div>
-          </div>
-          <span style={{fontSize:10,color:C.muted}}>{formatDate(s.createdAt,'monthDayShort')}</span>
-        </div>)}
-      </div>
-      {/* Home maintenance */}
-      <div style={S.card}>
-        <span style={S.lbl}>Home Maintenance</span>
-        {(()=>{
-          const done=maintenanceQueue.filter(item=>item.lastCompleted);
-          const overdue=maintenanceQueue.filter(item=>item.status==='overdue');
-          return <div>
-            <div style={{...S.row,padding:'7px 0',borderBottom:`0.5px solid ${C.bd}`}}>
-              <span style={{fontSize:12,color:C.muted}}>Tasks completed</span>
-              <span style={{fontSize:14,fontWeight:700,color:C.sage}}>{done.length}</span>
-            </div>
-            <div style={{...S.row,padding:'7px 0'}}>
-              <span style={{fontSize:12,color:C.muted}}>Overdue</span>
-              <span style={{fontSize:14,fontWeight:700,color:overdue.length>0?C.red:C.sage}}>{overdue.length}</span>
-            </div>
-          </div>;
-        })()}
-      </div>
-    </div>;
+  function createEmptyPlannedTask() {
+    const emptyTask = createTask('planned', { shouldFocusTitle: true, order: plannedTasks.length + 1 });
+    setTasks(current => sortTasks([...current, emptyTask]));
+    setActiveView('planning');
   }
 
-  function MoreScreen(){
-    const openTaskCount=Array.isArray(taskHistory)?taskHistory.filter(t=>!t.done&&!t.parentId&&(t.status||'active')==='active').length:0;
-    const financeReviewCount=typeof unreviewed==='number'?unreviewed:0;
-    const urgentMaintenanceCount=Array.isArray(maintenanceAttentionItems)?maintenanceAttentionItems.length:0;
-    const nextMaintenanceItem=Array.isArray(maintenanceAttentionItems)?maintenanceAttentionItems[0]:null;
-    const secondarySections=[
-      {
-        title:'Recovery and Health',
-        items:[
-          {id:'health',label:'Recovery',detail:'Sleep, recovery, wellness, appointments, and biometrics.'},
-          {id:'habits',label:'Lifestyle',detail:'Routines, repeated behaviors, and low-friction structure.'},
-        ],
-      },
-      {
-        title:'Operations',
-        items:[
-          {id:'maintenance',label:'Maintenance',detail:nextMaintenanceItem?`Next: ${nextMaintenanceItem.label} · ${getMaintenanceNextLabel(nextMaintenanceItem)}`:'No action due today.'},
-          {id:'tasks',label:'Tasks',detail:`${openTaskCount} open task${openTaskCount!==1?'s':''} across your system.`},
-          {id:'finance',label:'Finance',detail:`${financeReviewCount} transaction${financeReviewCount!==1?'s':''} waiting for review.`},
-        ],
-      },
-      {
-        title:'Review and Settings',
-        items:[
-          {id:'insights',label:'Insights',detail:'Patterns, history, and weekly review summaries.'},
-          {id:'settings',label:'Settings',detail:'Backup, restore, preferences, and app controls.'},
-        ],
-      },
-    ];
-
-    return <div style={S.body}>
-      <div style={S.card}>
-        <div style={{...S.row,alignItems:'flex-start',marginBottom:8}}>
-          <div>
-            <span style={S.lbl}>More</span>
-            <div style={{fontSize:18,fontWeight:700,color:C.tx}}>Secondary workspaces</div>
-          </div>
-          {urgentMaintenanceCount>0&&<span style={S.pill(C.redL,C.red)}>{urgentMaintenanceCount} urgent</span>}
-        </div>
-        <div style={{fontSize:12,color:C.tx2}}>Today, Calendar, Nutrition, and Fitness stay in the primary nav. Everything else lives here.</div>
-      </div>
-
-      {secondarySections.map(section=><div key={section.title} style={S.card}>
-        <span style={S.lbl}>{section.title}</span>
-        {section.items.map(item=><button key={item.id} onClick={()=>openTab(item.id)} style={{width:'100%',textAlign:'left',background:'transparent',border:'none',padding:'10px 0',cursor:'pointer',borderBottom:`0.5px solid ${C.bd}`}}>
-          <div style={{...S.row,alignItems:'flex-start',gap:10}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:700,color:C.tx}}>{item.label}</div>
-              <div style={{fontSize:11,color:C.tx2,marginTop:2}}>{item.detail}</div>
-            </div>
-            <div style={{fontSize:16,color:C.muted,flexShrink:0}}>›</div>
-          </div>
-        </button>)}
-      </div>)}
-
-      <div style={S.card}>
-        <div style={{...S.row,marginBottom:10}}>
-          <div>
-            <span style={S.lbl}>Quick Planning</span>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx}}>Weekly setup and command access</div>
-          </div>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-          <button style={{...S.btnGhost,width:'100%'}} onClick={()=>setShowWeeklyPlanner(true)}>Open Weekly Planner</button>
-          <button style={{...S.btnGhost,width:'100%'}} onClick={openBrainDump}>Open Brain Dump</button>
-        </div>
-      </div>
-    </div>;
+  function sendToInbox(title) {
+    const task = createTask('inbox', { title, order: inboxTasks.length + 1 });
+    setTasks(current => sortTasks([...current, task]));
+    setBrainDumpOpen(false);
+    setActiveView('inbox');
   }
 
-  // Primary navigation: Today · Calendar · Nutrition · Fitness · More
-  const NAV_ITEMS=[
-    {id:'home',label:'Today'},
-    {id:'calendar',label:'Calendar'},
-    {id:'meals',label:'Nutrition'},
-    {id:'training',label:'Fitness'},
-    {id:'more',label:'More'},
-  ];
-  const MORE_TAB_IDS=new Set(['tasks','finance','habits','health','maintenance','insights','settings','more']);
-  const TAB_TITLES={
-    home:'Today',
-    calendar:'Calendar',
-    tasks:'Tasks',
-    training:'Fitness',
-    meals:'Nutrition',
-    finance:'Finance',
-    habits:'Lifestyle',
-    health:'Recovery',
-    maintenance:'Maintenance',
-    insights:'Insights',
-    settings:'Settings',
-    more:'More',
+  function moveToPlanning(taskId) {
+    updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
+    setActiveView('planning');
+  }
+
+  function moveToExecution(taskId) {
+    updateTask(taskId, task => ({ ...task, status: 'active', shouldFocusTitle: false }));
+    setActiveView('planning');
+  }
+
+  function moveBackToPlanning(taskId) {
+    updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
+  }
+
+  const sharedHandlers = {
+    onCommitTitle: commitTitle,
+    onToggleDone: toggleDone,
+    onDelete: deleteTask,
+    onMove: moveTask,
+    onAddSubtask: addSubtask,
+    onCommitSubtaskTitle: commitSubtaskTitle,
+    onToggleSubtask: toggleSubtask,
+    onCommitNotes: commitNotes,
   };
-  const SCREENS={
-    home:HomeScreenV2,
-    calendar:()=>React.createElement(CalendarScreen,{focusDay:calendarFocusDay,onSelectDay:setCalendarFocusDay}),
-    tasks:()=>React.createElement(TasksScreen,{activeTab:taskScreenTab,onTabChange:setTaskScreenTab}),
-    training:TrainingScreen,
-    meals:MealsScreen,
-    finance:()=>React.createElement(FinanceScreen,{activeView:finView,onViewChange:setFinView}),
-    habits:()=>React.createElement(LifestyleScreen,{activeTab:lifestyleScreenTab,onTabChange:setLifestyleScreenTab,lifestyleOpen,setLifestyleOpen}),
-    health:()=>React.createElement(HealthScreen,{activeTab:healthScreenTab,onTabChange:setHealthScreenTab}),
-    maintenance:MaintenanceScreen,
-    insights:InsightsScreen,
-    settings:()=>React.createElement(SettingsScreen,{activeSection:settingsSection,onSectionChange:setSettingsSection}),
-    more:MoreScreen
-  };
-  const activePrimaryTab=MORE_TAB_IDS.has(tab)?'more':(NAV_ITEMS.some(item=>item.id===tab)?tab:null);
-  const ActiveScreen=SCREENS[tab]||HomeScreenV2;
-  const screenFallback=<div style={S.body}>
-    <div style={S.card}>
-      <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>Screen failed to render</div>
-      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Resetting to Today will recover the app if a screen throws during navigation.</div>
-      <button style={S.btnGhost} onClick={()=>openTab('home')}>Back to Today</button>
-    </div>
-  </div>;
-
-  const hr=NOW.getHours();
-  const greeting=hr>=6&&hr<12?'Good morning':hr>=12&&hr<17?'Good afternoon':'Good evening';
 
   return (
-    <div style={S.wrap}>
-      <a href="#app-main" className="skip-link">Skip to content</a>
-      <NotificationBanner
-        message={notif}
-        type={notifType}
-        detail={notifDetail}
-        actionLabel={notifAction?.label}
-        onAction={notifAction?.handler}
-        onDismiss={clearNotif}
+    <div className="app-shell">
+      <Header
+        inboxCount={inboxTasks.length}
+        onOpenBrainDump={() => setBrainDumpOpen(true)}
+        onOpenInbox={() => setActiveView('inbox')}
+        onOpenSettings={() => setActiveView('settings')}
       />
       <div style={S.hdr}>
         <div>
@@ -9826,176 +8047,106 @@ function App(){
             </div>
           </div>
 
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Sleep (hours)</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              {[4,5,5.5,6,6.5,7,7.5,8,8.5,9].map(h=><button
-                key={h}
-                onClick={()=>setCheckInSleep(h)}
-                aria-pressed={checkInSleep===h}
-                style={{padding:'8px 10px',borderRadius:10,border:`2px solid ${checkInSleep===h?C.navy:C.bd}`,background:checkInSleep===h?C.navyL:C.bg,color:checkInSleep===h?C.navyDk:C.tx,fontSize:12,fontWeight:600,cursor:'pointer'}}
-              >{h}h</button>)}
-            </div>
-          </div>
+      <main className="app-content">
+        {activeView === 'inbox' && (
+          <InboxView
+            tasks={inboxTasks}
+            onCommitTitle={commitTitle}
+            onMoveToPlanning={moveToPlanning}
+            onDelete={deleteTask}
+          />
+        )}
 
-          <div style={{marginBottom:18}}>
-            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Stress / Load</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(6,minmax(0,1fr))',gap:8}}>
-              {[0,1,2,3,4,5].map(level=><button
-                key={level}
-                onClick={()=>setCheckInStress(level)}
-                aria-pressed={checkInStress===level}
-                style={{height:44,borderRadius:12,border:`2px solid ${checkInStress===level?C.red:C.bd}`,background:checkInStress===level?C.redL:C.bg,color:checkInStress===level?C.red:C.tx,fontSize:15,fontWeight:700,cursor:'pointer'}}
-              >
-                {level}
-              </button>)}
-            </div>
-          </div>
-
-          {!showCheckInNote&&<button style={{...S.btnGhost,width:'100%',marginBottom:12}} onClick={()=>setShowCheckInNote(true)}>Add note</button>}
-          {showCheckInNote&&<textarea
-            value={checkInNote}
-            onChange={e=>setCheckInNote(e.target.value)}
-            placeholder="Optional note"
-            rows={3}
-            style={{...S.inp,minHeight:88,resize:'vertical',marginBottom:12}}
-          />}
-
-          <div style={{display:'flex',gap:8}}>
-            <button style={S.btnSolid(C.sage)} onClick={saveMorningCheckin}>Save</button>
-            <button style={{...S.btnGhost,flex:1}} onClick={closeMorningCheckin}>Skip for today</button>
-          </div>
-        </div>
-      </div>}
-
-      {/* Energy check-in modal */}
-      {showEnergyIn&&<div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
-        <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto'}}>
-          <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:20}}>How are you today?</div>
-          <span style={S.lbl}>Energy (1–10)</span>
-          <div style={{display:'flex',gap:4,marginBottom:16,flexWrap:'wrap'}}>
-            {[1,2,3,4,5,6,7,8,9,10].map(n=><button key={n} onClick={()=>setEnergyScore(n)} style={{width:36,height:36,borderRadius:8,border:`1.5px solid ${energyScore===n?C.sage:C.bd}`,background:energyScore===n?C.sage:'transparent',color:energyScore===n?C.white:C.tx,fontSize:13,fontWeight:600,cursor:'pointer'}}>{n}</button>)}
-          </div>
-          <span style={S.lbl}>Hours slept</span>
-          <div style={{display:'flex',gap:6,marginBottom:20,flexWrap:'wrap'}}>
-            {[5,5.5,6,6.5,7,7.5,8,8.5,9].map(h=><button key={h} onClick={()=>setSleepHours(h)} style={{padding:'6px 10px',borderRadius:8,border:`1.5px solid ${sleepHours===h?C.navy:C.bd}`,background:sleepHours===h?C.navy:'transparent',color:sleepHours===h?C.white:C.tx,fontSize:12,cursor:'pointer'}}>{h}h</button>)}
-          </div>
-          <div style={{display:'flex',gap:8}}>
-            <button style={S.btnSolid(C.sage)} onClick={logEnergyCheckin}>Save</button>
-            <button style={{...S.btnGhost,flex:1}} onClick={()=>setShowEnergyIn(false)}>Cancel</button>
-          </div>
-        </div>
-      </div>}
-
-      {showBrainDumpModal&&<BrainDumpModal
-        C={C}
-        S={S}
-        onClose={()=>setShowBrainDumpModal(false)}
-        onSave={saveBrainDumpEntry}
-      />}
-
-      {/* Quarterly / Annual review modal */}
-      {showReview&&(()=>{
-        const type=getReviewType()||'quarterly';
-        const year=NOW.getFullYear();
-        const q=Math.ceil((NOW.getMonth()+1)/3);
-        const totalWorkouts=workoutHistory.length;
-        const totalMiles=workoutHistory.filter(h=>h.type==='run').reduce((s,h)=>s+(parseFloat(h.data?.dist2)||0),0);
-        const yearSpend=(transactions||[]).filter(t=>!t.isCredit&&!t.isTransfer&&t.date.startsWith(String(year))).reduce((s,t)=>s+t.amount,0);
-        const subTotal=(recurringExpenses||[]).reduce((s,r)=>s+(r.averageAmount*12),0);
-        const bestHabit=(habits||[]).reduce((best,h)=>{const s=computeStreak(h,dailyLogs);return s>(best?.streak||0)?{...h,streak:s}:best;},null);
-        return <div style={{position:'fixed',inset:0,background:C.bg,zIndex:700,overflowY:'auto'}}>
-          <div style={{maxWidth:430,margin:'0 auto',padding:'16px 16px 80px'}}>
-            <div style={{...S.row,marginBottom:20,paddingTop:'env(safe-area-inset-top)'}}>
-              <div style={{fontSize:17,fontWeight:700,color:C.tx}}>{type==='annual'?`${year} Annual Review`:`Q${q} ${year} Review`}</div>
-              <button style={S.btnGhost} onClick={()=>setShowReview(false)}>Close</button>
-            </div>
-            <div style={{...S.card,background:PH.lClr,borderColor:'transparent',marginBottom:12}}>
-              <div style={{fontSize:11,color:PH.tClr,marginBottom:4}}>{type==='annual'?'Year in review':'Quarter in review'}</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                {[{l:'Workouts',v:totalWorkouts},{l:'Miles run',v:totalMiles.toFixed(1)},{l:'Spend YTD',v:fmtMoney(yearSpend)},{l:'Subscriptions/yr',v:fmtMoney(subTotal)}].map(({l,v})=>
-                  <div key={l}>
-                    <div style={{fontSize:9,color:PH.tClr}}>{l}</div>
-                    <div style={{fontSize:20,fontWeight:700,color:PH.clr}}>{v}</div>
-                  </div>
-                )}
+        {activeView === 'settings' && (
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Settings</p>
+                <h2>Keep your existing settings space</h2>
               </div>
             </div>
-            {bestHabit&&<div style={S.card}>
-              <span style={S.lbl}>Most consistent habit</span>
-              <div style={{fontSize:16,fontWeight:600,color:C.tx}}>{bestHabit.name}</div>
-              <div style={{fontSize:12,color:C.muted}}>{bestHabit.streak}d current streak</div>
-            </div>}
-            <div style={S.card}>
-              <span style={S.lbl}>Home maintenance</span>
-              <div style={{fontSize:13,color:C.tx}}>{Object.keys(maintenanceHistory||{}).length} tasks completed this period</div>
-            </div>
+            <p className="settings-copy">
+              This refactor keeps task management centralized in one context. Add any existing settings controls here without duplicating task state.
+            </p>
+          </section>
+        )}
+
+        {activeView !== 'inbox' && activeView !== 'settings' && (
+          <div className="board-grid">
+            <section className="task-card">
+              <div className="task-card-header">
+                <div>
+                  <p className="eyebrow">Brain Dump → Inbox</p>
+                  <h2>Captured items waiting for triage</h2>
+                </div>
+              </div>
+              <div className="summary-stack">
+                <div className="summary-tile">
+                  <span>Inbox</span>
+                  <strong>{inboxTasks.length}</strong>
+                </div>
+                <button type="button" className="secondary-button full-width" onClick={() => setActiveView('inbox')}>
+                  Open Inbox
+                </button>
+              </div>
+            </section>
+
+            <PlanningCard
+              tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
+              handlers={sharedHandlers}
+              onCreateEmptyTask={createEmptyPlannedTask}
+              onMoveToExecution={moveToExecution}
+            />
+
+            <ExecutionCard
+              tasks={activeTasks}
+              handlers={sharedHandlers}
+              onMoveBackToPlanning={moveBackToPlanning}
+            />
+
+            <section className="task-card">
+              <div className="task-card-header">
+                <div>
+                  <p className="eyebrow">Done</p>
+                  <h2>Completed tasks</h2>
+                </div>
+              </div>
+              <div className="task-list compact-list">
+                {doneTasks.length === 0 ? (
+                  <p className="empty-message">Completed work will appear here.</p>
+                ) : (
+                  doneTasks.map(task => (
+                    <div key={task.id} className="transition-row done-row">
+                      <span className="transition-title">{task.title || 'Untitled task'}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </section>
           </div>
-        </div>;
-      })()}
+        )}
+      </main>
 
-      {/* Focus Mode overlay */}
-      {focusTaskId&&(()=>{
-        const focusTask=taskHistory.find(t=>t.id===focusTaskId)||null;
-        if(!focusTask)return null;
-        const tmrMins=focusTmrSec!==null?Math.floor(focusTmrSec/60):null;
-        const tmrSecs=focusTmrSec!==null?focusTmrSec%60:null;
-        const tmrPct=focusTmrSec!==null?focusTmrSec/(25*60):1;
-        return <div style={{position:'fixed',inset:0,background:C.navy,zIndex:999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'32px 24px'}}>
-          <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',letterSpacing:'1px',textTransform:'uppercase',marginBottom:16}}>Focus Mode</div>
-          <div style={{fontSize:22,fontWeight:800,color:C.white,textAlign:'center',lineHeight:1.3,marginBottom:32,maxWidth:320}}>{focusTask.text}</div>
-          {focusTmrSec!==null&&<div style={{marginBottom:32,textAlign:'center'}}>
-            <div style={{fontSize:60,fontWeight:800,color:C.white,letterSpacing:'-2px'}}>{String(tmrMins).padStart(2,'0')}:{String(tmrSecs).padStart(2,'0')}</div>
-            <div style={{width:200,height:4,background:'rgba(255,255,255,0.2)',borderRadius:99,marginTop:10,overflow:'hidden',margin:'10px auto 0'}}>
-              <div style={{width:`${tmrPct*100}%`,height:'100%',background:C.white,borderRadius:99,transition:'width 1s linear'}}/>
-            </div>
-          </div>}
-          <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',maxWidth:280}}>
-            {focusTmrSec===null&&<button style={{...S.btnSolid(),background:C.sage,border:'none'}} onClick={()=>{setFocusTmrSec(25*60);setFocusTmrRunning(true);}}>Start 25-min Timer</button>}
-            {focusTmrSec!==null&&<button style={{...S.btnSolid(),background:focusTmrRunning?C.amberDk:C.sage,border:'none'}} onClick={()=>setFocusTmrRunning(r=>!r)}>{focusTmrRunning?'Pause':'Resume'}</button>}
-            <button style={{...S.btnSolid(),background:C.sage,border:'none'}} onClick={()=>{updateProfile(p=>({...p,taskHistory:p.taskHistory.map(t=>t.id===focusTask.id?{...t,done:true,status:'done',updatedAt:new Date().toISOString()}:t)}));setFocusTaskId(null);setFocusTmrSec(null);setFocusTmrRunning(false);showNotif('Task completed!','success');}}>Done — Mark Complete</button>
-            <button style={{...S.btnGhost,color:C.white,borderColor:'rgba(255,255,255,0.3)'}} onClick={()=>{setFocusTaskId(null);setFocusTmrSec(null);setFocusTmrRunning(false);}}>Exit Focus</button>
-          </div>
-        </div>;
-      })()}
-
-      {/* Workout player overlay */}
-      {showWorkoutPlayer&&wkSess&&<WorkoutPlayer
-        C={C}
-        S={S}
-        wkSess={wkSess}
-        onComplete={()=>{finishWk();setShowWorkoutPlayer(false);}}
-        onCancel={()=>{setWkSess(null);setTrainView('overview');setShowWorkoutPlayer(false);}}
-      />}
-
-      {/* Flow Engine overlay */}
-      {showFlow&&(
-        <FlowRoot
-          dayType={flowDayType}
-          onDayType={handleFlowDayType}
-          calendarCache={calendarCache}
-          todayKey={TODAY}
-          now={NOW}
-          onClose={()=>setShowFlow(false)}
-        />
-      )}
-
+      <BrainDumpModal
+        isOpen={brainDumpOpen}
+        onClose={() => setBrainDumpOpen(false)}
+        onSubmit={sendToInbox}
+      />
     </div>
   );
 }
 
-function mountApp(){
-  try{
-    const rootElement=document.getElementById('root');
-    if(!rootElement)throw new Error('Root element #root was not found.');
-    const root=rootElement.__appRoot??createRoot(rootElement);
-    rootElement.__appRoot=root;
-    root.render(React.createElement(App));
-  }catch(error){
-    console.error('App render failed:',error);
-    const loading=document.getElementById('loading');
-    if(loading)loading.textContent='App failed to load. Refresh to retry.';
-  }
+function App() {
+  return (
+    <TaskProvider>
+      <TaskApp />
+    </TaskProvider>
+  );
 }
 
-mountApp();
+const rootElement = document.getElementById('root');
+createRoot(rootElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
