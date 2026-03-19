@@ -284,75 +284,104 @@ function TodayList({
   setDailyExecutionMode,
 }){
   const headingId=React.useId();
-  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
-  const isExecution=dailyExecutionEntry.mode==='execution';
-  const visibleTasks=isExecution
-    ?dailyExecutionEntry.agenda
-    :dailyExecutionEntry.priorities;
+  const planningTasks=dailyExecutionEntry.priorities.filter(task=>task.text.trim()&&(task.status||'planned')==='planned');
+  const executionTasks=(dailyExecutionEntry.agenda||[]).filter(task=>task.text.trim()&&(task.status||'planned')==='active');
+  const hasPlanningTasks=planningTasks.length>0;
 
-  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
+  function renderTask(task,index,items,section){
+    const isPlanning=section==='planning';
+    const subtasksText=Array.isArray(task.subtasks)?task.subtasks.map(sub=>sub.text).filter(Boolean).join('\n'):'';
+    return <div key={task.id}>
+      <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'flex-start',background:isPlanning?C.surf:C.white,border:`1px solid ${isPlanning?C.bd:C.sageL}`,borderRadius:12,padding:'10px 12px'}}>
+        <button
+          type="button"
+          aria-pressed={task.completed}
+          aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`task ${index+1}`}`}
+          style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0,marginTop:isPlanning?8:4}}
+          onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
+        >{task.completed?'✓':''}</button>
+        {isPlanning
+          ?<div style={{display:'grid',gap:8}}>
+            <FieldInput
+              id={`daily-priority-${task.id}`}
+              aria-label={`Planning task ${index+1}`}
+              value={task.text||''}
+              placeholder={`Task ${index+1}`}
+              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
+              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
+            />
+            <FieldInput
+              as="textarea"
+              aria-label={`Notes for task ${index+1}`}
+              value={task.notes||''}
+              placeholder="Notes"
+              style={{...S.inp,minHeight:68,resize:'vertical',margin:0,paddingTop:10}}
+              onChange={e=>updatePriorityTask(task.id,{notes:e.target.value})}
+            />
+            <FieldInput
+              as="textarea"
+              aria-label={`Subtasks for task ${index+1}`}
+              value={subtasksText}
+              placeholder="Subtasks (one per line)"
+              style={{...S.inp,minHeight:76,resize:'vertical',margin:0,paddingTop:10}}
+              onChange={e=>updatePriorityTask(task.id,{subtasks:e.target.value.split(/\n+/).map(line=>line.trim()).filter(Boolean).map((text,subIndex)=>({id:`${task.id}-sub-${subIndex}`,text,completed:task.subtasks?.find(sub=>sub.text===text)?.completed||false}))})}
+            />
+          </div>
+          :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'2px 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
+            <span>{task.text||`Task ${index+1}`}</span>
+            {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:4}}>{task.notes}</span>}
+            {Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingTop:8,display:'grid',gap:4}}>
+              {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
+                <button
+                  type="button"
+                  aria-pressed={sub.completed}
+                  style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
+                  onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
+                >{sub.completed?'✓':''}</button>
+                <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
+              </div>)}
+            </div>}
+          </div>}
+        <div style={{display:'flex',gap:6,flexShrink:0,marginTop:isPlanning?2:0}}>
+          {isPlanning&&<>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`task ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`task ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
+            <button type="button" aria-label={`Remove ${task.text?.trim()||`task ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>
+          </>}
+        </div>
+      </div>
+    </div>;
+  }
+
+  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:14}}>
     <div style={{...S.row,alignItems:'flex-start',gap:10}}>
       <div style={{minWidth:0}}>
         <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Today</div>
         <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
         {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
       </div>
-      <span style={S.pill(isExecution?C.sageL:C.navyL,isExecution?C.sageDk:C.navyDk)}>{isExecution?'Execution':'Planning'}</span>
     </div>
-    <div style={{display:'grid',gap:8}}>
-      {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
-        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:4}}>No priorities</div>
-        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Use Brain Dump to capture something fast, then process it when you&apos;re ready.</div>
-        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openBrainDump}>Brain Dump</button>
-      </div>}
-      {visibleTasks.map((task,index,items)=><div key={task.id}>
-        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-          <button
-            type="button"
-            aria-pressed={task.completed}
-            aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
-            style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}
-            onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
-          >
-            {task.completed?'✓':''}
-          </button>
-          {!isExecution
-            ?<FieldInput
-              id={`daily-priority-${task.id}`}
-              aria-label={`Priority ${index+1}`}
-              value={task.text||''}
-              placeholder={`Task ${index+1}`}
-              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
-              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
-            />
-            :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
-              <span>{task.text||`Task ${index+1}`}</span>
-              {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:2}}>{task.notes}</span>}
-            </div>}
-          <div style={{display:'flex',gap:6,flexShrink:0}}>
-            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
-            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
-            {!isExecution&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
-          </div>
-        </div>
-        {isExecution&&Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingLeft:30,display:'grid',gap:4,marginTop:4}}>
-          {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
-            <button
-              type="button"
-              aria-pressed={sub.completed}
-              style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
-              onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
-            >{sub.completed?'✓':''}</button>
-            <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
-          </div>)}
-        </div>}
-      </div>)}
+
+    <div style={{display:'grid',gap:10,padding:'12px',border:`1px solid ${C.bd}`,borderRadius:16,background:C.white}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+        <h3 style={{margin:0,fontSize:17,fontWeight:800,color:C.tx}}>Planning</h3>
+        <button type="button" style={{...S.btnSolid(C.navy),fontSize:11,padding:'7px 12px',opacity:hasPlanningTasks?1:0.45,pointerEvents:hasPlanningTasks?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasPlanningTasks}>Start</button>
+      </div>
+      <div style={{display:'grid',gap:8}}>
+        {planningTasks.map((task,index,items)=>renderTask(task,index,items,'planning'))}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-start'}}>
+        <button type="button" style={{...S.btnGhost}} onClick={openBrainDump}>Brain Dump</button>
+      </div>
     </div>
-    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-      {!isExecution&&<button type="button" style={{...S.btnGhost,flex:1}} onClick={openBrainDump}>Brain Dump</button>}
-      {!isExecution
-        ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
-        :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
+
+    <div style={{display:'grid',gap:10,padding:'12px',border:`1px solid ${C.sageL}`,borderRadius:16,background:'#F9FBF7'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+        <h3 style={{margin:0,fontSize:17,fontWeight:800,color:C.tx}}>Execution</h3>
+      </div>
+      <div style={{display:'grid',gap:8}}>
+        {executionTasks.map((task,index,items)=>renderTask(task,index,items,'execution'))}
+      </div>
     </div>
   </section>;
 }
@@ -2513,11 +2542,21 @@ function createDailyExecutionTask(text='',overrides={}){
 }
 
 function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
+  const source=(task&&typeof task==='object'&&!Array.isArray(task))?task:{};
   return createDailyExecutionTask(typeof task==='string'?task:(task?.text||''),{
-    ...((task&&typeof task==='object'&&!Array.isArray(task))?task:{}),
+    ...source,
     id:task?.id||`dx-${dateKey}-${index}`,
     date:normalizeDateKey(task?.date||dateKey,dateKey),
     completed:!!task?.completed,
+    status:source.status==='active'?'active':'planned',
+    notes:typeof source.notes==='string'?source.notes:'',
+    subtasks:Array.isArray(source.subtasks)
+      ?source.subtasks.map((sub,subIndex)=>({
+        id:sub?.id||`${task?.id||`dx-${dateKey}-${index}`}-sub-${subIndex}`,
+        text:typeof sub==='string'?sub:(sub?.text||''),
+        completed:!!sub?.completed,
+      }))
+      :[],
     timestamp:typeof task?.timestamp==='string'?task.timestamp:null,
     updatedAt:typeof task?.updatedAt==='string'?task.updatedAt:new Date().toISOString(),
   });
@@ -3535,9 +3574,10 @@ function App(){
   };
   function saveBrainDumpEntry(text){
     const entry={id:`brain-${Date.now()}`,text,createdAt:new Date().toISOString(),processed:false};
-    updateProfile(p=>({...p,brainDump:[entry,...(p.brainDump||[])]}));
+    const inboxItem={id:`inbox-${Date.now()}`,text,createdDate:TODAY,suggestedType:'task',status:'pending'};
+    updateProfile(p=>({...p,brainDump:[entry,...(p.brainDump||[])],inboxItems:[...(p.inboxItems||[]),inboxItem]}));
     setShowBrainDumpModal(false);
-    showNotif('Captured','success');
+    showNotif('Captured to Inbox','success');
   }
   const openTab=useCallback((nextTab,options={})=>{
     if(!APP_TAB_IDS.includes(nextTab))return;
@@ -4537,8 +4577,8 @@ function App(){
     const item=(inboxItems||[]).find(x=>x.id===id);
     if(!item)return;
     if(type==='task'){
-      const t={id:`t-${Date.now()}`,text:item.text,date:extra.date||TODAY,priority:extra.priority||2,parentId:null,done:false,status:'active',bucket:extra.bucket||'next',contextTags:extra.contextTags||[],scheduledTime:extra.scheduledTime||'',updatedAt:new Date().toISOString()};
-      updateProfile(p=>({...p,inboxItems:(p.inboxItems||[]).map(x=>x.id===id?{...x,status:'processed'}:x),taskHistory:[...(p.taskHistory||[]),t]}));
+      const t={id:`t-${Date.now()}`,text:item.text,date:extra.date||TODAY,priority:extra.priority||2,parentId:null,done:false,status:'planned',bucket:extra.bucket||'next',contextTags:extra.contextTags||[],scheduledTime:extra.scheduledTime||'',updatedAt:new Date().toISOString()};
+      updateProfile(p=>({...p,inboxItems:(p.inboxItems||[]).map(x=>x.id===id?{...x,status:'processed'}:x),taskHistory:[...(p.taskHistory||[]),t],dailyExecution:{...(p.dailyExecution||{}),[(extra.date||TODAY)]:(()=>{const base=normalizeDailyExecutionEntry((p.dailyExecution||{})[extra.date||TODAY],extra.date||TODAY,p.top3?.[extra.date||TODAY]||[]);return{...base,priorities:[...base.priorities,createDailyExecutionTask(item.text,{date:extra.date||TODAY,status:'planned'})]};})()}}));
     } else if(type==='finance'){
       const cat=autoCategorize(item.text,profile.merchantRules||{});
       const finMatch=item.text.match(/\$?(\d+(?:\.\d{1,2})?)/);
@@ -4839,27 +4879,37 @@ function App(){
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
     function setDailyExecutionMode(nextMode){
-      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>task.text.trim())){
-        showNotif('Add at least one priority before moving to execution.','warn');
+      const planningTasks=dailyExecutionEntry.priorities.filter(task=>task.text.trim()&&(task.status||'planned')==='planned');
+      if(nextMode==='execution'&&planningTasks.length===0){
+        showNotif('Add at least one planning task before starting execution.','warn');
         return;
       }
-      updateDailyExecution(activeDate,entry=>({
-        ...entry,
-        mode:nextMode,
-        agenda:nextMode==='execution'
-          ?entry.priorities.map(task=>({...task}))
-          :entry.agenda,
-      }));
+      updateDailyExecution(activeDate,entry=>{
+        if(nextMode!=='execution')return {...entry,mode:'planning'};
+        const priorities=entry.priorities.map(task=>task.text.trim()&&((task.status||'planned')==='planned')?{...task,status:'active',updatedAt:new Date().toISOString()}:task);
+        const activatedIds=new Set(priorities.filter(task=>task.text.trim()&&task.status==='active').map(task=>task.id));
+        const existingAgenda=(entry.agenda||[]).filter(task=>task.text.trim()&&activatedIds.has(task.id));
+        const syncedAgenda=priorities
+          .filter(task=>task.text.trim()&&task.status==='active')
+          .map(task=>existingAgenda.find(item=>item.id===task.id)||{...task});
+        return {...entry,mode:'execution',priorities,agenda:syncedAgenda};
+      });
       if(nextMode==='execution')trackGrowthEvent('execution_started',{date:activeDate});
-      showNotif(nextMode==='execution'?'Execution mode enabled':'Returned to planning mode','success');
+      showNotif(nextMode==='execution'?'Execution started':'Returned to planning mode','success');
     }
 
     function updatePriorityTask(taskId,patch){
       updateDailyExecution(activeDate,entry=>{
-        const priorities=entry.priorities.map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task);
-        const agendaSource=entry.mode==='execution'
-          ?(entry.agenda.length>0?entry.agenda:entry.priorities).map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task)
-          :entry.agenda;
+        const nextPatch={...patch};
+        if(Array.isArray(nextPatch.subtasks)){
+          nextPatch.subtasks=nextPatch.subtasks.map((sub,index)=>({
+            id:sub?.id||`${taskId}-sub-${index}`,
+            text:typeof sub==='string'?sub:(sub?.text||''),
+            completed:!!sub?.completed,
+          }));
+        }
+        const priorities=entry.priorities.map(task=>task.id===taskId?{...task,...nextPatch,updatedAt:new Date().toISOString()}:task);
+        const agendaSource=(entry.agenda||[]).map(task=>task.id===taskId?{...task,...nextPatch,updatedAt:new Date().toISOString()}:task);
         return{...entry,priorities,agenda:agendaSource};
       });
     }
@@ -9627,21 +9677,29 @@ function App(){
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <button
-            style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'8px',cursor:'pointer',display:'flex',alignItems:'center',position:'relative'}}
+            style={{...S.btnSolid(C.navy),padding:'8px 12px'}}
+            onClick={openBrainDump}
+            title="Brain Dump"
+            aria-label="Brain Dump"
+          >
+            Brain Dump
+          </button>
+          <button
+            style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'8px 12px',cursor:'pointer',display:'flex',alignItems:'center',position:'relative',color:C.tx,fontSize:13,fontWeight:600}}
             onClick={()=>openTab('tasks',{taskTab:'inbox'})}
             title="Inbox"
             aria-label={pendingInbox.length>0?`Inbox, ${pendingInbox.length} pending item${pendingInbox.length!==1?'s':''}`:'Inbox'}
           >
             {pendingInbox.length>0&&<div style={{position:'absolute',top:0,right:0,minWidth:16,height:16,borderRadius:999,background:C.red,color:C.white,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{Math.min(pendingInbox.length,9)}</div>}
-            <NavIcon id="inbox" active={tab==='tasks'}/>
+            Inbox
           </button>
           <button
-            style={{background:C.navy,border:'none',borderRadius:12,width:36,height:36,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
-            onClick={openBrainDump}
-            title="Brain Dump"
-            aria-label="Brain Dump"
+            style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,width:36,height:36,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+            onClick={()=>openTab('settings')}
+            title="Settings"
+            aria-label="Settings"
           >
-            <span style={{color:'var(--white)',fontSize:17,lineHeight:1}} aria-hidden="true">🧠</span>
+            <NavIcon id="more" active={tab==='settings'||tab==='more'}/>
           </button>
         </div>
       </div>
