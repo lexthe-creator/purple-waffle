@@ -356,6 +356,8 @@ function TodayList({
         :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
     </div>
   </section>;
+}
+
 function InlineTaskInput({C,S,onAdd}){
   const [text,setText]=useState('');
   const [notesOpen,setNotesOpen]=useState(false);
@@ -2406,7 +2408,6 @@ const DEFAULT_OPS={
   top3:{},
   dailyExecution:{},
   dailyRecommendations:{},
-  brainDump:[],
   inboxItems:[], // [{id,text,createdDate,suggestedType,status:'pending'|'processed'}]
   googleClientId:null,
   notifications:{morningTime:'07:00',eveningTime:'21:00'},
@@ -3503,7 +3504,6 @@ function App(){
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
   const [showHabitsModal,setShowHabitsModal]=useState(false);
-  const [showBrainDumpModal,setShowBrainDumpModal]=useState(false);
   const [habitDraftCompletions,setHabitDraftCompletions]=useState({});
   const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
   const [showProgramPicker,setShowProgramPicker]=useState(false);
@@ -9880,13 +9880,6 @@ function App(){
           </div>
         </div>
       </div>}
-
-      {showBrainDumpModal&&<BrainDumpModal
-        C={C}
-        S={S}
-        onClose={()=>setShowBrainDumpModal(false)}
-        onSave={saveBrainDumpEntry}
-      />}
 
       {showBrainDumpModal&&<BrainDumpModal
         C={C}
