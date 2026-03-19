@@ -21,6 +21,9 @@ export default function HomeView({
   onMoveBackToPlanning,
   onOpenInbox,
   onOpenBrainDump,
+  onOpenNutrition,
+  onOpenWorkout,
+  onMarkTaskDone,
 }) {
   return (
     <div className="home-stack">
@@ -35,14 +38,15 @@ export default function HomeView({
         onCreateEmptyTask={onCreateEmptyTask}
         onMoveToExecution={onMoveToExecution}
         onMoveBackToPlanning={onMoveBackToPlanning}
+        onMarkDone={onMarkTaskDone}
       />
       <div className="context-card-grid">
-        <MealCard plannedCount={plannedTasks.length} />
-        <WorkoutCard activeCount={activeTasks.length} />
-        <WeeklyPreviewCard inboxCount={inboxTasks.length} doneCount={doneTasks.length} />
-        <WeekAheadCard plannedCount={plannedTasks.length} />
-        <SomedaySoonCard inboxCount={inboxTasks.length} />
-        <TaskFlowCard activeCount={activeTasks.length} doneCount={doneTasks.length} />
+        <MealCard onOpenNutrition={onOpenNutrition} />
+        <WorkoutCard onOpenWorkout={onOpenWorkout} />
+        <WeeklyPreviewCard />
+        <WeekAheadCard />
+        <SomedaySoonCard />
+        <TaskFlowCard plannedCount={plannedTasks.length} activeCount={activeTasks.length} doneCount={doneTasks.length} />
       </div>
     </div>
   );
