@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
+import QuickAddModal from './components/QuickAddModal.jsx';
+import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
 import { FlowRoot } from './flow/FlowRoot.jsx';
@@ -268,6 +270,53 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
   </section>;
 }
 
+function InlineTaskInput({C,S,onAdd}){
+  const [text,setText]=useState('');
+  const [notesOpen,setNotesOpen]=useState(false);
+  const [notes,setNotes]=useState('');
+  const [subtasks,setSubtasks]=useState([]);
+  const [open,setOpen]=useState(false);
+
+  function submit(){
+    if(!text.trim())return;
+    onAdd({text:text.trim(),notes:notes.trim()||null,subtasks:subtasks.map(s=>({id:`sub-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,text:s.trim(),completed:false})).filter(s=>s.text)});
+    setText('');setNotes('');setSubtasks([]);setNotesOpen(false);setOpen(false);
+  }
+
+  if(!open){
+    return <button type="button" style={{...S.btnGhost,fontSize:12,justifyContent:'flex-start',padding:'8px 12px'}} onClick={()=>setOpen(true)}>+ Add task</button>;
+  }
+
+  return <div style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gap:8}}>
+    <input
+      value={text}
+      onChange={e=>setText(e.target.value)}
+      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();submit();}if(e.key==='Escape')setOpen(false);}}
+      placeholder="Task name"
+      style={{...S.inp,margin:0}}
+      autoFocus
+    />
+    {subtasks.map((st,i)=><div key={i} style={{display:'flex',gap:8,paddingLeft:14,alignItems:'center'}}>
+      <div style={{width:5,height:5,borderRadius:999,background:C.muted,flexShrink:0}}/>
+      <input
+        value={st}
+        onChange={e=>{const next=[...subtasks];next[i]=e.target.value;setSubtasks(next);}}
+        placeholder={`Subtask ${i+1}`}
+        style={{...S.inp,margin:0,flex:1,fontSize:12}}
+      />
+      <button type="button" onClick={()=>setSubtasks(subtasks.filter((_,j)=>j!==i))} style={{...S.btnGhost,padding:'3px 7px',fontSize:11}}>×</button>
+    </div>)}
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      <button type="button" onClick={()=>setSubtasks([...subtasks,''])} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>+ Subtask</button>
+      <button type="button" onClick={()=>setNotesOpen(o=>!o)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>{notesOpen?'▾ Notes':'▸ Notes'}</button>
+      <div style={{flex:1}}/>
+      <button type="button" onClick={()=>setOpen(false)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>Cancel</button>
+      <button type="button" onClick={submit} disabled={!text.trim()} style={{...S.btnSmall(),fontSize:11,padding:'5px 9px',opacity:text.trim()?1:0.45}}>Add</button>
+    </div>
+    {notesOpen&&<textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes…" rows={2} style={{...S.inp,margin:0,resize:'vertical',fontSize:12}}/>}
+  </div>;
+}
+
 function TodayList({
   C,
   S,
@@ -283,7 +332,8 @@ function TodayList({
 }){
   const headingId=React.useId();
   const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
-  const visibleTasks=dailyExecutionEntry.mode==='execution'
+  const isExecution=dailyExecutionEntry.mode==='execution';
+  const visibleTasks=isExecution
     ?dailyExecutionEntry.agenda
     :dailyExecutionEntry.priorities;
 
@@ -294,45 +344,60 @@ function TodayList({
         <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
         {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
       </div>
-      <span style={S.pill(dailyExecutionEntry.mode==='execution'?C.sageL:C.navyL,dailyExecutionEntry.mode==='execution'?C.sageDk:C.navyDk)}>{dailyExecutionEntry.mode==='execution'?'Execution':'Planning'}</span>
+      <span style={S.pill(isExecution?C.sageL:C.navyL,isExecution?C.sageDk:C.navyDk)}>{isExecution?'Execution':'Planning'}</span>
     </div>
     <div style={{display:'grid',gap:8}}>
       {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
         <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:8}}>No priorities</div>
-        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={addPriorityTask}>Add task</button>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={()=>addPriorityTask()}>Add task</button>
       </div>}
-      {visibleTasks.map((task,index,items)=><div key={task.id} style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-        <button
-          type="button"
-          aria-pressed={task.completed}
-          aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
-          style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700}}
-          onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
-        >
-          {task.completed?'✓':''}
-        </button>
-        {dailyExecutionEntry.mode==='planning'
-          ?<FieldInput
-            id={`daily-priority-${task.id}`}
-            aria-label={`Priority ${index+1}`}
-            value={task.text||''}
-            placeholder={`Task ${index+1}`}
-            style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
-            onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
-          />
-          :<div style={{minHeight:42,display:'flex',alignItems:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
-            {task.text||`Task ${index+1}`}
-          </div>}
-        <div style={{display:'flex',gap:6}}>
-          <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
-          <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
-          {dailyExecutionEntry.mode==='planning'&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
+      {visibleTasks.map((task,index,items)=><div key={task.id}>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+          <button
+            type="button"
+            aria-pressed={task.completed}
+            aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
+            style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}
+            onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
+          >
+            {task.completed?'✓':''}
+          </button>
+          {!isExecution
+            ?<FieldInput
+              id={`daily-priority-${task.id}`}
+              aria-label={`Priority ${index+1}`}
+              value={task.text||''}
+              placeholder={`Task ${index+1}`}
+              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
+              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
+            />
+            :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
+              <span>{task.text||`Task ${index+1}`}</span>
+              {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:2}}>{task.notes}</span>}
+            </div>}
+          <div style={{display:'flex',gap:6,flexShrink:0}}>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
+            {!isExecution&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
+          </div>
         </div>
+        {isExecution&&Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingLeft:30,display:'grid',gap:4,marginTop:4}}>
+          {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
+            <button
+              type="button"
+              aria-pressed={sub.completed}
+              style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
+              onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
+            >{sub.completed?'✓':''}</button>
+            <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
+          </div>)}
+        </div>}
       </div>)}
     </div>
+    {isExecution&&<InlineTaskInput C={C} S={S} onAdd={addPriorityTask}/>}
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-      <button type="button" style={{...S.btnGhost,flex:1}} onClick={addPriorityTask}>Add task</button>
-      {dailyExecutionEntry.mode==='planning'
+      {!isExecution&&<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>addPriorityTask()}>Add task</button>}
+      {!isExecution
         ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
         :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
     </div>
@@ -3462,8 +3527,12 @@ function App(){
   const [checkInEnergy,setCheckInEnergy]=useState(3);
   const [checkInStress,setCheckInStress]=useState(2);
   const [checkInNote,setCheckInNote]=useState('');
+  const [checkInSleep,setCheckInSleep]=useState(7);
   const [showCheckInNote,setShowCheckInNote]=useState(false);
   const [dismissedMorningCheckinDate,setDismissedMorningCheckinDate]=useState(null);
+  const [showQuickAddModal,setShowQuickAddModal]=useState(false);
+  const [quickAddModalType,setQuickAddModalType]=useState(null);
+  const [showWorkoutPlayer,setShowWorkoutPlayer]=useState(false);
   const [tier2Open,setTier2Open]=useState({energy:true,finance:false,habits:false});
   const [homeCardsOpen,setHomeCardsOpen]=useState({habits:false,alerts:false,weekly:false});
   const [showInsights,setShowInsights]=useState(false);
@@ -3546,6 +3615,29 @@ function App(){
     setCaptureText('');
     setShowCapture(true);
   };
+  function handleQuickAddTask(taskData){
+    updateDailyExecution(TODAY,entry=>{
+      const nextTask=createDailyExecutionTask(taskData.text||'',{date:TODAY,...taskData});
+      return{
+        ...entry,
+        priorities:[...entry.priorities,nextTask],
+        agenda:entry.mode==='execution'?[...entry.agenda,nextTask]:entry.agenda,
+      };
+    });
+    showNotif('Task added','success');
+    trackGrowthEvent('task_added_quick',{});
+  }
+  function handleQuickAddMeal(mealData){
+    const entry=normalizeMealEntry({...mealData,id:Date.now()},mealData.slot||'snack');
+    applyUndoableProfileUpdate('Meal logged',p=>({...p,meals:{...p.meals,[TODAY]:[...(p.meals?.[TODAY]||[]),entry]}}),`Added to ${mealData.slot||'snack'}.`);
+    trackGrowthEvent('meal_logged',{slot:mealData.slot||'snack',source:'quick_add'});
+    showNotif('Meal logged','success');
+  }
+  function handleQuickAddNote(noteData){
+    const note={id:`note-${Date.now()}`,text:noteData.text,createdAt:new Date().toISOString(),date:TODAY};
+    updateProfile(p=>({...p,captureNotes:[...(p.captureNotes||[]),note]}));
+    showNotif('Note saved','success');
+  }
   const openTab=useCallback((nextTab,options={})=>{
     if(!APP_TAB_IDS.includes(nextTab))return;
     if(options.taskTab&&TASK_TAB_IDS.includes(options.taskTab))setTaskScreenTab(options.taskTab);
@@ -3823,6 +3915,7 @@ function App(){
     setCheckInEnergy(typeof existingEntry?.energy==='number'?existingEntry.energy:3);
     setCheckInStress(typeof existingEntry?.stress==='number'?existingEntry.stress:2);
     setCheckInNote(typeof existingEntry?.note==='string'?existingEntry.note:'');
+    setCheckInSleep(typeof existingEntry?.sleepHours==='number'?existingEntry.sleepHours:7);
     setShowCheckInNote(!!existingEntry?.note);
     const onKeyDown=e=>{
       if(e.key!=='Escape')return;
@@ -4463,18 +4556,44 @@ function App(){
     setShowEnergyIn(false);showNotif('Energy logged','success');
   }
   function closeMorningCheckin(){
+    const todayKey=getTodayKey();
+    const todayLogEntry=profile.dailyLogs?.[todayKey];
+    if(!todayLogEntry?.checkInDone){
+      // Auto-generate energy baseline so energy is never null
+      const recentEntries=Object.entries(profile.dailyLogs||{})
+        .filter(([k])=>k<todayKey)
+        .sort(([a],[b])=>b.localeCompare(a))
+        .slice(0,7);
+      const lastEnergy=recentEntries.find(([,v])=>typeof v?.checkInEnergy==='number')?.[1]?.checkInEnergy??3;
+      saveDailyCheckin(todayKey,{date:todayKey,energy:lastEnergy,mood:null,stress:null,skipped:true});
+      updateProfile(p=>({
+        ...p,
+        dailyLogs:{
+          ...p.dailyLogs,
+          [todayKey]:{
+            ...(p.dailyLogs?.[todayKey]||{}),
+            checkInEnergy:lastEnergy,
+            energyScore:lastEnergy*2,
+            checkInDone:true,
+            skipped:true,
+          },
+        },
+      }));
+    }
     setShowMorningCheckin(false);
-    setDismissedMorningCheckinDate(getTodayKey());
+    setDismissedMorningCheckinDate(todayKey);
   }
   function saveMorningCheckin(){
     const todayKey=getTodayKey();
     const noteValue=checkInNote.trim();
+    const sleepVal=typeof checkInSleep==='number'&&checkInSleep>0?checkInSleep:null;
     const entry={
       date:todayKey,
       mood:typeof checkInMood==='number'?checkInMood:null,
       energy:checkInEnergy,
       stress:checkInStress,
       note:noteValue||null,
+      sleepHours:sleepVal,
     };
     saveDailyCheckin(todayKey,entry);
     updateProfile(p=>({
@@ -4489,6 +4608,7 @@ function App(){
           energyScore:entry.energy*2,
           stress:entry.stress,
           checkInNote:entry.note,
+          sleepHours:sleepVal!=null?sleepVal:(p.dailyLogs?.[todayKey]?.sleepHours||null),
           workoutDone:wktDone,
           proteinMet:totPro>=(proGoal*0.9),
           hydrationMet:todayH>=(hydGoal*0.9),
@@ -4806,6 +4926,7 @@ function App(){
   function HomeScreenV2(){
     const weekAheadPanelId=useId();
     const [weekAheadOpen,setWeekAheadOpen]=useState(false);
+    const [rescheduleTarget,setRescheduleTarget]=useState(null);
     const agendaTab='today';
     const activeDate=selectedDate;
     const isViewingToday=activeDate===TODAY;
@@ -4849,7 +4970,7 @@ function App(){
     const activeLifestyleItems=(lifestyleItems||[]).filter(i=>!i.archived).sort((a,b)=>(a.order||0)-(b.order||0));
     const dailyDone=activeLifestyleItems.filter(i=>!!todayChores[i.id]).length;
 
-    const energyFive=recoveryToday.energy==null?null:Math.max(1,Math.min(5,Math.round((recoveryToday.energy||6)/2)));
+    const energyFive=Math.max(1,Math.min(5,Math.round(((recoveryToday.energy??6)/2))));
     const sleepHoursToday=recoveryToday.sleep||0;
     const sleepWhole=Math.floor(sleepHoursToday||0);
     const sleepMinutes=Math.round(((sleepHoursToday||0)-sleepWhole)*60);
@@ -4905,9 +5026,9 @@ function App(){
       });
     }
 
-    function addPriorityTask(){
+    function addPriorityTask(taskData={}){
       updateDailyExecution(activeDate,entry=>{
-        const nextTask=createDailyExecutionTask('',{date:activeDate});
+        const nextTask=createDailyExecutionTask(taskData.text||'',{date:activeDate,...taskData});
         return{
           ...entry,
           mode:entry.mode==='execution'?entry.mode:'planning',
@@ -5053,8 +5174,17 @@ function App(){
         showNotif('Past workouts are locked and cannot be started retroactively.','warn');
         return;
       }
+      if(wktDone){
+        openTab('training',{trainSection:'today'});
+        return;
+      }
       if(selectedTodayWorkout){
-        launchWorkout(selectedTodayWorkout);
+        const hydrated=hydrateWorkoutSession({...selectedTodayWorkout,dateKey:TODAY});
+        setWkSess(hydrated);
+        setPlayerIdx(hydrated?.currentExerciseIdx||0);
+        setTrainView('session');
+        trackGrowthEvent('workout_started',{type:hydrated?.type||'workout'});
+        setShowWorkoutPlayer(true);
         return;
       }
       openTab('training');
@@ -5081,9 +5211,8 @@ function App(){
       showNotif(`Repeated ${entry.meal}`,'success');
     }
     function openMealQuickAdd(){
-      setMealShortcut({slot:missingMealSlots[0]?.slot.id||'lunch',mode:'ingredient'});
-      setShowManual(true);
-      openTab('meals');
+      setQuickAddModalType('meal');
+      setShowQuickAddModal(true);
     }
     function openAddTaskFlow(){
       setNewTask(createNewTaskDraft(activeDate,{date:activeDate,bucket:'next'}));
@@ -5270,14 +5399,47 @@ function App(){
           </div>
           <span style={{fontSize:11,color:C.navy,fontWeight:700}}>Open Plan</span>
         </div>
-        <div style={{display:'grid',gap:8,maxHeight:276,overflowY:'auto',paddingRight:2}}>
-          {weekPlannedWorkouts.map(item=><div key={item.plannedDate} style={{background:C.card,border:`1px solid ${C.bd}`,borderRadius:12,padding:'10px 12px',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.plannedDayLabel}</div>
-              <div style={{fontSize:12,fontWeight:700,color:C.tx,marginBottom:4,lineHeight:1.35}}>{item.plannedName?.replace('Strength — ','')||item.name}</div>
-            </div>
-            <span style={{...S.pill(item.status==='completed'||item.status==='moved'?C.sageL:item.status==='missed'?C.amberL:C.navyL,item.status==='completed'||item.status==='moved'?C.sageDk:item.status==='missed'?C.amberDk:C.navyDk),flexShrink:0,marginBottom:0}}>{item.status==='completed'||item.status==='moved'?'Done':item.status==='missed'?'Open':'Planned'}</span>
-          </div>)}
+        <div style={{display:'grid',gap:8,maxHeight:360,overflowY:'auto',paddingRight:2}}>
+          {weekPlannedWorkouts.map(item=>{
+            const isDone=item.status==='completed'||item.status==='moved';
+            const isMissed=item.status==='missed';
+            const isRescheduling=rescheduleTarget===item.plannedDate;
+            const pillBg=isDone?C.sageL:isMissed?C.amberL:C.navyL;
+            const pillClr=isDone?C.sageDk:isMissed?C.amberDk:C.navyDk;
+            const pillLabel=isDone?'Done':isMissed?'Missed':'Planned';
+            // Next 7 days for rescheduling
+            const reschedDates=Array.from({length:7},(_,i)=>{const d=new Date(TODAY);d.setDate(d.getDate()+i+1);return formatDateKey(d);});
+            return <div key={item.plannedDate}>
+              <div style={{background:C.card,border:`1px solid ${isMissed?C.amber:C.bd}`,borderRadius:12,padding:'10px 12px',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:10}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:9,color:C.muted,marginBottom:4}}>{item.plannedDayLabel}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:C.tx,marginBottom:isMissed?6:4,lineHeight:1.35}}>{item.plannedName?.replace('Strength — ','')||item.name}</div>
+                  {isMissed&&<button
+                    type="button"
+                    onClick={e=>{e.stopPropagation();setRescheduleTarget(isRescheduling?null:item.plannedDate);}}
+                    style={{...S.btnGhost,fontSize:10,padding:'4px 8px'}}
+                  >{isRescheduling?'Cancel':'Reschedule'}</button>}
+                </div>
+                <span style={{...S.pill(pillBg,pillClr),flexShrink:0,marginBottom:0}}>{pillLabel}</span>
+              </div>
+              {isRescheduling&&<div style={{background:C.surf,borderRadius:'0 0 12px 12px',padding:'10px 12px',marginTop:-4}} onClick={e=>e.stopPropagation()}>
+                <div style={{fontSize:10,fontWeight:700,color:C.muted,marginBottom:8,letterSpacing:0.5,textTransform:'uppercase'}}>Pick a new date</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {reschedDates.map(d=><button
+                    key={d}
+                    type="button"
+                    onClick={e=>{
+                      e.stopPropagation();
+                      updateProfile(p=>({...p,workoutReschedules:{...(p.workoutReschedules||{}),[item.plannedDate]:d}}));
+                      setRescheduleTarget(null);
+                      showNotif(`Rescheduled to ${formatDate(d,'weekdayMonthDayShort')}`,'success');
+                    }}
+                    style={{padding:'6px 10px',borderRadius:10,border:`1.5px solid ${C.bd}`,background:C.card,color:C.tx,fontSize:11,fontWeight:600,cursor:'pointer'}}
+                  >{formatDate(d,'weekdayMonthDayShort')}</button>)}
+                </div>
+              </div>}
+            </div>;
+          })}
         </div>
       </button>
 
@@ -9620,9 +9782,9 @@ function App(){
       <div style={S.hdr}>
         <div>
           {tab==='home'?<>
-            <div style={{...S.micro,fontWeight:600,letterSpacing:'0.2px'}}>{greeting}</div>
+            <div style={{...S.micro,fontWeight:400}}>{greeting}</div>
             <button
-              style={{background:'none',border:'none',padding:0,marginTop:2,cursor:'pointer',fontSize:T.hero,fontWeight:800,color:C.tx,lineHeight:1.08,textAlign:'left'}}
+              style={{background:'none',border:'none',padding:0,marginTop:1,cursor:'pointer',fontSize:13,fontWeight:500,color:C.muted,lineHeight:1.35,textAlign:'left'}}
               title={formatDate(NOW,'primaryWithYear')}
               onClick={()=>{
                 openTab('calendar',{calendarFocusDay:TODAY});
@@ -9646,8 +9808,13 @@ function App(){
             {pendingInbox.length>0&&<div style={{position:'absolute',top:0,right:0,minWidth:16,height:16,borderRadius:999,background:C.red,color:C.white,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{Math.min(pendingInbox.length,9)}</div>}
             <NavIcon id="inbox" active={tab==='tasks'}/>
           </button>
-          <button style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'8px',cursor:'pointer',display:'flex',alignItems:'center'}} onClick={()=>openTab('settings')}>
-            <NavIcon id="settings" active={tab==='settings'}/>
+          <button
+            style={{background:C.navy,border:'none',borderRadius:12,width:36,height:36,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+            onClick={()=>{setShowQuickAddModal(true);setQuickAddModalType(null);}}
+            title="Quick add"
+            aria-label="Quick add"
+          >
+            <span style={{color:'var(--white)',fontSize:22,fontWeight:300,lineHeight:1,marginTop:-1}}>+</span>
           </button>
         </div>
       </div>
@@ -9771,6 +9938,18 @@ function App(){
               >
                 {level}
               </button>)}
+            </div>
+          </div>
+
+          <div style={{marginBottom:18}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',color:C.muted,marginBottom:8}}>Sleep (hours)</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              {[4,5,5.5,6,6.5,7,7.5,8,8.5,9].map(h=><button
+                key={h}
+                onClick={()=>setCheckInSleep(h)}
+                aria-pressed={checkInSleep===h}
+                style={{padding:'8px 10px',borderRadius:10,border:`2px solid ${checkInSleep===h?C.navy:C.bd}`,background:checkInSleep===h?C.navyL:C.bg,color:checkInSleep===h?C.navyDk:C.tx,fontSize:12,fontWeight:600,cursor:'pointer'}}
+              >{h}h</button>)}
             </div>
           </div>
 
@@ -9933,8 +10112,25 @@ function App(){
         </div>;
       })()}
 
-      {/* Quick Capture floating button */}
-      <button onClick={openCommandBar} style={{position:'fixed',right:20,bottom:80,width:48,height:48,borderRadius:'50%',background:C.navy,color:C.white,border:'none',fontSize:24,fontWeight:300,cursor:'pointer',zIndex:400,boxShadow:C.shadowStrong,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>
+      {/* QuickAdd modal */}
+      {showQuickAddModal&&<QuickAddModal
+        C={C}
+        S={S}
+        initialType={quickAddModalType}
+        onClose={()=>{setShowQuickAddModal(false);setQuickAddModalType(null);}}
+        onSaveTask={handleQuickAddTask}
+        onSaveMeal={handleQuickAddMeal}
+        onSaveNote={handleQuickAddNote}
+      />}
+
+      {/* Workout player overlay */}
+      {showWorkoutPlayer&&wkSess&&<WorkoutPlayer
+        C={C}
+        S={S}
+        wkSess={wkSess}
+        onComplete={()=>{finishWk();setShowWorkoutPlayer(false);}}
+        onCancel={()=>{setWkSess(null);setTrainView('overview');setShowWorkoutPlayer(false);}}
+      />}
 
       {/* Flow Engine overlay */}
       {showFlow&&(
