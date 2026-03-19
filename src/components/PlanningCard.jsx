@@ -1,7 +1,7 @@
 import React from 'react';
 import TaskItem from './TaskItem.jsx';
 
-export default function PlanningCard({ tasks, handlers, onCreateEmptyTask }) {
+export default function PlanningCard({ tasks, handlers, onCreateEmptyTask, onMoveToExecution }) {
   return (
     <section className="task-card">
       <div className="task-card-header">
@@ -18,7 +18,14 @@ export default function PlanningCard({ tasks, handlers, onCreateEmptyTask }) {
         {tasks.length === 0 ? (
           <p className="empty-message">No priorities yet. Use + to create one and edit inline.</p>
         ) : (
-          tasks.map(task => <TaskItem key={task.id} task={task} {...handlers} />)
+          tasks.map(task => (
+            <div key={task.id} className="task-transition-shell">
+              <TaskItem task={task} {...handlers} />
+              <button type="button" className="secondary-button" onClick={() => onMoveToExecution(task.id)}>
+                Move to Execution
+              </button>
+            </div>
+          ))
         )}
       </div>
     </section>
