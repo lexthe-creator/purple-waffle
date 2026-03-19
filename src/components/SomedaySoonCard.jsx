@@ -1,5 +1,15 @@
 import React from 'react';
 
+export default function SomedaySoonCard() {
+  return (
+    <section className="task-card home-card">
+      <div className="task-card-header">
+        <div>
+          <p className="eyebrow">Someday / Soon</p>
+          <h2>Park ideas without losing them</h2>
+        </div>
+      </div>
+      <p className="settings-copy">A future-friendly parking lot for ideas, experiments, and optional work that should stay visible without cluttering execution.</p>
 export default function SomedaySoonCard({ inboxCount = 0, plannedCount = 0, activeCount = 0, doneCount = 0 }) {
   const copy = {
     MealCard: ['Meal', plannedCount, 'Use today\'s plan to protect energy and reduce friction.'],

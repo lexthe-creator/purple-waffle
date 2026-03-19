@@ -471,6 +471,17 @@ textarea:focus-visible {
 }
 
 
+.home-card {
+  align-content: start;
+}
+
+.home-card-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 960px) {
+  .home-card-wide {
+    grid-column: span 1;
 .home-stack {
   display: grid;
   gap: 20px;

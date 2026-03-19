@@ -2,6 +2,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
+import PlanningCard from './components/PlanningCard.jsx';
+import ExecutionCard from './components/ExecutionCard.jsx';
+import MealCard from './components/MealCard.jsx';
+import WorkoutCard from './components/WorkoutCard.jsx';
+import WeeklyPreviewCard from './components/WeeklyPreviewCard.jsx';
+import WeekAheadCard from './components/WeekAheadCard.jsx';
+import SomedaySoonCard from './components/SomedaySoonCard.jsx';
+import TaskFlowCard from './components/TaskFlowCard.jsx';
+import InboxView from './views/InboxView.jsx';
+import NutritionView from './views/NutritionView.jsx';
+import WorkoutView from './views/WorkoutView.jsx';
 import InboxView from './views/InboxView.jsx';
 import HomeView from './views/HomeView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
@@ -11,6 +22,8 @@ import './styles.css';
 
 function TaskApp() {
   const { tasks, setTasks, createTask, generateId, sortTasks } = useTaskContext();
+  const [activeView, setActiveView] = useState('home');
+  const [brainDumpOpen, setBrainDumpOpen] = useState(false);
   const [activeView, setActiveView] = useState('planning');
   const [brainDumpOpen, setBrainDumpOpen] = useState(false);
   const [ui, setUi] = useState({ flowActive: false, flowIndex: 0 });
@@ -8004,6 +8017,10 @@ function App() {
     updatePriority(priorityId, priority => ({ ...priority, notes }));
   }
 
+  function createEmptyPlannedTask() {
+    const emptyTask = createTask('planned', { shouldFocusTitle: true, order: plannedTasks.length + 1 });
+    setTasks(current => sortTasks([...current, emptyTask]));
+    setActiveView('home');
   function createEmptyPriority() {
     setAppState(current => ({
       ...current,
@@ -8031,6 +8048,19 @@ function App() {
     setBrainDumpOpen(false);
   }
 
+  function moveToPlanning(taskId) {
+    updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
+    setActiveView('home');
+  }
+
+  function moveToExecution(taskId) {
+    updateTask(taskId, task => ({ ...task, status: 'active', shouldFocusTitle: false }));
+    setActiveView('home');
+  }
+
+  function moveBackToPlanning(taskId) {
+    updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
+    setActiveView('home');
   function commitInboxTitle(itemId, title) {
     setAppState(current => ({
       ...current,
@@ -8307,6 +8337,18 @@ function App() {
             onMoveToPlanning={moveInboxToPriorities}
             onDelete={deleteInboxItem}
           />
+        )}
+
+        {activeView === 'nutrition' && <NutritionView onBackHome={() => setActiveView('home')} />}
+
+        {activeView === 'workout' && <WorkoutView onBackHome={() => setActiveView('home')} />}
+
+        {activeView === 'settings' && (
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Settings</p>
+                <h2>Keep your existing settings space</h2>
         ) : (
           <div className="board-grid">
             <section className="task-card">
@@ -8327,6 +8369,9 @@ function App() {
               />
             </section>
 
+        {activeView === 'home' && (
+          <div className="board-grid">
+            <section className="task-card home-card home-card-wide">
         {activeView !== 'inbox' && activeView !== 'settings' && (
           <HomeView
             inboxTasks={inboxTasks}
@@ -8358,6 +8403,23 @@ function App() {
               </div>
             </section>
 
+            <WeeklyPreviewCard />
+            <MealCard onOpenNutrition={() => setActiveView('nutrition')} />
+            <WorkoutCard onOpenWorkout={() => setActiveView('workout')} />
+            <WeekAheadCard />
+            <SomedaySoonCard />
+            <TaskFlowCard
+              plannedCount={plannedTasks.length}
+              activeCount={activeTasks.length}
+              doneCount={doneTasks.length}
+            />
+
+            <PlanningCard
+              tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
+              handlers={sharedHandlers}
+              onCreateEmptyTask={createEmptyPlannedTask}
+              onMoveToExecution={moveToExecution}
+            />
             <section className="task-card focus-session-card">
               <div className="task-card-header">
                 <div>
