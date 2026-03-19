@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
+import InboxView from './views/InboxView.jsx';
+import HomeView from './views/HomeView.jsx';
+import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import PlanningCard from './components/PlanningCard.jsx';
 import InboxView from './views/InboxView.jsx';
 import './styles.css';
@@ -8324,6 +8327,19 @@ function App() {
               />
             </section>
 
+        {activeView !== 'inbox' && activeView !== 'settings' && (
+          <HomeView
+            inboxTasks={inboxTasks}
+            plannedTasks={plannedTasks}
+            activeTasks={activeTasks}
+            doneTasks={doneTasks}
+            sharedHandlers={sharedHandlers}
+            onCreateEmptyTask={createEmptyPlannedTask}
+            onMoveToExecution={moveToExecution}
+            onMoveBackToPlanning={moveBackToPlanning}
+            onOpenInbox={() => setActiveView('inbox')}
+            onOpenBrainDump={() => setBrainDumpOpen(true)}
+          />
             <section className="task-card">
               <div className="task-card-header">
                 <div>
