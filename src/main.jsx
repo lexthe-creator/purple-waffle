@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
-import QuickAddModal from './components/QuickAddModal.jsx';
+import BrainDumpModal from './components/BrainDumpModal.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
@@ -271,6 +271,91 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
   </section>;
 }
 
+function TodayList({
+  C,
+  S,
+  FieldInput,
+  dailyExecutionEntry,
+  selectedDateLabel,
+  isViewingToday,
+  updatePriorityTask,
+  movePriorityTask,
+  removePriorityTask,
+  openBrainDump,
+  setDailyExecutionMode,
+}){
+  const headingId=React.useId();
+  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
+  const isExecution=dailyExecutionEntry.mode==='execution';
+  const visibleTasks=isExecution
+    ?dailyExecutionEntry.agenda
+    :dailyExecutionEntry.priorities;
+
+  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
+    <div style={{...S.row,alignItems:'flex-start',gap:10}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Today</div>
+        <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
+        {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
+      </div>
+      <span style={S.pill(isExecution?C.sageL:C.navyL,isExecution?C.sageDk:C.navyDk)}>{isExecution?'Execution':'Planning'}</span>
+    </div>
+    <div style={{display:'grid',gap:8}}>
+      {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:4}}>No priorities</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Use Brain Dump to capture something fast, then process it when you&apos;re ready.</div>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openBrainDump}>Brain Dump</button>
+      </div>}
+      {visibleTasks.map((task,index,items)=><div key={task.id}>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+          <button
+            type="button"
+            aria-pressed={task.completed}
+            aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
+            style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}
+            onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
+          >
+            {task.completed?'✓':''}
+          </button>
+          {!isExecution
+            ?<FieldInput
+              id={`daily-priority-${task.id}`}
+              aria-label={`Priority ${index+1}`}
+              value={task.text||''}
+              placeholder={`Task ${index+1}`}
+              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
+              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
+            />
+            :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
+              <span>{task.text||`Task ${index+1}`}</span>
+              {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:2}}>{task.notes}</span>}
+            </div>}
+          <div style={{display:'flex',gap:6,flexShrink:0}}>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
+            {!isExecution&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
+          </div>
+        </div>
+        {isExecution&&Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingLeft:30,display:'grid',gap:4,marginTop:4}}>
+          {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
+            <button
+              type="button"
+              aria-pressed={sub.completed}
+              style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
+              onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
+            >{sub.completed?'✓':''}</button>
+            <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
+          </div>)}
+        </div>}
+      </div>)}
+    </div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      {!isExecution&&<button type="button" style={{...S.btnGhost,flex:1}} onClick={openBrainDump}>Brain Dump</button>}
+      {!isExecution
+        ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
+        :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
+    </div>
+  </section>;
 function InlineTaskInput({C,S,onAdd}){
   const [text,setText]=useState('');
   const [notesOpen,setNotesOpen]=useState(false);
@@ -366,7 +451,7 @@ function QuickActions({
           <div style={{fontSize:14,fontWeight:700,color:C.tx,lineHeight:1.2}}>{mealTitle}</div>
           {mealSubtitle&&<div style={{fontSize:11,color:C.muted,marginTop:3}}>{mealSubtitle}</div>}
         </div>
-        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onMealAction}>Add</button>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onMealAction}>Open</button>
       </div>
       <div style={{...S.row,background:C.card,borderRadius:14,padding:'12px 12px',alignItems:'center'}}>
         <div style={{flex:1,minWidth:0}}>
@@ -390,7 +475,7 @@ function QuickActions({
     </div>
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       <button type="button" style={{...S.btnGhost,flex:1}} onClick={onOpenCheckIn}>Check in</button>
-      <button type="button" style={{...S.btnGhost,flex:1,position:'relative'}} onClick={onOpenBrainDump}>Add</button>
+      <button type="button" style={{...S.btnGhost,flex:1,position:'relative'}} onClick={onOpenBrainDump}>Brain Dump</button>
       <button type="button" style={{...S.btnGhost,flex:1}} onClick={onOpenCalendar}>Open Calendar</button>
     </div>
   </section>;
@@ -2309,6 +2394,7 @@ const DEFAULT_OPS={
   dailyLogs:{},
   habits:[],
   captureNotes:[],
+  brainDump:[],
   maintenanceMeta:{},
   lastMaintenancePromptDate:null,
   securitySettings:{analyticsEnabled:true,dataExportHistory:[]},
@@ -3078,31 +3164,6 @@ function parseMinutesInput(text){
   const n=parseFloat(t);
   return Number.isFinite(n)&&n>0?n:null;
 }
-function routeCapture(text){
-  const t=text.trim();
-  if(!t)return null;
-  const lower=t.toLowerCase();
-  const workoutStart=/^(start|continue)\s+(today'?s\s+)?workout/.test(lower);
-  if(workoutStart)return{type:'command',command:'start_workout',label:'Start Workout',icon:'W',preview:'Start today\'s workout'};
-  const foodMatch=t.match(/^log\s+(.+?)\s+(\d+(?:\.\d+)?)\s*g$/i);
-  if(foodMatch)return{type:'command',command:'log_food',label:'Log Food',icon:'F',foodQuery:foodMatch[1].trim(),grams:parseFloat(foodMatch[2]),preview:`Log ${foodMatch[1].trim()} ${foodMatch[2]}g`};
-  const fiveKMatch=t.match(/^add\s+5k\s+time\s+(.+)$/i);
-  if(fiveKMatch){
-    const mins=parseMinutesInput(fiveKMatch[1]);
-    if(mins)return{type:'command',command:'set_5k',label:'Set 5K Time',icon:'P',minutes:mins,preview:`Set 5K time to ${fiveKMatch[1].trim()}`};
-  }
-  const groceryMatch=t.match(/^add\s+grocery\s+item\s+(.+)$/i);
-  if(groceryMatch)return{type:'command',command:'add_grocery',label:'Add Grocery Item',icon:'G',item:groceryMatch[1].trim(),preview:`Add grocery item: ${groceryMatch[1].trim()}`};
-  if(CAPTURE_NOTE.test(t))return{type:'note',label:'Note',icon:'N',preview:t.replace(/^(idea:|note:|think:|remember:|\*)\s*/i,'')};
-  if(CAPTURE_CURRENCY.test(t)){
-    const match=t.match(/\$?([\d,.]+)/);
-    const amount=match?parseFloat(match[1].replace(',','')):null;
-    return{type:'expense',label:'Expense',icon:'$',amount,preview:t};
-  }
-  if(CAPTURE_DATE.test(t))return{type:'task',label:'Task',icon:'T',preview:t};
-  return{type:'task',label:'Task',icon:'T',preview:t};
-}
-
 // ── HABIT HELPERS ─────────────────────────────────────────────────
 function computeStreak(habit,dailyLogs){
   if(!habit||!dailyLogs)return 0;
@@ -3430,9 +3491,7 @@ function App(){
   const [editingAccountId,setEditingAccountId]=useState(null);
   const [accountForm,setAccountForm]=useState({name:'',institution:'',type:'checking',isActive:true,startingBalance:''});
   const [showImport,setShowImport]=useState(false);
-  const [showCapture,setShowCapture]=useState(false);
-  const [captureText,setCaptureText]=useState('');
-  const [captureMode,setCaptureMode]=useState('command');
+  const [showBrainDumpModal,setShowBrainDumpModal]=useState(false);
   const [showWeeklyPlanner,setShowWeeklyPlanner]=useState(false);
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
@@ -3449,8 +3508,6 @@ function App(){
   const [checkInSleep,setCheckInSleep]=useState(7);
   const [showCheckInNote,setShowCheckInNote]=useState(false);
   const [dismissedMorningCheckinDate,setDismissedMorningCheckinDate]=useState(null);
-  const [showQuickAddModal,setShowQuickAddModal]=useState(false);
-  const [quickAddModalType,setQuickAddModalType]=useState(null);
   const [showWorkoutPlayer,setShowWorkoutPlayer]=useState(false);
   const [tier2Open,setTier2Open]=useState({energy:true,finance:false,habits:false});
   const [homeCardsOpen,setHomeCardsOpen]=useState({habits:false,alerts:false,weekly:false});
@@ -3524,38 +3581,14 @@ function App(){
       };
     });
   },[profile.securitySettings?.analyticsEnabled,updateGrowthState]);
-  const openCommandBar=()=>{
-    setCaptureMode('command');
-    setCaptureText('');
-    setShowCapture(true);
-  };
   const openBrainDump=()=>{
-    setCaptureMode('note');
-    setCaptureText('');
-    setShowCapture(true);
+    setShowBrainDumpModal(true);
   };
-  function handleQuickAddTask(taskData){
-    updateDailyExecution(TODAY,entry=>{
-      const nextTask=createDailyExecutionTask(taskData.text||'',{date:TODAY,...taskData});
-      return{
-        ...entry,
-        priorities:[...entry.priorities,nextTask],
-        agenda:entry.mode==='execution'?[...entry.agenda,nextTask]:entry.agenda,
-      };
-    });
-    showNotif('Task added','success');
-    trackGrowthEvent('task_added_quick',{});
-  }
-  function handleQuickAddMeal(mealData){
-    const entry=normalizeMealEntry({...mealData,id:Date.now()},mealData.slot||'snack');
-    applyUndoableProfileUpdate('Meal logged',p=>({...p,meals:{...p.meals,[TODAY]:[...(p.meals?.[TODAY]||[]),entry]}}),`Added to ${mealData.slot||'snack'}.`);
-    trackGrowthEvent('meal_logged',{slot:mealData.slot||'snack',source:'quick_add'});
-    showNotif('Meal logged','success');
-  }
-  function handleQuickAddNote(noteData){
-    const note={id:`note-${Date.now()}`,text:noteData.text,createdAt:new Date().toISOString(),date:TODAY};
-    updateProfile(p=>({...p,captureNotes:[...(p.captureNotes||[]),note]}));
-    showNotif('Note saved','success');
+  function saveBrainDumpEntry(text){
+    const entry={id:`brain-${Date.now()}`,text,createdAt:new Date().toISOString(),processed:false};
+    updateProfile(p=>({...p,brainDump:[entry,...(p.brainDump||[])]}));
+    setShowBrainDumpModal(false);
+    showNotif('Captured','success');
   }
   const openTab=useCallback((nextTab,options={})=>{
     if(!APP_TAB_IDS.includes(nextTab))return;
@@ -3915,13 +3948,10 @@ function App(){
       const key=e.key.toLowerCase();
       if(key==='k'){
         e.preventDefault();
-        openCommandBar();
+        openBrainDump();
       }else if(key==='t'){
         e.preventDefault();
-        openTab('tasks',{taskTab:'next'});
-        setNewTask(createNewTaskDraft(getTodayKey()));
-        setTaskDraftText('');
-        setShowAddTask(true);
+        openBrainDump();
       }else if(key==='w'){
         e.preventDefault();
         openTab('training');
@@ -4400,66 +4430,6 @@ function App(){
     const d=new Date(dateStr+'T12:00:00');const dow=d.getDay();
     return (busyBlocks||[]).filter(b=>(b.recurring?b.dow===dow:b.date===dateStr)&&b.startTime&&b.endTime)
       .sort((a,b)=>timeToMins(a.startTime)-timeToMins(b.startTime));
-  }
-
-  // ── QUICK CAPTURE ───────────────────────────────────────────────
-  function confirmCapture(routed){
-    const text=captureText.trim();
-    if(!text)return;
-    if(routed?.type==='command'){
-      if(routed.command==='start_workout'){
-        if(adjustedTodayWorkout){
-          openTab('training');
-          launchWorkout(adjustedTodayWorkout);
-          showNotif('Started today\'s workout','success');
-        }else{
-          showNotif('No workout scheduled today','warn');
-        }
-      }else if(routed.command==='log_food'){
-        const query=(routed.foodQuery||'').toLowerCase();
-        const allFoods=resolveFoodLibrary(foodLibrary);
-        const food=allFoods.find(item=>item.name.toLowerCase()===query)
-          || allFoods.find(item=>item.name.toLowerCase().includes(query))
-          || allFoods.find(item=>query.includes(item.name.toLowerCase()));
-        if(food&&routed.grams){
-          const macros=scaleFoodMacros(food,routed.grams);
-          addMeal({
-            meal:food.name,
-            foodId:food.id,
-            source:'command',
-            grams:Math.round(routed.grams),
-            cal:macros.cal,
-            pro:macros.pro,
-            carb:macros.carb,
-            fat:macros.fat,
-            fiber:macros.fiber,
-            sodium:macros.sodium,
-          },'snack');
-          showNotif(`${food.name} logged`,'success');
-        }else{
-          showNotif('Food not found in library or pantry','warn');
-        }
-      }else if(routed.command==='set_5k'){
-        updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:routed.minutes}}));
-        showNotif('5K time updated','success');
-      }else if(routed.command==='add_grocery'){
-        const itemText=`Grocery: ${routed.item}`;
-        updateProfile(p=>({...p,inboxItems:[...(p.inboxItems||[]),{id:String(Date.now()),text:itemText,createdDate:TODAY,suggestedType:'grocery',status:'pending'}]}));
-        showNotif('Added to grocery inbox','success');
-      }
-    } else if(routed?.type==='expense'){
-      const t={transactionId:`cap-${Date.now()}`,date:TODAY,merchant:routed.preview,description:routed.preview,amount:routed.amount||0,isCredit:false,accountId:getDefaultAccountId(activeFinancialAccounts,true),category:'other',isReviewed:false,isTransfer:false,isRecurring:false,notes:''};
-      updateProfile(p=>({...p,transactions:[...(p.transactions||[]),t]}));
-    } else if(routed?.type==='note'){
-      const item={id:`inbox-${Date.now()}`,text:routed.preview,createdDate:TODAY,suggestedType:'note',status:'pending'};
-      updateProfile(p=>({...p,inboxItems:[...(p.inboxItems||[]),item]}));
-      showNotif('Added to inbox for review','success');
-    } else {
-      const t={id:String(Date.now()),text:text,date:TODAY,priority:1,parentId:null,done:false,updatedAt:new Date().toISOString()};
-      updateProfile(p=>({...p,taskHistory:[...(p.taskHistory||[]),t]}));
-    }
-    setCaptureText('');setShowCapture(false);setCaptureMode('command');
-    if(routed?.type!=='command')showNotif('Captured','success');
   }
 
   // ── DAILY LOG ───────────────────────────────────────────────────
@@ -5037,7 +5007,7 @@ function App(){
       pendingInbox.length>0?{label:'Inbox',value:String(pendingInbox.length)}:null,
     ].filter(Boolean);
     const mealCardTitle='Log meal';
-    const mealCardSubtitle=(nextPlannedMeal||missingMealSlots.length>0)?'Quick add':null;
+    const mealCardSubtitle=(nextPlannedMeal||missingMealSlots.length>0)?'Open nutrition':null;
     const workoutCardTitle=getCompactWorkoutTitle(workoutTitle||restDayRecovery.name);
     const workoutCardDuration=workoutDuration||restDayRecovery.dur||'25 min';
     const taskCardTitle=nextTaskItem?.text||'No tasks';
@@ -5130,17 +5100,6 @@ function App(){
       },slotOverride||entry.slot||'snack');
       showNotif(`Repeated ${entry.meal}`,'success');
     }
-    function openMealQuickAdd(){
-      setQuickAddModalType('meal');
-      setShowQuickAddModal(true);
-    }
-    function openAddTaskFlow(){
-      setNewTask(createNewTaskDraft(activeDate,{date:activeDate,bucket:'next'}));
-      setTaskDraftText('');
-      setShowAddTask(true);
-      openTab('tasks',{taskTab:'next'});
-    }
-
     function buildAgendaItemsForDate(dateStr){
       const scheduledItems=(calendarCache[dateStr]||[]).map(event=>({
         id:`event-${dateStr}-${event.id}`,
@@ -5259,7 +5218,7 @@ function App(){
         S={S}
         activationChecklist={growthState.activationChecklist}
         onOpenCheckIn={()=>setShowMorningCheckin(true)}
-        onOpenAddTask={openAddTaskFlow}
+        onOpenAddTask={openBrainDump}
       />}
       {(shouldShowInstallCta||needsInstallHelp)&&!isInstalled&&<div style={{...S.card,padding:'12px 14px'}}>
         <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Install</div>
@@ -5276,7 +5235,7 @@ function App(){
         updatePriorityTask={updatePriorityTask}
         movePriorityTask={movePriorityTask}
         removePriorityTask={removePriorityTask}
-        addPriorityTask={addPriorityTask}
+        openBrainDump={openBrainDump}
         setDailyExecutionMode={setDailyExecutionMode}
       />
       <QuickActions
@@ -5289,15 +5248,15 @@ function App(){
         handleWorkoutDecision={handleWorkoutDecision}
         mealTitle={mealCardTitle}
         mealSubtitle={mealCardSubtitle}
-        onMealAction={openMealQuickAdd}
+        onMealAction={()=>openTab('meals')}
         workoutTitle={workoutCardTitle}
         workoutDuration={workoutCardDuration}
         workoutCta={wktDone?'View':'Start'}
         onWorkoutAction={openTodayWorkoutAction}
         taskTitle={taskCardTitle}
         taskMeta={taskCardMeta}
-        taskCta={nextTaskItem?'Open':'Add task'}
-        onTaskAction={nextTaskItem?()=>openTab('tasks',{taskTab:'next'}):openAddTaskFlow}
+        taskCta={nextTaskItem?'Open':'Brain Dump'}
+        onTaskAction={nextTaskItem?()=>openTab('tasks',{taskTab:'next'}):openBrainDump}
         showTaskDone={!!nextTaskItem}
         onTaskDone={()=>nextTaskItem&&toggleTaskDone(nextTaskItem.id)}
         onOpenCheckIn={()=>setShowMorningCheckin(true)}
@@ -7656,7 +7615,7 @@ function App(){
       {tasksTab==='inbox'&&<div>
         {pendingInbox.length===0&&<div style={{textAlign:'center',padding:'40px 0',color:C.muted,fontSize:13}}>
           Inbox is clear.<br/>
-          <span style={{fontSize:11}}>Use Quick Capture on Home to add ideas.</span>
+          <span style={{fontSize:11}}>Use Brain Dump on Home to capture ideas fast.</span>
         </div>}
         {pendingInbox.map((item,i)=><div key={item.id} style={{...S.card,marginBottom:8}}>
           <div style={{fontSize:13,color:C.tx,marginBottom:10,lineHeight:1.5}}>{item.text}</div>
@@ -9632,7 +9591,7 @@ function App(){
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           <button style={{...S.btnGhost,width:'100%'}} onClick={()=>setShowWeeklyPlanner(true)}>Open Weekly Planner</button>
-          <button style={{...S.btnGhost,width:'100%'}} onClick={openCommandBar}>Open Command Bar</button>
+          <button style={{...S.btnGhost,width:'100%'}} onClick={openBrainDump}>Open Brain Dump</button>
         </div>
       </div>
     </div>;
@@ -9702,9 +9661,9 @@ function App(){
       <div style={S.hdr}>
         <div>
           {tab==='home'?<>
-            <div style={{...S.micro,fontWeight:400}}>{greeting}</div>
+            <div style={{...S.micro,fontWeight:400}}>{`${greeting}, ${toTitleCaseLabel(profile.userProfile?.name||'there')}`}</div>
             <button
-              style={{background:'none',border:'none',padding:0,marginTop:1,cursor:'pointer',fontSize:13,fontWeight:500,color:C.muted,lineHeight:1.35,textAlign:'left'}}
+              style={{background:'none',border:'none',padding:0,marginTop:1,cursor:'pointer',fontSize:11,fontWeight:400,color:C.muted,opacity:0.68,lineHeight:1.35,textAlign:'left'}}
               title={formatDate(NOW,'primaryWithYear')}
               onClick={()=>{
                 openTab('calendar',{calendarFocusDay:TODAY});
@@ -9730,11 +9689,11 @@ function App(){
           </button>
           <button
             style={{background:C.navy,border:'none',borderRadius:12,width:36,height:36,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
-            onClick={()=>{setShowQuickAddModal(true);setQuickAddModalType(null);}}
-            title="Quick add"
-            aria-label="Quick add"
+            onClick={openBrainDump}
+            title="Brain Dump"
+            aria-label="Brain Dump"
           >
-            <span style={{color:'var(--white)',fontSize:22,fontWeight:300,lineHeight:1,marginTop:-1}}>+</span>
+            <span style={{color:'var(--white)',fontSize:17,lineHeight:1}} aria-hidden="true">🧠</span>
           </button>
         </div>
       </div>
@@ -9922,50 +9881,12 @@ function App(){
         </div>
       </div>}
 
-      {/* Quick Capture modal */}
-      {showCapture&&(()=>{
-        const routed=captureMode==='note'
-          ?(captureText.trim()?{type:'note',label:'Note',icon:'N',preview:captureText.trim()}:null)
-          :routeCapture(captureText);
-        return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
-          <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto'}}>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>{captureMode==='note'?'Brain Dump':'Command Bar'}</div>
-            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
-              {captureMode==='note'
-                ?'Capture a note without routing it anywhere else.'
-                :'Try: “Log chicken 120g”, “Start today’s workout”, “Add 5K time 24:10”, or “Add grocery item bananas”.'}
-            </div>
-            <FieldInput
-              value={captureText}
-              allowEnterSubmit
-              onChange={e=>setCaptureText(e.target.value)}
-              onKeyDown={e=>{
-                if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing||!routed)return;
-                e.preventDefault();
-                confirmCapture(routed);
-              }}
-              placeholder={captureMode==='note'?'Type your note...':'Type a command or capture...'}
-              style={{...S.inp,marginBottom:10,fontSize:15}}
-              autoFocus
-            />
-            {routed&&<div style={{...S.card,padding:'10px 12px',marginBottom:12,background:C.surf}}>
-              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Routing as</div>
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <div style={{width:22,height:22,borderRadius:6,background:routed.type==='expense'?C.amber:routed.type==='note'?C.navy:routed.type==='command'?C.red:C.sage,color:C.white,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{routed.icon}</div>
-                <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{routed.label}</span>
-                <span style={{fontSize:11,color:C.muted}}>{routed.preview?.slice(0,40)}</span>
-              </div>
-              {captureMode!=='note'&&routed.type!=='command'&&<div style={{display:'flex',gap:5,marginTop:8}}>
-                {['task','expense','note'].map(type=><button key={type} onClick={()=>confirmCapture({...routed,type,label:type.charAt(0).toUpperCase()+type.slice(1),icon:type==='expense'?'$':type==='note'?'N':'T'})} style={{padding:'4px 10px',borderRadius:7,border:`1px solid ${routed.type===type?C.sage:C.bd}`,background:routed.type===type?C.sage:'transparent',color:routed.type===type?C.white:C.muted,fontSize:10,cursor:'pointer'}}>{type}</button>)}
-              </div>}
-            </div>}
-            <div style={{display:'flex',gap:8}}>
-              <button style={S.btnSolid(C.sage)} onClick={()=>routed&&confirmCapture(routed)} disabled={!routed}>Save</button>
-              <button style={{...S.btnGhost,flex:1}} onClick={()=>{setShowCapture(false);setCaptureText('');setCaptureMode('command');}}>Cancel</button>
-            </div>
-          </div>
-        </div>;
-      })()}
+      {showBrainDumpModal&&<BrainDumpModal
+        C={C}
+        S={S}
+        onClose={()=>setShowBrainDumpModal(false)}
+        onSave={saveBrainDumpEntry}
+      />}
 
       {/* Quarterly / Annual review modal */}
       {showReview&&(()=>{
@@ -10031,17 +9952,6 @@ function App(){
           </div>
         </div>;
       })()}
-
-      {/* QuickAdd modal */}
-      {showQuickAddModal&&<QuickAddModal
-        C={C}
-        S={S}
-        initialType={quickAddModalType}
-        onClose={()=>{setShowQuickAddModal(false);setQuickAddModalType(null);}}
-        onSaveTask={handleQuickAddTask}
-        onSaveMeal={handleQuickAddMeal}
-        onSaveNote={handleQuickAddNote}
-      />}
 
       {/* Workout player overlay */}
       {showWorkoutPlayer&&wkSess&&<WorkoutPlayer
