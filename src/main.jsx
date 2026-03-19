@@ -8369,6 +8369,8 @@ function App() {
               />
             </section>
 
+        {activeView !== 'inbox' && activeView !== 'settings' && (
+          <div className="home-stack">
         {activeView === 'home' && (
           <div className="board-grid">
             <section className="task-card home-card home-card-wide">
