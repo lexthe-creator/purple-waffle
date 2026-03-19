@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { createRoot } from 'react-dom/client';
 import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
+import DayCard from './components/DayCard.jsx';
+import Header from './components/Header.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
 import { FlowRoot } from './flow/FlowRoot.jsx';
-import DayCard from './components/DayCard.jsx';
 
 const IS_DEV=import.meta.env.DEV;
 const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
@@ -271,6 +272,8 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenBrainDump}){
   </section>;
 }
 
+<<<<<<< revert-7-claude/setup-dev-workflow-MSJhL
+=======
 function TodayList({
   C,
   S,
@@ -405,6 +408,7 @@ function InlineTaskInput({C,S,onAdd}){
   </div>;
 }
 
+>>>>>>> main
 function QuickActions({
   C,
   S,
@@ -2396,7 +2400,6 @@ const DEFAULT_OPS={
   dailyLogs:{},
   habits:[],
   captureNotes:[],
-  brainDump:[],
   maintenanceMeta:{},
   lastMaintenancePromptDate:null,
   securitySettings:{analyticsEnabled:true,dataExportHistory:[]},
@@ -2550,19 +2553,19 @@ function normalizeLoadedProfile(data={}){
 }
 
 function createDailyExecutionTask(title='',overrides={}){
-  const resolvedTitle=String(overrides.title??overrides.text??title??'');
+  const resolvedTitle=typeof title==='string'?title:(overrides.title||overrides.text||'');
   return{
     id:overrides.id||`dx-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    title:resolvedTitle,
+    text:resolvedTitle,
     completed:!!overrides.completed,
     subtasks:Array.isArray(overrides.subtasks)?overrides.subtasks:[],
     notes:typeof overrides.notes==='string'?overrides.notes:'',
-    createdAt:overrides.createdAt||overrides.timestamp||new Date().toISOString(),
+    createdAt:typeof overrides.createdAt==='string'?overrides.createdAt:(overrides.timestamp||new Date().toISOString()),
     date:overrides.date||getTodayKey(),
     timestamp:overrides.timestamp||new Date().toISOString(),
     updatedAt:overrides.updatedAt||new Date().toISOString(),
     ...overrides,
-    title:resolvedTitle,
-    text:resolvedTitle,
   };
 }
 
@@ -3172,6 +3175,31 @@ function parseMinutesInput(text){
   const n=parseFloat(t);
   return Number.isFinite(n)&&n>0?n:null;
 }
+function routeCapture(text){
+  const t=text.trim();
+  if(!t)return null;
+  const lower=t.toLowerCase();
+  const workoutStart=/^(start|continue)\s+(today'?s\s+)?workout/.test(lower);
+  if(workoutStart)return{type:'command',command:'start_workout',label:'Start Workout',icon:'W',preview:'Start today\'s workout'};
+  const foodMatch=t.match(/^log\s+(.+?)\s+(\d+(?:\.\d+)?)\s*g$/i);
+  if(foodMatch)return{type:'command',command:'log_food',label:'Log Food',icon:'F',foodQuery:foodMatch[1].trim(),grams:parseFloat(foodMatch[2]),preview:`Log ${foodMatch[1].trim()} ${foodMatch[2]}g`};
+  const fiveKMatch=t.match(/^add\s+5k\s+time\s+(.+)$/i);
+  if(fiveKMatch){
+    const mins=parseMinutesInput(fiveKMatch[1]);
+    if(mins)return{type:'command',command:'set_5k',label:'Set 5K Time',icon:'P',minutes:mins,preview:`Set 5K time to ${fiveKMatch[1].trim()}`};
+  }
+  const groceryMatch=t.match(/^add\s+grocery\s+item\s+(.+)$/i);
+  if(groceryMatch)return{type:'command',command:'add_grocery',label:'Add Grocery Item',icon:'G',item:groceryMatch[1].trim(),preview:`Add grocery item: ${groceryMatch[1].trim()}`};
+  if(CAPTURE_NOTE.test(t))return{type:'note',label:'Note',icon:'N',preview:t.replace(/^(idea:|note:|think:|remember:|\*)\s*/i,'')};
+  if(CAPTURE_CURRENCY.test(t)){
+    const match=t.match(/\$?([\d,.]+)/);
+    const amount=match?parseFloat(match[1].replace(',','')):null;
+    return{type:'expense',label:'Expense',icon:'$',amount,preview:t};
+  }
+  if(CAPTURE_DATE.test(t))return{type:'task',label:'Task',icon:'T',preview:t};
+  return{type:'task',label:'Task',icon:'T',preview:t};
+}
+
 // ── HABIT HELPERS ─────────────────────────────────────────────────
 function computeStreak(habit,dailyLogs){
   if(!habit||!dailyLogs)return 0;
@@ -3499,7 +3527,8 @@ function App(){
   const [editingAccountId,setEditingAccountId]=useState(null);
   const [accountForm,setAccountForm]=useState({name:'',institution:'',type:'checking',isActive:true,startingBalance:''});
   const [showImport,setShowImport]=useState(false);
-  const [showBrainDumpModal,setShowBrainDumpModal]=useState(false);
+  const [showCapture,setShowCapture]=useState(false);
+  const [captureText,setCaptureText]=useState('');
   const [showWeeklyPlanner,setShowWeeklyPlanner]=useState(false);
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
@@ -3589,13 +3618,27 @@ function App(){
       };
     });
   },[profile.securitySettings?.analyticsEnabled,updateGrowthState]);
+  const openCommandBar=()=>{
+    setCaptureText('');
+    setShowCapture(true);
+  };
   const openBrainDump=()=>{
     setShowBrainDumpModal(true);
   };
   function saveBrainDumpEntry(text){
-    const entry={id:`brain-${Date.now()}`,text,createdAt:new Date().toISOString(),processed:false};
-    updateProfile(p=>({...p,brainDump:[entry,...(p.brainDump||[])]}));
-    setShowBrainDumpModal(false);
+    const createdAt=new Date().toISOString();
+    updateProfile(p=>({
+      ...p,
+      brainDump:[
+        ...(p.brainDump||[]),
+        {
+          id:`brain-${Date.now()}`,
+          text,
+          createdAt,
+          processed:false,
+        },
+      ],
+    }));
     showNotif('Captured','success');
   }
   const openTab=useCallback((nextTab,options={})=>{
@@ -3956,10 +3999,7 @@ function App(){
       const key=e.key.toLowerCase();
       if(key==='k'){
         e.preventDefault();
-        openBrainDump();
-      }else if(key==='t'){
-        e.preventDefault();
-        openBrainDump();
+        openCommandBar();
       }else if(key==='w'){
         e.preventDefault();
         openTab('training');
@@ -4440,6 +4480,66 @@ function App(){
       .sort((a,b)=>timeToMins(a.startTime)-timeToMins(b.startTime));
   }
 
+  // ── QUICK CAPTURE ───────────────────────────────────────────────
+  function confirmCapture(routed){
+    const text=captureText.trim();
+    if(!text)return;
+    if(routed?.type==='command'){
+      if(routed.command==='start_workout'){
+        if(adjustedTodayWorkout){
+          openTab('training');
+          launchWorkout(adjustedTodayWorkout);
+          showNotif('Started today\'s workout','success');
+        }else{
+          showNotif('No workout scheduled today','warn');
+        }
+      }else if(routed.command==='log_food'){
+        const query=(routed.foodQuery||'').toLowerCase();
+        const allFoods=resolveFoodLibrary(foodLibrary);
+        const food=allFoods.find(item=>item.name.toLowerCase()===query)
+          || allFoods.find(item=>item.name.toLowerCase().includes(query))
+          || allFoods.find(item=>query.includes(item.name.toLowerCase()));
+        if(food&&routed.grams){
+          const macros=scaleFoodMacros(food,routed.grams);
+          addMeal({
+            meal:food.name,
+            foodId:food.id,
+            source:'command',
+            grams:Math.round(routed.grams),
+            cal:macros.cal,
+            pro:macros.pro,
+            carb:macros.carb,
+            fat:macros.fat,
+            fiber:macros.fiber,
+            sodium:macros.sodium,
+          },'snack');
+          showNotif(`${food.name} logged`,'success');
+        }else{
+          showNotif('Food not found in library or pantry','warn');
+        }
+      }else if(routed.command==='set_5k'){
+        updateProfile(p=>({...p,athleteProfile:{...p.athleteProfile,fiveKTime:routed.minutes}}));
+        showNotif('5K time updated','success');
+      }else if(routed.command==='add_grocery'){
+        const itemText=`Grocery: ${routed.item}`;
+        updateProfile(p=>({...p,inboxItems:[...(p.inboxItems||[]),{id:String(Date.now()),text:itemText,createdDate:TODAY,suggestedType:'grocery',status:'pending'}]}));
+        showNotif('Added to grocery inbox','success');
+      }
+    } else if(routed?.type==='expense'){
+      const t={transactionId:`cap-${Date.now()}`,date:TODAY,merchant:routed.preview,description:routed.preview,amount:routed.amount||0,isCredit:false,accountId:getDefaultAccountId(activeFinancialAccounts,true),category:'other',isReviewed:false,isTransfer:false,isRecurring:false,notes:''};
+      updateProfile(p=>({...p,transactions:[...(p.transactions||[]),t]}));
+    } else if(routed?.type==='note'){
+      const item={id:`inbox-${Date.now()}`,text:routed.preview,createdDate:TODAY,suggestedType:'note',status:'pending'};
+      updateProfile(p=>({...p,inboxItems:[...(p.inboxItems||[]),item]}));
+      showNotif('Added to inbox for review','success');
+    } else {
+      const t={id:String(Date.now()),text:text,date:TODAY,priority:1,parentId:null,done:false,updatedAt:new Date().toISOString()};
+      updateProfile(p=>({...p,taskHistory:[...(p.taskHistory||[]),t]}));
+    }
+    setCaptureText('');setShowCapture(false);setCaptureMode('command');
+    if(routed?.type!=='command')showNotif('Captured','success');
+  }
+
   // ── DAILY LOG ───────────────────────────────────────────────────
   function saveDailyLog(patch,dateKey=selectedDate){
     updateProfile(p=>({...p,dailyLogs:{...p.dailyLogs,[dateKey]:{...(p.dailyLogs?.[dateKey]||{}),date:dateKey,...patch}}}));
@@ -4521,10 +4621,9 @@ function App(){
   function updateDailyExecution(dateKey,updater){
     const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
     const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
-    const getTaskTitle=task=>String(task?.title||task?.text||'');
-    const existingCount=existing.priorities.filter(task=>getTaskTitle(task).trim()).length;
-    const nextCount=nextEntry.priorities.filter(task=>getTaskTitle(task).trim()).length;
-    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>getTaskTitle(task));
+    const existingCount=existing.tasks.filter(task=>(task.title||task.text||'').trim()).length;
+    const nextCount=nextEntry.tasks.filter(task=>(task.title||task.text||'').trim()).length;
+    const nextTop3=nextEntry.tasks.slice(0,3).map(task=>task.title||task.text||'');
     updateProfile(current=>({
       ...current,
       dailyExecution:{...(current.dailyExecution||{}),[dateKey]:nextEntry},
@@ -4899,8 +4998,8 @@ function App(){
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
     function setDailyExecutionMode(nextMode){
-      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>String(task.title||task.text||'').trim())){
-        showNotif('Add at least one priority before moving to execution.','warn');
+      if(nextMode==='execution'&&!dailyExecutionEntry.tasks.some(task=>(task.title||task.text||'').trim())){
+        showNotif('Add at least one task before starting the day.','warn');
         return;
       }
       updateDailyExecution(activeDate,entry=>({
@@ -5218,7 +5317,7 @@ function App(){
         S={S}
         activationChecklist={growthState.activationChecklist}
         onOpenCheckIn={()=>setShowMorningCheckin(true)}
-        onOpenAddTask={openBrainDump}
+        onOpenBrainDump={openBrainDump}
       />}
       {(shouldShowInstallCta||needsInstallHelp)&&!isInstalled&&<div style={{...S.card,padding:'12px 14px'}}>
         <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Install</div>
@@ -5228,15 +5327,14 @@ function App(){
       <DayCard
         C={C}
         S={S}
-        FieldInput={FieldInput}
-        dayEntry={dailyExecutionEntry}
+        dailyExecutionEntry={dailyExecutionEntry}
         selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):'Today'}
         isViewingToday={isViewingToday}
-        updatePriorityTask={updatePriorityTask}
-        movePriorityTask={movePriorityTask}
-        removePriorityTask={removePriorityTask}
-        openBrainDump={openBrainDump}
-        setDailyExecutionMode={setDailyExecutionMode}
+        updateTask={updatePriorityTask}
+        moveTask={movePriorityTask}
+        removeTask={removePriorityTask}
+        addTask={addPriorityTask}
+        startDay={()=>setDailyExecutionMode('execution')}
       />
       <QuickActions
         C={C}
@@ -5255,8 +5353,8 @@ function App(){
         onWorkoutAction={openTodayWorkoutAction}
         taskTitle={taskCardTitle}
         taskMeta={taskCardMeta}
-        taskCta={nextTaskItem?'Open':'Brain Dump'}
-        onTaskAction={nextTaskItem?()=>openTab('tasks',{taskTab:'next'}):openBrainDump}
+        taskCta="Open"
+        onTaskAction={()=>openTab('tasks',{taskTab:'next'})}
         showTaskDone={!!nextTaskItem}
         onTaskDone={()=>nextTaskItem&&toggleTaskDone(nextTaskItem.id)}
         onOpenCheckIn={()=>setShowMorningCheckin(true)}
@@ -7615,7 +7713,7 @@ function App(){
       {tasksTab==='inbox'&&<div>
         {pendingInbox.length===0&&<div style={{textAlign:'center',padding:'40px 0',color:C.muted,fontSize:13}}>
           Inbox is clear.<br/>
-          <span style={{fontSize:11}}>Use Brain Dump on Home to capture ideas fast.</span>
+          <span style={{fontSize:11}}>Use Brain Dump on Home to capture ideas.</span>
         </div>}
         {pendingInbox.map((item,i)=><div key={item.id} style={{...S.card,marginBottom:8}}>
           <div style={{fontSize:13,color:C.tx,marginBottom:10,lineHeight:1.5}}>{item.text}</div>
@@ -9591,7 +9689,7 @@ function App(){
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
           <button style={{...S.btnGhost,width:'100%'}} onClick={()=>setShowWeeklyPlanner(true)}>Open Weekly Planner</button>
-          <button style={{...S.btnGhost,width:'100%'}} onClick={openBrainDump}>Open Brain Dump</button>
+          <button style={{...S.btnGhost,width:'100%'}} onClick={openCommandBar}>Open Command Bar</button>
         </div>
       </div>
     </div>;
@@ -9658,45 +9756,24 @@ function App(){
         onAction={notifAction?.handler}
         onDismiss={clearNotif}
       />
-     <div style={S.hdr}>
-        <div>
-          {tab==='home'?<>
-            <div style={{...S.micro,fontWeight:400}}>{`${greeting}, ${toTitleCaseLabel(profile.userProfile?.name||'there')}`}</div>
-            <button
-              style={{background:'none',border:'none',padding:0,marginTop:1,cursor:'pointer',fontSize:11,fontWeight:400,color:C.muted,opacity:0.68,lineHeight:1.35,textAlign:'left'}}
-              title={formatDate(NOW,'primaryWithYear')}
-              onClick={()=>{
-                openTab('calendar',{calendarFocusDay:TODAY});
-              }}
-            >
-              {formatDate(NOW,'primary')}
-            </button>
-          </>:<>
-            <div style={S.sectionTitle}>
-              {TAB_TITLES[tab]||TAB_TITLES.home}
-            </div>
-          </>}
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <button
-            style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'8px',cursor:'pointer',display:'flex',alignItems:'center',position:'relative'}}
-            onClick={()=>openTab('tasks',{taskTab:'inbox'})}
-            title="Inbox"
-            aria-label={pendingInbox.length>0?`Inbox, ${pendingInbox.length} pending item${pendingInbox.length!==1?'s':''}`:'Inbox'}
-          >
-            {pendingInbox.length>0&&<div style={{position:'absolute',top:0,right:0,minWidth:16,height:16,borderRadius:999,background:C.red,color:C.white,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{Math.min(pendingInbox.length,9)}</div>}
-            <NavIcon id="inbox" active={tab==='tasks'}/>
-          </button>
-          <button
-            style={{background:C.navy,border:'none',borderRadius:12,width:36,height:36,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
-            onClick={openBrainDump}
-            title="Brain Dump"
-            aria-label="Brain Dump"
-          >
-            <span style={{color:'var(--white)',fontSize:17,lineHeight:1}} aria-hidden="true">🧠</span>
-          </button>
-        </div>
-      </div>
+      {tab==='home'
+        ?<Header
+          C={C}
+          S={S}
+          greeting={greeting}
+          name={profile.userProfile?.name||'there'}
+          dateLabel={formatDate(NOW,'primary')}
+          dateTitle={formatDate(NOW,'primaryWithYear')}
+          inboxCount={pendingInbox.length}
+          onOpenCalendar={()=>openTab('calendar',{calendarFocusDay:TODAY})}
+          onOpenInbox={()=>openTab('tasks',{taskTab:'inbox'})}
+          onOpenBrainDump={openBrainDump}
+        />
+        :<div style={S.hdr}>
+          <div style={S.sectionTitle}>
+            {TAB_TITLES[tab]||TAB_TITLES.home}
+          </div>
+        </div>}
       <main id="app-main" ref={contentRef} tabIndex={-1} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
         <ScreenErrorBoundary resetKey={tab} fallback={screenFallback}>
           <ActiveScreen focusDay={calendarFocusDay}/>
@@ -9881,12 +9958,46 @@ function App(){
         </div>
       </div>}
 
-      {showBrainDumpModal&&<BrainDumpModal
-        C={C}
-        S={S}
-        onClose={()=>setShowBrainDumpModal(false)}
-        onSave={saveBrainDumpEntry}
-      />}
+      {/* Command Bar modal */}
+      {showCapture&&(()=>{
+        const routed=routeCapture(captureText);
+        return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
+          <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto'}}>
+            <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>Command Bar</div>
+            <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
+              Try: “Log chicken 120g”, “Start today’s workout”, “Add 5K time 24:10”, or “Add grocery item bananas”.
+            </div>
+            <FieldInput
+              value={captureText}
+              allowEnterSubmit
+              onChange={e=>setCaptureText(e.target.value)}
+              onKeyDown={e=>{
+                if(e.key!=='Enter'||e.shiftKey||e.altKey||e.ctrlKey||e.metaKey||e.nativeEvent.isComposing||!routed)return;
+                e.preventDefault();
+                confirmCapture(routed);
+              }}
+              placeholder="Type a command or capture..."
+              style={{...S.inp,marginBottom:10,fontSize:15}}
+              autoFocus
+            />
+            {routed&&<div style={{...S.card,padding:'10px 12px',marginBottom:12,background:C.surf}}>
+              <div style={{fontSize:10,color:C.muted,marginBottom:3}}>Routing as</div>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <div style={{width:22,height:22,borderRadius:6,background:routed.type==='expense'?C.amber:routed.type==='note'?C.navy:routed.type==='command'?C.red:C.sage,color:C.white,fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{routed.icon}</div>
+                <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{routed.label}</span>
+                <span style={{fontSize:11,color:C.muted}}>{routed.preview?.slice(0,40)}</span>
+              </div>
+              {routed.type!=='command'&&<div style={{display:'flex',gap:5,marginTop:8}}>
+                {['task','expense','note'].map(type=><button key={type} onClick={()=>confirmCapture({...routed,type,label:type.charAt(0).toUpperCase()+type.slice(1),icon:type==='expense'?'$':type==='note'?'N':'T'})} style={{padding:'4px 10px',borderRadius:7,border:`1px solid ${routed.type===type?C.sage:C.bd}`,background:routed.type===type?C.sage:'transparent',color:routed.type===type?C.white:C.muted,fontSize:10,cursor:'pointer'}}>{type}</button>)}
+              </div>}
+            </div>}
+            <div style={{display:'flex',gap:8}}>
+              <button style={S.btnSolid(C.sage)} onClick={()=>routed&&confirmCapture(routed)} disabled={!routed}>Save</button>
+              <button style={{...S.btnGhost,flex:1}} onClick={()=>{setShowCapture(false);setCaptureText('');}}>Cancel</button>
+            </div>
+          </div>
+        </div>;
+      })()}
 
       {/* Quarterly / Annual review modal */}
       {showReview&&(()=>{
