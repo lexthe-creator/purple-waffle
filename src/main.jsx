@@ -272,6 +272,143 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenBrainDump}){
   </section>;
 }
 
+<<<<<<< revert-7-claude/setup-dev-workflow-MSJhL
+=======
+function TodayList({
+  C,
+  S,
+  FieldInput,
+  dailyExecutionEntry,
+  selectedDateLabel,
+  isViewingToday,
+  updatePriorityTask,
+  movePriorityTask,
+  removePriorityTask,
+  openBrainDump,
+  setDailyExecutionMode,
+}){
+  const headingId=React.useId();
+  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
+  const isExecution=dailyExecutionEntry.mode==='execution';
+  const visibleTasks=isExecution
+    ?dailyExecutionEntry.agenda
+    :dailyExecutionEntry.priorities;
+
+  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
+    <div style={{...S.row,alignItems:'flex-start',gap:10}}>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Today</div>
+        <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
+        {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
+      </div>
+      <span style={S.pill(isExecution?C.sageL:C.navyL,isExecution?C.sageDk:C.navyDk)}>{isExecution?'Execution':'Planning'}</span>
+    </div>
+    <div style={{display:'grid',gap:8}}>
+      {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:4}}>No priorities</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:8}}>Use Brain Dump to capture something fast, then process it when you&apos;re ready.</div>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openBrainDump}>Brain Dump</button>
+      </div>}
+      {visibleTasks.map((task,index,items)=><div key={task.id}>
+        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
+          <button
+            type="button"
+            aria-pressed={task.completed}
+            aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
+            style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}
+            onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
+          >
+            {task.completed?'✓':''}
+          </button>
+          {!isExecution
+            ?<FieldInput
+              id={`daily-priority-${task.id}`}
+              aria-label={`Priority ${index+1}`}
+              value={task.text||''}
+              placeholder={`Task ${index+1}`}
+              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
+              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
+            />
+            :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
+              <span>{task.text||`Task ${index+1}`}</span>
+              {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:2}}>{task.notes}</span>}
+            </div>}
+          <div style={{display:'flex',gap:6,flexShrink:0}}>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
+            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
+            {!isExecution&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
+          </div>
+        </div>
+        {isExecution&&Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingLeft:30,display:'grid',gap:4,marginTop:4}}>
+          {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
+            <button
+              type="button"
+              aria-pressed={sub.completed}
+              style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
+              onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
+            >{sub.completed?'✓':''}</button>
+            <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
+          </div>)}
+        </div>}
+      </div>)}
+    </div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      {!isExecution&&<button type="button" style={{...S.btnGhost,flex:1}} onClick={openBrainDump}>Brain Dump</button>}
+      {!isExecution
+        ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
+        :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
+    </div>
+  </section>;
+}
+
+function InlineTaskInput({C,S,onAdd}){
+  const [text,setText]=useState('');
+  const [notesOpen,setNotesOpen]=useState(false);
+  const [notes,setNotes]=useState('');
+  const [subtasks,setSubtasks]=useState([]);
+  const [open,setOpen]=useState(false);
+
+  function submit(){
+    if(!text.trim())return;
+    onAdd({text:text.trim(),notes:notes.trim()||null,subtasks:subtasks.map(s=>({id:`sub-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,text:s.trim(),completed:false})).filter(s=>s.text)});
+    setText('');setNotes('');setSubtasks([]);setNotesOpen(false);setOpen(false);
+  }
+
+  if(!open){
+    return <button type="button" style={{...S.btnGhost,fontSize:12,justifyContent:'flex-start',padding:'8px 12px'}} onClick={()=>setOpen(true)}>+ Add task</button>;
+  }
+
+  return <div style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gap:8}}>
+    <input
+      value={text}
+      onChange={e=>setText(e.target.value)}
+      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();submit();}if(e.key==='Escape')setOpen(false);}}
+      placeholder="Task name"
+      style={{...S.inp,margin:0}}
+      autoFocus
+    />
+    {subtasks.map((st,i)=><div key={i} style={{display:'flex',gap:8,paddingLeft:14,alignItems:'center'}}>
+      <div style={{width:5,height:5,borderRadius:999,background:C.muted,flexShrink:0}}/>
+      <input
+        value={st}
+        onChange={e=>{const next=[...subtasks];next[i]=e.target.value;setSubtasks(next);}}
+        placeholder={`Subtask ${i+1}`}
+        style={{...S.inp,margin:0,flex:1,fontSize:12}}
+      />
+      <button type="button" onClick={()=>setSubtasks(subtasks.filter((_,j)=>j!==i))} style={{...S.btnGhost,padding:'3px 7px',fontSize:11}}>×</button>
+    </div>)}
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      <button type="button" onClick={()=>setSubtasks([...subtasks,''])} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>+ Subtask</button>
+      <button type="button" onClick={()=>setNotesOpen(o=>!o)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>{notesOpen?'▾ Notes':'▸ Notes'}</button>
+      <div style={{flex:1}}/>
+      <button type="button" onClick={()=>setOpen(false)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>Cancel</button>
+      <button type="button" onClick={submit} disabled={!text.trim()} style={{...S.btnSmall(),fontSize:11,padding:'5px 9px',opacity:text.trim()?1:0.45}}>Add</button>
+    </div>
+    {notesOpen&&<textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes…" rows={2} style={{...S.inp,margin:0,resize:'vertical',fontSize:12}}/>}
+  </div>;
+}
+
+>>>>>>> main
 function QuickActions({
   C,
   S,
@@ -2274,7 +2411,6 @@ const DEFAULT_OPS={
   top3:{},
   dailyExecution:{},
   dailyRecommendations:{},
-  brainDump:[],
   inboxItems:[], // [{id,text,createdDate,suggestedType,status:'pending'|'processed'}]
   googleClientId:null,
   notifications:{morningTime:'07:00',eveningTime:'21:00'},
@@ -3397,7 +3533,6 @@ function App(){
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
   const [showHabitsModal,setShowHabitsModal]=useState(false);
-  const [showBrainDumpModal,setShowBrainDumpModal]=useState(false);
   const [habitDraftCompletions,setHabitDraftCompletions]=useState({});
   const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
   const [showProgramPicker,setShowProgramPicker]=useState(false);
@@ -9863,13 +9998,6 @@ function App(){
           </div>
         </div>;
       })()}
-
-      {showBrainDumpModal&&<BrainDumpModal
-        C={C}
-        S={S}
-        onClose={()=>setShowBrainDumpModal(false)}
-        onSave={saveBrainDumpEntry}
-      />}
 
       {/* Quarterly / Annual review modal */}
       {showReview&&(()=>{
