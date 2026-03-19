@@ -1,29 +1,36 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-export default function BrainDumpModal({ isOpen, onClose, onSubmit }) {
-  const [value, setValue] = useState('');
+export default function BrainDumpModal({ isOpen, initialValue = '', onChange, onClose, onSubmit }) {
+  const [value, setValue] = useState(initialValue);
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setValue('');
+      setValue(initialValue);
       return;
     }
+
+    setValue(initialValue);
 
     const frame = window.requestAnimationFrame(() => {
       inputRef.current?.focus();
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isOpen]);
+  }, [initialValue, isOpen]);
 
   if (!isOpen) return null;
+
+  function handleChange(nextValue) {
+    setValue(nextValue);
+    onChange?.(nextValue);
+  }
 
   function commit() {
     const nextValue = value.trim();
     if (!nextValue) return;
     onSubmit(nextValue);
-    setValue('');
+    handleChange('');
   }
 
   return (
@@ -47,7 +54,7 @@ export default function BrainDumpModal({ isOpen, onClose, onSubmit }) {
           <input
             ref={inputRef}
             value={value}
-            onChange={event => setValue(event.target.value)}
+            onChange={event => handleChange(event.target.value)}
             onKeyDown={event => {
               if (event.key === 'Escape') {
                 event.preventDefault();
