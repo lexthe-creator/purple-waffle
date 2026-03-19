@@ -1,18 +1,42 @@
 import React from 'react';
 
-export default function Header({ inboxCount, onOpenBrainDump, onOpenInbox }) {
+function InboxIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="toolbar-icon">
+      <path d="M4 5.5h16a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6.5a1 1 0 0 1 1-1Zm0 2V17h16V7.5H4Zm3.5 3h9a1 1 0 1 1 0 2h-9a1 1 0 1 1 0-2Z" />
+    </svg>
+  );
+}
+
+function BrainIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="toolbar-icon">
+      <path d="M9 3.5a3.5 3.5 0 0 0-3.43 4.21A3.99 3.99 0 0 0 6 15.5h.25A3.75 3.75 0 0 0 10 19.25h1V14H9.75a1 1 0 1 1 0-2H11V9.75H9.75a1 1 0 1 1 0-2H11V3.5H9Zm4 0V8h1.25a1 1 0 1 1 0 2H13V12h1.25a1 1 0 1 1 0 2H13v5.25h1a3.75 3.75 0 0 0 3.75-3.75H18a4 4 0 0 0 .43-7.79A3.5 3.5 0 0 0 15 3.5h-2Z" />
+    </svg>
+  );
+}
+
+export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickAdd }) {
+  const dateLabel = new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date());
+
   return (
     <header className="app-header">
-      <div>
-        <p className="eyebrow">Planning First</p>
-        <h1>Capture, triage, and shape today before you start</h1>
+      <div className="header-copy">
+        <p className="header-date">{dateLabel}</p>
+        <h1>Good morning, {userName}</h1>
       </div>
-      <div className="header-actions">
-        <button type="button" className="primary-button" onClick={onOpenBrainDump}>
-          Brain Dump
+
+      <div className="header-actions" role="toolbar" aria-label="Global actions">
+        <button type="button" className="icon-button" onClick={onOpenInbox} aria-label={`Open inbox${inboxCount ? ` with ${inboxCount} notifications` : ''}`}>
+          <InboxIcon />
+          {inboxCount > 0 && <span className="icon-badge">{Math.min(inboxCount, 9)}</span>}
         </button>
-        <button type="button" className="secondary-button" onClick={onOpenInbox}>
-          Inbox{inboxCount > 0 ? ` (${inboxCount})` : ''}
+        <button type="button" className="icon-button filled-icon-button" onClick={onOpenQuickAdd} aria-label="Open quick add">
+          <BrainIcon />
         </button>
       </div>
     </header>
