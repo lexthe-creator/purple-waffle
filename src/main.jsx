@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
@@ -6,6 +6,11 @@ import PlanningCard from './components/PlanningCard.jsx';
 import InboxView from './views/InboxView.jsx';
 import './styles.css';
 
+function TaskApp() {
+  const { tasks, setTasks, createTask, generateId, sortTasks } = useTaskContext();
+  const [activeView, setActiveView] = useState('planning');
+  const [brainDumpOpen, setBrainDumpOpen] = useState(false);
+  const [ui, setUi] = useState({ flowActive: false, flowIndex: 0 });
 const APP_STATE_STORAGE_KEY = 'purple-waffle-app-state-v2';
 
 function generateId(prefix = 'item') {
@@ -7724,6 +7729,59 @@ function App(){
         </div>}
       </div>}
 
+  const flowItems = useMemo(
+    () => activeTasks.flatMap(task => {
+      const incompleteSubtasks = task.subtasks.filter(subtask => !subtask.done);
+
+      if (incompleteSubtasks.length > 0) {
+        return incompleteSubtasks.map(subtask => ({
+          type: 'subtask',
+          taskId: task.id,
+          subtaskId: subtask.id,
+          title: subtask.title || 'Untitled subtask',
+          parentTitle: task.title || 'Untitled priority',
+        }));
+      }
+
+      if (task.status !== 'done') {
+        return [{
+          type: 'task',
+          taskId: task.id,
+          title: task.title || 'Untitled priority',
+        }];
+      }
+
+      return [];
+    }),
+    [activeTasks],
+  );
+
+  const currentFlowItem = flowItems[ui.flowIndex] ?? null;
+
+  function setFlowIndex(flowIndex) {
+    setUi(current => ({ ...current, flowIndex }));
+  }
+
+  function exitFlow() {
+    setUi({ flowActive: false, flowIndex: 0 });
+  }
+
+  function advanceFlow(nextIndex) {
+    if (nextIndex >= flowItems.length) {
+      exitFlow();
+      return;
+    }
+
+    setFlowIndex(nextIndex);
+  }
+
+  useEffect(() => {
+    if (!ui.flowActive) return;
+    if (flowItems.length === 0 || ui.flowIndex >= flowItems.length) {
+      exitFlow();
+    }
+  }, [flowItems.length, ui.flowActive, ui.flowIndex]);
+
       {tasksTab==='templates'&&<div>
         <div style={{...S.card,marginBottom:12}}>
           <span style={S.lbl}>New Template</span>
@@ -8007,6 +8065,53 @@ function App() {
     });
   }
 
+  function startFocusSession() {
+    if (flowItems.length === 0) return;
+    setUi({ flowActive: true, flowIndex: 0 });
+  }
+
+  function skipFlowItem() {
+    advanceFlow(ui.flowIndex + 1);
+  }
+
+  function completeFlowItem() {
+    if (!currentFlowItem) {
+      exitFlow();
+      return;
+    }
+
+    if (currentFlowItem.type === 'subtask') {
+      setTasks(current => sortTasks(current.map(task => {
+        if (task.id !== currentFlowItem.taskId) return task;
+
+        const subtasks = task.subtasks.map(subtask => (
+          subtask.id === currentFlowItem.subtaskId ? { ...subtask, done: true } : subtask
+        ));
+        const hasRemainingSubtasks = subtasks.some(subtask => !subtask.done);
+
+        return {
+          ...task,
+          subtasks,
+          status: hasRemainingSubtasks ? task.status : 'done',
+        };
+      })));
+    } else {
+      setTasks(current => sortTasks(current.map(task => (
+        task.id === currentFlowItem.taskId ? { ...task, status: 'done', shouldFocusTitle: false } : task
+      ))));
+    }
+
+  }
+
+  const sharedHandlers = {
+    onCommitTitle: commitTitle,
+    onToggleDone: toggleDone,
+    onDelete: deleteTask,
+    onMove: moveTask,
+    onAddSubtask: addSubtask,
+    onCommitSubtaskTitle: commitSubtaskTitle,
+    onToggleSubtask: toggleSubtask,
+    onCommitNotes: commitNotes,
   const priorityHandlers = {
     onCommitTitle: commitPriorityTitle,
     onDelete: deletePriority,
@@ -8237,6 +8342,53 @@ function App() {
               </div>
             </section>
 
+            <section className="task-card focus-session-card">
+              <div className="task-card-header">
+                <div>
+                  <p className="eyebrow">Focus Session</p>
+                  <h2>{ui.flowActive ? 'Keep going' : 'Work one priority at a time'}</h2>
+                </div>
+              </div>
+
+              {ui.flowActive && currentFlowItem ? (
+                <div className="focus-session-body" aria-live="polite">
+                  <div className="focus-session-progress">
+                    Item {ui.flowIndex + 1} of {flowItems.length}
+                  </div>
+                  <div className="focus-session-item">
+                    <p className="eyebrow">{currentFlowItem.type === 'subtask' ? 'Subtask' : 'Priority'}</p>
+                    <h3>{currentFlowItem.title}</h3>
+                    {currentFlowItem.parentTitle && (
+                      <p className="hint-text">From {currentFlowItem.parentTitle}</p>
+                    )}
+                  </div>
+                  <div className="focus-session-actions">
+                    <button type="button" className="ghost-button" onClick={skipFlowItem}>
+                      Skip
+                    </button>
+                    <button type="button" className="primary-button" onClick={completeFlowItem}>
+                      Complete
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="summary-stack">
+                  <div className="summary-tile">
+                    <span>Ready items</span>
+                    <strong>{flowItems.length}</strong>
+                  </div>
+                  <p className="hint-text">
+                    Start Focus Session to work through your active priorities one item at a time.
+                  </p>
+                  <button
+                    type="button"
+                    className="primary-button full-width"
+                    onClick={startFocusSession}
+                    disabled={flowItems.length === 0}
+                  >
+                    Start Focus Session
+                  </button>
+                </div>
             <PlanningCard
               tasks={appState.priorities.map(priority => ({ ...priority, shouldFocusTitle: Boolean(priority.shouldFocusTitle) }))}
               handlers={priorityHandlers}
@@ -8264,6 +8416,43 @@ function App() {
                 <p className="empty-message">Add priorities to define flow when you are ready.</p>
               )}
             </section>
+
+            {!ui.flowActive && (
+              <>
+                <PlanningCard
+                  tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
+                  handlers={sharedHandlers}
+                  onCreateEmptyTask={createEmptyPlannedTask}
+                  onMoveToExecution={moveToExecution}
+                />
+
+                <ExecutionCard
+                  tasks={activeTasks}
+                  handlers={sharedHandlers}
+                  onMoveBackToPlanning={moveBackToPlanning}
+                />
+
+                <section className="task-card">
+                  <div className="task-card-header">
+                    <div>
+                      <p className="eyebrow">Done</p>
+                      <h2>Completed tasks</h2>
+                    </div>
+                  </div>
+                  <div className="task-list compact-list">
+                    {doneTasks.length === 0 ? (
+                      <p className="empty-message">Completed work will appear here.</p>
+                    ) : (
+                      doneTasks.map(task => (
+                        <div key={task.id} className="transition-row done-row">
+                          <span className="transition-title">{task.title || 'Untitled task'}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+              </>
+            )}
           </div>
         )}
       </main>
