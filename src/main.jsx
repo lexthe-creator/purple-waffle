@@ -1,221 +1,346 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
-import BrainDumpModal from './components/BrainDumpModal.jsx';
-import PlanningCard from './components/PlanningCard.jsx';
-import ExecutionCard from './components/ExecutionCard.jsx';
+import QuickAddModal from './components/QuickAddModal.jsx';
+import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
+import WorkoutPlayer from './components/WorkoutPlayer.jsx';
+import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
+import { AppProvider, useAppContext } from './context/AppContext.jsx';
 import './styles.css';
 
-function TaskApp() {
-  const { tasks, setTasks, createTask, generateId, sortTasks } = useTaskContext();
-  const [activeView, setActiveView] = useState('planning');
-  const [brainDumpOpen, setBrainDumpOpen] = useState(false);
+const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
 
-  const inboxTasks = useMemo(() => tasks.filter(task => task.status === 'inbox'), [tasks]);
-  const plannedTasks = useMemo(() => tasks.filter(task => task.status === 'planned'), [tasks]);
-  const activeTasks = useMemo(() => tasks.filter(task => task.status === 'active'), [tasks]);
-  const doneTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
+function formatDateLabel(value) {
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+}
 
-  function updateTask(taskId, updater) {
-    setTasks(current => sortTasks(current.map(task => (task.id === taskId ? updater(task) : task))));
+function Dashboard() {
+  const {
+    quickAddOpen,
+    setQuickAddOpen,
+    notificationCenterOpen,
+    setNotificationCenterOpen,
+    energyState,
+    setEnergyState,
+  } = useAppContext();
+  const {
+    tasks,
+    setTasks,
+    meals,
+    setMeals,
+    notes,
+    setNotes,
+    workouts,
+    setWorkouts,
+    notifications,
+    setNotifications,
+    createTask,
+    createMeal,
+    createNote,
+    createWorkout,
+    createNotification,
+    createSubtask,
+  } = useTaskContext();
+
+  const [quickMealName, setQuickMealName] = useState('');
+  const [quickMealTags, setQuickMealTags] = useState([]);
+  const [activeWorkoutId, setActiveWorkoutId] = useState(null);
+  const [weeklyItems, setWeeklyItems] = useState(() => {
+    const now = new Date();
+    return [
+      { id: 'week-1', title: 'Deep work block', status: 'planned', date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString().slice(0, 10), rescheduleOpen: false },
+      { id: 'week-2', title: 'Strength session', status: 'completed', date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).toISOString().slice(0, 10), rescheduleOpen: false },
+      { id: 'week-3', title: 'Meal prep', status: 'missed', date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3).toISOString().slice(0, 10), rescheduleOpen: false },
+    ];
+  });
+
+  const executionTasks = useMemo(() => tasks.filter(task => task.status !== 'done'), [tasks]);
+  const completedTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
+  const unreadNotifications = useMemo(() => notifications.filter(notification => !notification.read), [notifications]);
+  const activeWorkout = useMemo(() => workouts.find(workout => workout.id === activeWorkoutId) ?? null, [workouts, activeWorkoutId]);
+  const latestMeal = meals[0];
+
+  function upsertNotification(title, detail) {
+    setNotifications(current => [createNotification({ title, detail }), ...current]);
+  }
+
+  function updateTask(taskId, updates) {
+    setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
+  }
+
+  function addInlineTask() {
+    setTasks(current => [createTask({ status: 'active', shouldFocusTitle: true }), ...current]);
   }
 
   function deleteTask(taskId) {
     setTasks(current => current.filter(task => task.id !== taskId));
   }
 
-  function moveTask(taskId, direction) {
-    setTasks(current => {
-      const currentTask = current.find(task => task.id === taskId);
-      if (!currentTask) return current;
-
-      const sameStatusTasks = sortTasks(current.filter(task => task.status === currentTask.status));
-      const index = sameStatusTasks.findIndex(task => task.id === taskId);
-      const nextIndex = index + direction;
-      if (index < 0 || nextIndex < 0 || nextIndex >= sameStatusTasks.length) return current;
-
-      const reordered = [...sameStatusTasks];
-      const [movedTask] = reordered.splice(index, 1);
-      reordered.splice(nextIndex, 0, movedTask);
-
-      const updatedById = new Map(
-        reordered.map((task, orderIndex) => [task.id, { ...task, order: orderIndex + 1 }]),
-      );
-
-      return sortTasks(current.map(task => updatedById.get(task.id) || task));
-    });
-  }
-
-  function commitTitle(taskId, title) {
-    updateTask(taskId, task => ({ ...task, title, shouldFocusTitle: false }));
-  }
-
-  function toggleDone(taskId) {
-    updateTask(taskId, task => ({
-      ...task,
-      status: task.status === 'done' ? 'active' : 'done',
-      shouldFocusTitle: false,
-    }));
-  }
-
-  function addSubtask(taskId) {
-    updateTask(taskId, task => ({
-      ...task,
-      subtasks: [...task.subtasks, { id: generateId('subtask'), title: '', done: false }],
-    }));
-  }
-
-  function commitSubtaskTitle(taskId, subtaskId, title) {
-    updateTask(taskId, task => ({
-      ...task,
-      subtasks: task.subtasks.map(subtask => (subtask.id === subtaskId ? { ...subtask, title } : subtask)),
-    }));
+  function toggleTaskDone(taskId) {
+    setTasks(current => current.map(task => (
+      task.id === taskId
+        ? { ...task, status: task.status === 'done' ? 'active' : 'done' }
+        : task
+    )));
   }
 
   function toggleSubtask(taskId, subtaskId) {
-    updateTask(taskId, task => ({
-      ...task,
-      subtasks: task.subtasks.map(subtask => (subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask)),
+    setTasks(current => current.map(task => (
+      task.id === taskId
+        ? {
+            ...task,
+            subtasks: task.subtasks.map(subtask => (
+              subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask
+            )),
+          }
+        : task
+    )));
+  }
+
+  function addSubtask(taskId) {
+    setTasks(current => current.map(task => (
+      task.id === taskId
+        ? { ...task, subtasks: [...task.subtasks, createSubtask('')] }
+        : task
+    )));
+  }
+
+  function handleQuickAdd({ type, value, meta }) {
+    if (type === 'task') {
+      setTasks(current => [createTask({ status: 'active', title: value, notes: meta }), ...current]);
+      upsertNotification('Task captured', value);
+      return;
+    }
+
+    if (type === 'meal') {
+      setMeals(current => [createMeal({ name: value, tags: meta ? meta.split(',').map(tag => tag.trim()).filter(Boolean) : [] }), ...current]);
+      upsertNotification('Meal logged', value);
+      return;
+    }
+
+    if (type === 'workout') {
+      setWorkouts(current => [createWorkout({ name: value, duration: Number.parseInt(meta, 10) || 30 }), ...current]);
+      upsertNotification('Workout ready', value);
+      return;
+    }
+
+    setNotes(current => [createNote({ content: value + (meta ? ` — ${meta}` : '') }), ...current]);
+    upsertNotification('Note saved', value);
+  }
+
+  function submitQuickMeal() {
+    const trimmed = quickMealName.trim();
+    if (!trimmed) return;
+    setMeals(current => [createMeal({ name: trimmed, tags: quickMealTags }), ...current]);
+    setQuickMealName('');
+    setQuickMealTags([]);
+    upsertNotification('Quick meal added', trimmed);
+  }
+
+  function beginWorkout(workoutId) {
+    setActiveWorkoutId(workoutId);
+    setWorkouts(current => current.map(workout => (workout.id === workoutId ? { ...workout, status: 'active' } : workout)));
+  }
+
+  function cancelWorkout() {
+    if (!activeWorkoutId) return;
+    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'planned' } : workout)));
+    setActiveWorkoutId(null);
+  }
+
+  function completeWorkout() {
+    if (!activeWorkoutId) return;
+    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'completed' } : workout)));
+    upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
+    setActiveWorkoutId(null);
+  }
+
+  function applyEnergyCheckIn(value, sleepHours, sleepSource) {
+    setEnergyState({
+      value,
+      sleepHours,
+      sleepSource,
+      lastCheckIn: new Date().toISOString(),
+    });
+  }
+
+  function skipCheckIn() {
+    setEnergyState(current => ({
+      value: current.value ?? 3,
+      sleepHours: current.sleepHours ?? 7,
+      sleepSource: current.lastCheckIn ? 'last known' : 'baseline',
+      lastCheckIn: current.lastCheckIn,
     }));
+    upsertNotification('Energy auto-generated', 'Using your last known energy baseline.');
   }
 
-  function commitNotes(taskId, notes) {
-    updateTask(taskId, task => ({ ...task, notes }));
+  function updateWeeklyItem(itemId, updates) {
+    setWeeklyItems(current => current.map(item => (item.id === itemId ? { ...item, ...updates } : item)));
   }
 
-  function createEmptyPlannedTask() {
-    const emptyTask = createTask('planned', { shouldFocusTitle: true, order: plannedTasks.length + 1 });
-    setTasks(current => sortTasks([...current, emptyTask]));
-    setActiveView('planning');
-  }
-
-  function sendToInbox(title) {
-    const task = createTask('inbox', { title, order: inboxTasks.length + 1 });
-    setTasks(current => sortTasks([...current, task]));
-    setBrainDumpOpen(false);
-    setActiveView('inbox');
-  }
-
-  function moveToPlanning(taskId) {
-    updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
-    setActiveView('planning');
-  }
-
-  function moveToExecution(taskId) {
-    updateTask(taskId, task => ({ ...task, status: 'active', shouldFocusTitle: false }));
-    setActiveView('planning');
-  }
-
-  function moveBackToPlanning(taskId) {
-    updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
-  }
-
-  const sharedHandlers = {
-    onCommitTitle: commitTitle,
-    onToggleDone: toggleDone,
-    onDelete: deleteTask,
-    onMove: moveTask,
-    onAddSubtask: addSubtask,
-    onCommitSubtaskTitle: commitSubtaskTitle,
-    onToggleSubtask: toggleSubtask,
-    onCommitNotes: commitNotes,
-  };
+  const weeklyViewItems = weeklyItems.map(item => ({ ...item, dateLabel: formatDateLabel(item.date) }));
 
   return (
     <div className="app-shell">
       <Header
-        inboxCount={inboxTasks.length}
-        onOpenBrainDump={() => setBrainDumpOpen(true)}
-        onOpenInbox={() => setActiveView('inbox')}
-        onOpenSettings={() => setActiveView('settings')}
+        userName="Maya"
+        inboxCount={unreadNotifications.length}
+        onOpenInbox={() => setNotificationCenterOpen(true)}
+        onOpenQuickAdd={() => setQuickAddOpen(true)}
       />
 
-      <main className="app-content">
-        {activeView === 'inbox' && (
-          <InboxView
-            tasks={inboxTasks}
-            onCommitTitle={commitTitle}
-            onMoveToPlanning={moveToPlanning}
-            onDelete={deleteTask}
-          />
-        )}
+      <main className="app-content single-flow-layout">
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">Execution mode</p>
+              <h2>Run the day from here</h2>
+              <p className="section-copy">Inline capture, meals, workouts, and notes stay inside the same flow.</p>
+            </div>
+            <button type="button" className="secondary-button" onClick={addInlineTask}>+ Add task</button>
+          </div>
 
-        {activeView === 'settings' && (
-          <section className="task-card">
-            <div className="task-card-header">
+          <div className="energy-strip">
+            <div className="metric-card">
+              <span>Energy</span>
+              <strong>{energyState.value}/5</strong>
+            </div>
+            <div className="metric-card">
+              <span>Sleep</span>
+              <strong>{energyState.sleepHours}h</strong>
+              <small>{energyState.sleepSource === 'manual' ? 'Manual' : energyState.sleepSource === 'integrated' ? 'Integrated' : 'Auto-filled'}</small>
+            </div>
+            <div className="metric-actions">
+              <button type="button" className="ghost-button" onClick={() => applyEnergyCheckIn(4, 7.5, 'manual')}>Check in</button>
+              <button type="button" className="ghost-button" onClick={skipCheckIn}>Skip</button>
+            </div>
+          </div>
+
+          <div className="execution-list">
+            {executionTasks.map(task => (
+              <ExecutionTaskItem
+                key={task.id}
+                task={task}
+                onUpdateTask={updateTask}
+                onDeleteTask={deleteTask}
+                onToggleDone={toggleTaskDone}
+                onToggleSubtask={toggleSubtask}
+                onAddSubtask={addSubtask}
+                onAddSibling={addInlineTask}
+              />
+            ))}
+          </div>
+        </section>
+
+        <div className="dashboard-columns">
+          <section className="task-card quiet-card">
+            <div className="task-card-header compact-header">
               <div>
-                <p className="eyebrow">Settings</p>
-                <h2>Keep your existing settings space</h2>
+                <p className="eyebrow">Meals</p>
+                <h2>Quick add meal</h2>
               </div>
             </div>
-            <p className="settings-copy">
-              This refactor keeps task management centralized in one context. Add any existing settings controls here without duplicating task state.
-            </p>
-          </section>
-        )}
-
-        {activeView !== 'inbox' && activeView !== 'settings' && (
-          <div className="board-grid">
-            <section className="task-card">
-              <div className="task-card-header">
-                <div>
-                  <p className="eyebrow">Brain Dump → Inbox</p>
-                  <h2>Captured items waiting for triage</h2>
-                </div>
-              </div>
-              <div className="summary-stack">
-                <div className="summary-tile">
-                  <span>Inbox</span>
-                  <strong>{inboxTasks.length}</strong>
-                </div>
-                <button type="button" className="secondary-button full-width" onClick={() => setActiveView('inbox')}>
-                  Open Inbox
+            <div className="quick-entry-row">
+              <input className="task-title-input" value={quickMealName} onChange={event => setQuickMealName(event.target.value)} placeholder="Meal name" />
+              <button type="button" className="primary-button" onClick={submitQuickMeal}>Save</button>
+            </div>
+            <div className="tag-row">
+              {QUICK_MEAL_TAGS.map(tag => (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`status-chip ${quickMealTags.includes(tag) ? 'is-active' : ''}`}
+                  onClick={() => setQuickMealTags(current => current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag])}
+                >
+                  {tag}
                 </button>
-              </div>
-            </section>
+              ))}
+            </div>
+            <div className="feed-card">
+              <strong>{latestMeal?.name || 'No meals logged yet'}</strong>
+              <p>{latestMeal?.tags?.length ? latestMeal.tags.join(' · ') : 'Single-step meal logging is ready.'}</p>
+            </div>
+          </section>
 
-            <PlanningCard
-              tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
-              handlers={sharedHandlers}
-              onCreateEmptyTask={createEmptyPlannedTask}
-              onMoveToExecution={moveToExecution}
-            />
-
-            <ExecutionCard
-              tasks={activeTasks}
-              handlers={sharedHandlers}
-              onMoveBackToPlanning={moveBackToPlanning}
-            />
-
-            <section className="task-card">
-              <div className="task-card-header">
-                <div>
-                  <p className="eyebrow">Done</p>
-                  <h2>Completed tasks</h2>
-                </div>
+          <section className="task-card quiet-card">
+            <div className="task-card-header compact-header">
+              <div>
+                <p className="eyebrow">Workout</p>
+                <h2>Start and finish in one place</h2>
               </div>
-              <div className="task-list compact-list">
-                {doneTasks.length === 0 ? (
-                  <p className="empty-message">Completed work will appear here.</p>
-                ) : (
-                  doneTasks.map(task => (
-                    <div key={task.id} className="transition-row done-row">
-                      <span className="transition-title">{task.title || 'Untitled task'}</span>
-                    </div>
-                  ))
-                )}
+            </div>
+            {activeWorkout ? (
+              <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
+            ) : (
+              <div className="workout-stack">
+                {workouts.map(workout => (
+                  <article key={workout.id} className="feed-card">
+                    <strong>{workout.name}</strong>
+                    <p>{workout.duration} min · {workout.status}</p>
+                    <button type="button" className="secondary-button" onClick={() => beginWorkout(workout.id)}>
+                      {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
+                    </button>
+                  </article>
+                ))}
               </div>
-            </section>
-          </div>
-        )}
+            )}
+          </section>
+        </div>
+
+        <div className="dashboard-columns">
+          <section className="task-card quiet-card">
+            <div className="task-card-header compact-header">
+              <div>
+                <p className="eyebrow">Notes</p>
+                <h2>Recent captures</h2>
+              </div>
+            </div>
+            <div className="simple-feed">
+              {notes.map(note => (
+                <article key={note.id} className="feed-card">
+                  <p>{note.content}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card quiet-card">
+            <div className="task-card-header compact-header">
+              <div>
+                <p className="eyebrow">Completed</p>
+                <h2>Finished today</h2>
+              </div>
+            </div>
+            <div className="simple-feed">
+              {completedTasks.length === 0 ? (
+                <p className="empty-message">Completed tasks will land here.</p>
+              ) : (
+                completedTasks.map(task => (
+                  <article key={task.id} className="feed-card done-card">
+                    <strong>{task.title || 'Untitled task'}</strong>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+
+        <WeeklyPreview
+          items={weeklyViewItems}
+          onStatusChange={(itemId, status) => updateWeeklyItem(itemId, { status })}
+          onDateChange={(itemId, date) => updateWeeklyItem(itemId, { date })}
+          onToggleReschedule={itemId => updateWeeklyItem(itemId, { rescheduleOpen: !weeklyItems.find(item => item.id === itemId)?.rescheduleOpen })}
+        />
       </main>
 
-      <BrainDumpModal
-        isOpen={brainDumpOpen}
-        onClose={() => setBrainDumpOpen(false)}
-        onSubmit={sendToInbox}
+      <QuickAddModal isOpen={quickAddOpen} onClose={() => setQuickAddOpen(false)} onSubmit={handleQuickAdd} />
+      <InboxView
+        isOpen={notificationCenterOpen}
+        notifications={notifications}
+        onClose={() => setNotificationCenterOpen(false)}
+        onMarkAllRead={() => setNotifications(current => current.map(notification => ({ ...notification, read: true })))}
       />
     </div>
   );
@@ -224,13 +349,14 @@ function TaskApp() {
 function App() {
   return (
     <TaskProvider>
-      <TaskApp />
+      <AppProvider>
+        <Dashboard />
+      </AppProvider>
     </TaskProvider>
   );
 }
 
-const rootElement = document.getElementById('root');
-createRoot(rootElement).render(
+createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
