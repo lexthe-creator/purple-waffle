@@ -173,10 +173,10 @@ textarea:focus-visible {
   gap: 20px;
 }
 
-.board-grid {
+.home-stack {
   display: grid;
   gap: 20px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .task-card {
@@ -356,6 +356,42 @@ textarea:focus-visible {
   width: 100%;
 }
 
+
+.focus-session-card {
+  align-content: start;
+}
+
+.focus-session-body,
+.focus-session-item,
+.focus-session-actions,
+.focus-session-progress {
+  display: grid;
+  gap: 14px;
+}
+
+.focus-session-progress {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.focus-session-item {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid rgba(47, 62, 92, 0.08);
+  border-radius: 18px;
+}
+
+.focus-session-item h3 {
+  margin: 6px 0 0;
+  font-size: 1.5rem;
+}
+
+.focus-session-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+
 .compact-list {
   align-content: start;
 }
@@ -401,11 +437,6 @@ textarea:focus-visible {
   line-height: 1.5;
 }
 
-@media (max-width: 960px) {
-  .board-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 @media (max-width: 720px) {
   .app-shell {
@@ -457,4 +488,68 @@ textarea:focus-visible {
   cursor: not-allowed;
   opacity: 0.6;
   transform: none;
+.home-card {
+  align-content: start;
+}
+
+.home-card-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 960px) {
+  .home-card-wide {
+    grid-column: span 1;
+.home-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.feature-card {
+  gap: 16px;
+}
+
+.summary-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.summary-row-tight {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.priorities-shell {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.priorities-shell > .task-card-header {
+  padding: 20px 20px 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px 24px 0 0;
+  box-shadow: var(--shadow);
+}
+
+.priorities-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.context-card-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.context-card {
+  align-content: start;
+}
+
+@media (max-width: 1200px) {
+  .priorities-grid,
+  .context-card-grid {
+    grid-template-columns: 1fr;
+  }
 }
