@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
@@ -16,6 +16,19 @@ function formatDateLabel(value) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
 }
 
+function getElapsedSeconds(session, nowMs) {
+  if (!session) return 0;
+
+  const baseline = Number.isFinite(session.elapsedSeconds) ? session.elapsedSeconds : 0;
+  const startedAtMs = Date.parse(session.startedAt || '');
+
+  if (!Number.isFinite(startedAtMs)) {
+    return baseline;
+  }
+
+  return baseline + Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
+}
+
 function Dashboard() {
   const {
     quickAddOpen,
@@ -24,6 +37,10 @@ function Dashboard() {
     setNotificationCenterOpen,
     energyState,
     setEnergyState,
+    workoutSession,
+    startWorkoutSession,
+    toggleWorkoutExercise,
+    clearWorkoutSession,
   } = useAppContext();
   const {
     tasks,
@@ -36,6 +53,8 @@ function Dashboard() {
     setWorkouts,
     notifications,
     setNotifications,
+    weeklyItems,
+    setWeeklyItems,
     createTask,
     createMeal,
     createNote,
@@ -46,21 +65,36 @@ function Dashboard() {
 
   const [quickMealName, setQuickMealName] = useState('');
   const [quickMealTags, setQuickMealTags] = useState([]);
-  const [activeWorkoutId, setActiveWorkoutId] = useState(null);
-  const [weeklyItems, setWeeklyItems] = useState(() => {
-    const now = new Date();
-    return [
-      { id: 'week-1', title: 'Deep work block', status: 'planned', date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString().slice(0, 10), rescheduleOpen: false },
-      { id: 'week-2', title: 'Strength session', status: 'completed', date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).toISOString().slice(0, 10), rescheduleOpen: false },
-      { id: 'week-3', title: 'Meal prep', status: 'missed', date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3).toISOString().slice(0, 10), rescheduleOpen: false },
-    ];
-  });
+  const [openWeeklyReschedules, setOpenWeeklyReschedules] = useState({});
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!workoutSession?.activeWorkoutId) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [workoutSession?.activeWorkoutId]);
 
   const executionTasks = useMemo(() => tasks.filter(task => task.status !== 'done'), [tasks]);
   const completedTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
   const unreadNotifications = useMemo(() => notifications.filter(notification => !notification.read), [notifications]);
-  const activeWorkout = useMemo(() => workouts.find(workout => workout.id === activeWorkoutId) ?? null, [workouts, activeWorkoutId]);
+  const activeWorkout = useMemo(
+    () => workouts.find(workout => workout.id === workoutSession?.activeWorkoutId) ?? null,
+    [workouts, workoutSession?.activeWorkoutId],
+  );
+  const activeWorkoutElapsed = useMemo(
+    () => getElapsedSeconds(workoutSession, nowMs),
+    [workoutSession, nowMs],
+  );
   const latestMeal = meals[0];
+
+  useEffect(() => {
+    if (workoutSession?.activeWorkoutId && !activeWorkout) {
+      clearWorkoutSession();
+    }
+  }, [activeWorkout, clearWorkoutSession, workoutSession?.activeWorkoutId]);
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
@@ -126,7 +160,7 @@ function Dashboard() {
       return;
     }
 
-    setNotes(current => [createNote({ content: value + (meta ? ` — ${meta}` : '') }), ...current]);
+    setNotes(current => [createNote({ content: value + (meta ? ` - ${meta}` : '') }), ...current]);
     upsertNotification('Note saved', value);
   }
 
@@ -140,21 +174,29 @@ function Dashboard() {
   }
 
   function beginWorkout(workoutId) {
-    setActiveWorkoutId(workoutId);
-    setWorkouts(current => current.map(workout => (workout.id === workoutId ? { ...workout, status: 'active' } : workout)));
+    setWorkouts(current => current.map(workout => (
+      workout.id === workoutId ? { ...workout, status: 'active' } : workout
+    )));
+    startWorkoutSession(workoutId);
   }
 
   function cancelWorkout() {
-    if (!activeWorkoutId) return;
-    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'planned' } : workout)));
-    setActiveWorkoutId(null);
+    if (!workoutSession?.activeWorkoutId) return;
+
+    setWorkouts(current => current.map(workout => (
+      workout.id === workoutSession.activeWorkoutId ? { ...workout, status: 'planned' } : workout
+    )));
+    clearWorkoutSession();
   }
 
   function completeWorkout() {
-    if (!activeWorkoutId) return;
-    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'completed' } : workout)));
+    if (!workoutSession?.activeWorkoutId) return;
+
+    setWorkouts(current => current.map(workout => (
+      workout.id === workoutSession.activeWorkoutId ? { ...workout, status: 'completed' } : workout
+    )));
     upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
-    setActiveWorkoutId(null);
+    clearWorkoutSession();
   }
 
   function applyEnergyCheckIn(value, sleepHours, sleepSource) {
@@ -180,7 +222,15 @@ function Dashboard() {
     setWeeklyItems(current => current.map(item => (item.id === itemId ? { ...item, ...updates } : item)));
   }
 
-  const weeklyViewItems = weeklyItems.map(item => ({ ...item, dateLabel: formatDateLabel(item.date) }));
+  function toggleWeeklyReschedule(itemId) {
+    setOpenWeeklyReschedules(current => ({ ...current, [itemId]: !current[itemId] }));
+  }
+
+  const weeklyViewItems = weeklyItems.map(item => ({
+    ...item,
+    dateLabel: formatDateLabel(item.date),
+    rescheduleOpen: openWeeklyReschedules[item.id] === true,
+  }));
 
   return (
     <div className="app-shell">
@@ -260,7 +310,7 @@ function Dashboard() {
             </div>
             <div className="feed-card">
               <strong>{latestMeal?.name || 'No meals logged yet'}</strong>
-              <p>{latestMeal?.tags?.length ? latestMeal.tags.join(' · ') : 'Single-step meal logging is ready.'}</p>
+              <p>{latestMeal?.tags?.length ? latestMeal.tags.join(' - ') : 'Single-step meal logging is ready.'}</p>
             </div>
           </section>
 
@@ -272,13 +322,20 @@ function Dashboard() {
               </div>
             </div>
             {activeWorkout ? (
-              <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
+              <WorkoutPlayer
+                workout={activeWorkout}
+                elapsedSeconds={activeWorkoutElapsed}
+                completedExerciseIds={workoutSession?.completedExerciseIds || []}
+                onToggleExercise={toggleWorkoutExercise}
+                onCancel={cancelWorkout}
+                onComplete={completeWorkout}
+              />
             ) : (
               <div className="workout-stack">
                 {workouts.map(workout => (
                   <article key={workout.id} className="feed-card">
                     <strong>{workout.name}</strong>
-                    <p>{workout.duration} min · {workout.status}</p>
+                    <p>{workout.duration} min - {workout.status}</p>
                     <button type="button" className="secondary-button" onClick={() => beginWorkout(workout.id)}>
                       {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
                     </button>
@@ -298,11 +355,15 @@ function Dashboard() {
               </div>
             </div>
             <div className="simple-feed">
-              {notes.map(note => (
-                <article key={note.id} className="feed-card">
-                  <p>{note.content}</p>
-                </article>
-              ))}
+              {notes.length === 0 ? (
+                <p className="empty-message">Notes captured from quick add will show up here.</p>
+              ) : (
+                notes.map(note => (
+                  <article key={note.id} className="feed-card">
+                    <p>{note.content}</p>
+                  </article>
+                ))
+              )}
             </div>
           </section>
 
@@ -331,7 +392,7 @@ function Dashboard() {
           items={weeklyViewItems}
           onStatusChange={(itemId, status) => updateWeeklyItem(itemId, { status })}
           onDateChange={(itemId, date) => updateWeeklyItem(itemId, { date })}
-          onToggleReschedule={itemId => updateWeeklyItem(itemId, { rescheduleOpen: !weeklyItems.find(item => item.id === itemId)?.rescheduleOpen })}
+          onToggleReschedule={toggleWeeklyReschedule}
         />
       </main>
 
