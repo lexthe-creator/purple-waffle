@@ -433,3 +433,18 @@ textarea:focus-visible {
     justify-content: flex-start;
   }
 }
+
+
+.home-card {
+  align-content: start;
+}
+
+.home-card-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 960px) {
+  .home-card-wide {
+    grid-column: span 1;
+  }
+}

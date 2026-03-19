@@ -4,13 +4,21 @@ import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
 import PlanningCard from './components/PlanningCard.jsx';
 import ExecutionCard from './components/ExecutionCard.jsx';
+import MealCard from './components/MealCard.jsx';
+import WorkoutCard from './components/WorkoutCard.jsx';
+import WeeklyPreviewCard from './components/WeeklyPreviewCard.jsx';
+import WeekAheadCard from './components/WeekAheadCard.jsx';
+import SomedaySoonCard from './components/SomedaySoonCard.jsx';
+import TaskFlowCard from './components/TaskFlowCard.jsx';
 import InboxView from './views/InboxView.jsx';
+import NutritionView from './views/NutritionView.jsx';
+import WorkoutView from './views/WorkoutView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import './styles.css';
 
 function TaskApp() {
   const { tasks, setTasks, createTask, generateId, sortTasks } = useTaskContext();
-  const [activeView, setActiveView] = useState('planning');
+  const [activeView, setActiveView] = useState('home');
   const [brainDumpOpen, setBrainDumpOpen] = useState(false);
 
   const inboxTasks = useMemo(() => tasks.filter(task => task.status === 'inbox'), [tasks]);
@@ -88,7 +96,7 @@ function TaskApp() {
   function createEmptyPlannedTask() {
     const emptyTask = createTask('planned', { shouldFocusTitle: true, order: plannedTasks.length + 1 });
     setTasks(current => sortTasks([...current, emptyTask]));
-    setActiveView('planning');
+    setActiveView('home');
   }
 
   function sendToInbox(title) {
@@ -100,16 +108,17 @@ function TaskApp() {
 
   function moveToPlanning(taskId) {
     updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
-    setActiveView('planning');
+    setActiveView('home');
   }
 
   function moveToExecution(taskId) {
     updateTask(taskId, task => ({ ...task, status: 'active', shouldFocusTitle: false }));
-    setActiveView('planning');
+    setActiveView('home');
   }
 
   function moveBackToPlanning(taskId) {
     updateTask(taskId, task => ({ ...task, status: 'planned', shouldFocusTitle: false }));
+    setActiveView('home');
   }
 
   const sharedHandlers = {
@@ -142,6 +151,10 @@ function TaskApp() {
           />
         )}
 
+        {activeView === 'nutrition' && <NutritionView onBackHome={() => setActiveView('home')} />}
+
+        {activeView === 'workout' && <WorkoutView onBackHome={() => setActiveView('home')} />}
+
         {activeView === 'settings' && (
           <section className="task-card">
             <div className="task-card-header">
@@ -156,9 +169,9 @@ function TaskApp() {
           </section>
         )}
 
-        {activeView !== 'inbox' && activeView !== 'settings' && (
+        {activeView === 'home' && (
           <div className="board-grid">
-            <section className="task-card">
+            <section className="task-card home-card home-card-wide">
               <div className="task-card-header">
                 <div>
                   <p className="eyebrow">Brain Dump → Inbox</p>
@@ -175,6 +188,17 @@ function TaskApp() {
                 </button>
               </div>
             </section>
+
+            <WeeklyPreviewCard />
+            <MealCard onOpenNutrition={() => setActiveView('nutrition')} />
+            <WorkoutCard onOpenWorkout={() => setActiveView('workout')} />
+            <WeekAheadCard />
+            <SomedaySoonCard />
+            <TaskFlowCard
+              plannedCount={plannedTasks.length}
+              activeCount={activeTasks.length}
+              doneCount={doneTasks.length}
+            />
 
             <PlanningCard
               tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
