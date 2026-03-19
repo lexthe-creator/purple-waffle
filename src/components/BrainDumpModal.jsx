@@ -1,45 +1,65 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-export default function BrainDumpModal({ C, S, onClose, onSave }) {
-  const [text, setText] = useState('');
+export default function BrainDumpModal({ isOpen, onClose, onSubmit }) {
+  const [value, setValue] = useState('');
   const inputRef = useRef(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (!isOpen) {
+      setValue('');
+      return;
+    }
 
-  function submit() {
-    const nextText = text.trim();
-    if (!nextText) return;
-    onSave(nextText);
-    setText('');
-    onClose();
+    const frame = window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  function commit() {
+    const nextValue = value.trim();
+    if (!nextValue) return;
+    onSubmit(nextValue);
+    setValue('');
   }
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: C.scrim, zIndex: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={onClose}
-    >
-      <div
-        style={{ ...S.card, width: '100%', maxWidth: 420, padding: '18px 16px' }}
-        onClick={event => event.stopPropagation()}
-      >
-        <input
-          ref={inputRef}
-          value={text}
-          onChange={event => setText(event.target.value)}
-          onKeyDown={event => {
-            if (event.key === 'Escape') onClose();
-            if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              submit();
-            }
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card" onClick={event => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Brain Dump</p>
+            <h2>Capture it fast</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close brain dump">
+            ×
+          </button>
+        </div>
+        <form
+          onSubmit={event => {
+            event.preventDefault();
+            commit();
           }}
-          placeholder="Dump it..."
-          style={{ ...S.inp, margin: 0, fontSize: 15 }}
-          aria-label="Brain dump"
-        />
+        >
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={event => setValue(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                onClose();
+              }
+            }}
+            placeholder="What needs capturing?"
+            className="brain-dump-input"
+            aria-label="Brain dump input"
+          />
+        </form>
+        <p className="hint-text">Press Enter to send it to Inbox. Press Esc to close.</p>
       </div>
     </div>
   );
