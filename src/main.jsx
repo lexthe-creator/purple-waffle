@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import WorkoutDecisionPrompt from './components/WorkoutDecisionPrompt.jsx';
-import QuickAddModal from './components/QuickAddModal.jsx';
+import BrainDumpModal from './components/BrainDumpModal.jsx';
+import DayCard from './components/DayCard.jsx';
+import Header from './components/Header.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
@@ -229,7 +231,7 @@ function getCompactWorkoutTitle(title=''){
   return cleaned?toTitleCaseLabel(cleaned):'Workout';
 }
 
-function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
+function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenBrainDump}){
   const items=[
     {id:'checkInCompleted',label:'Check in'},
     {id:'prioritiesSet',label:'Pick priorities'},
@@ -243,7 +245,7 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
     <div style={{display:'grid',gap:6}}>
       {items.map(item=>{
         const done=activationChecklist?.[item.id]===true;
-        const onClick=item.id==='checkInCompleted'?onOpenCheckIn:onOpenAddTask;
+        const onClick=item.id==='checkInCompleted'?onOpenCheckIn:onOpenBrainDump;
         return <button
           key={item.id}
           type="button"
@@ -266,140 +268,6 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
           {!done&&<span style={{fontSize:11,fontWeight:700,color:C.navy,flexShrink:0}}>Open</span>}
         </button>;
       })}
-    </div>
-  </section>;
-}
-
-function InlineTaskInput({C,S,onAdd}){
-  const [text,setText]=useState('');
-  const [notesOpen,setNotesOpen]=useState(false);
-  const [notes,setNotes]=useState('');
-  const [subtasks,setSubtasks]=useState([]);
-  const [open,setOpen]=useState(false);
-
-  function submit(){
-    if(!text.trim())return;
-    onAdd({text:text.trim(),notes:notes.trim()||null,subtasks:subtasks.map(s=>({id:`sub-${Date.now()}-${Math.random().toString(36).slice(2,6)}`,text:s.trim(),completed:false})).filter(s=>s.text)});
-    setText('');setNotes('');setSubtasks([]);setNotesOpen(false);setOpen(false);
-  }
-
-  if(!open){
-    return <button type="button" style={{...S.btnGhost,fontSize:12,justifyContent:'flex-start',padding:'8px 12px'}} onClick={()=>setOpen(true)}>+ Add task</button>;
-  }
-
-  return <div style={{background:C.surf,borderRadius:12,padding:'10px 12px',display:'grid',gap:8}}>
-    <input
-      value={text}
-      onChange={e=>setText(e.target.value)}
-      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();submit();}if(e.key==='Escape')setOpen(false);}}
-      placeholder="Task name"
-      style={{...S.inp,margin:0}}
-      autoFocus
-    />
-    {subtasks.map((st,i)=><div key={i} style={{display:'flex',gap:8,paddingLeft:14,alignItems:'center'}}>
-      <div style={{width:5,height:5,borderRadius:999,background:C.muted,flexShrink:0}}/>
-      <input
-        value={st}
-        onChange={e=>{const next=[...subtasks];next[i]=e.target.value;setSubtasks(next);}}
-        placeholder={`Subtask ${i+1}`}
-        style={{...S.inp,margin:0,flex:1,fontSize:12}}
-      />
-      <button type="button" onClick={()=>setSubtasks(subtasks.filter((_,j)=>j!==i))} style={{...S.btnGhost,padding:'3px 7px',fontSize:11}}>×</button>
-    </div>)}
-    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-      <button type="button" onClick={()=>setSubtasks([...subtasks,''])} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>+ Subtask</button>
-      <button type="button" onClick={()=>setNotesOpen(o=>!o)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>{notesOpen?'▾ Notes':'▸ Notes'}</button>
-      <div style={{flex:1}}/>
-      <button type="button" onClick={()=>setOpen(false)} style={{...S.btnGhost,fontSize:11,padding:'5px 9px'}}>Cancel</button>
-      <button type="button" onClick={submit} disabled={!text.trim()} style={{...S.btnSmall(),fontSize:11,padding:'5px 9px',opacity:text.trim()?1:0.45}}>Add</button>
-    </div>
-    {notesOpen&&<textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes…" rows={2} style={{...S.inp,margin:0,resize:'vertical',fontSize:12}}/>}
-  </div>;
-}
-
-function TodayList({
-  C,
-  S,
-  FieldInput,
-  dailyExecutionEntry,
-  selectedDateLabel,
-  isViewingToday,
-  updatePriorityTask,
-  movePriorityTask,
-  removePriorityTask,
-  addPriorityTask,
-  setDailyExecutionMode,
-}){
-  const headingId=React.useId();
-  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
-  const isExecution=dailyExecutionEntry.mode==='execution';
-  const visibleTasks=isExecution
-    ?dailyExecutionEntry.agenda
-    :dailyExecutionEntry.priorities;
-
-  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
-    <div style={{...S.row,alignItems:'flex-start',gap:10}}>
-      <div style={{minWidth:0}}>
-        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Today</div>
-        <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
-        {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
-      </div>
-      <span style={S.pill(isExecution?C.sageL:C.navyL,isExecution?C.sageDk:C.navyDk)}>{isExecution?'Execution':'Planning'}</span>
-    </div>
-    <div style={{display:'grid',gap:8}}>
-      {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
-        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:8}}>No priorities</div>
-        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={()=>addPriorityTask()}>Add task</button>
-      </div>}
-      {visibleTasks.map((task,index,items)=><div key={task.id}>
-        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-          <button
-            type="button"
-            aria-pressed={task.completed}
-            aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
-            style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}
-            onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
-          >
-            {task.completed?'✓':''}
-          </button>
-          {!isExecution
-            ?<FieldInput
-              id={`daily-priority-${task.id}`}
-              aria-label={`Priority ${index+1}`}
-              value={task.text||''}
-              placeholder={`Task ${index+1}`}
-              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
-              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
-            />
-            :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
-              <span>{task.text||`Task ${index+1}`}</span>
-              {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:2}}>{task.notes}</span>}
-            </div>}
-          <div style={{display:'flex',gap:6,flexShrink:0}}>
-            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
-            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
-            {!isExecution&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
-          </div>
-        </div>
-        {isExecution&&Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingLeft:30,display:'grid',gap:4,marginTop:4}}>
-          {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
-            <button
-              type="button"
-              aria-pressed={sub.completed}
-              style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
-              onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
-            >{sub.completed?'✓':''}</button>
-            <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
-          </div>)}
-        </div>}
-      </div>)}
-    </div>
-    {isExecution&&<InlineTaskInput C={C} S={S} onAdd={addPriorityTask}/>}
-    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-      {!isExecution&&<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>addPriorityTask()}>Add task</button>}
-      {!isExecution
-        ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
-        :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
     </div>
   </section>;
 }
@@ -452,7 +320,7 @@ function QuickActions({
           <div style={{fontSize:14,fontWeight:700,color:C.tx,lineHeight:1.2}}>{mealTitle}</div>
           {mealSubtitle&&<div style={{fontSize:11,color:C.muted,marginTop:3}}>{mealSubtitle}</div>}
         </div>
-        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onMealAction}>Add</button>
+        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={onMealAction}>Open</button>
       </div>
       <div style={{...S.row,background:C.card,borderRadius:14,padding:'12px 12px',alignItems:'center'}}>
         <div style={{flex:1,minWidth:0}}>
@@ -476,7 +344,7 @@ function QuickActions({
     </div>
     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
       <button type="button" style={{...S.btnGhost,flex:1}} onClick={onOpenCheckIn}>Check in</button>
-      <button type="button" style={{...S.btnGhost,flex:1,position:'relative'}} onClick={onOpenBrainDump}>Add</button>
+      <button type="button" style={{...S.btnGhost,flex:1,position:'relative'}} onClick={onOpenBrainDump}>Brain Dump</button>
       <button type="button" style={{...S.btnGhost,flex:1}} onClick={onOpenCalendar}>Open Calendar</button>
     </div>
   </section>;
@@ -2406,6 +2274,7 @@ const DEFAULT_OPS={
   top3:{},
   dailyExecution:{},
   dailyRecommendations:{},
+  brainDump:[],
   inboxItems:[], // [{id,text,createdDate,suggestedType,status:'pending'|'processed'}]
   googleClientId:null,
   notifications:{morningTime:'07:00',eveningTime:'21:00'},
@@ -2480,6 +2349,7 @@ function normalizeLoadedProfile(data={}){
   normalized.dailyMealPlans=normalized.dailyMealPlans&&typeof normalized.dailyMealPlans==='object'?normalized.dailyMealPlans:{};
   normalized.mealTemplates=Array.isArray(normalized.mealTemplates)?normalized.mealTemplates:[];
   normalized.taskTemplates=Array.isArray(normalized.taskTemplates)?normalized.taskTemplates:[];
+  normalized.brainDump=Array.isArray(normalized.brainDump)?normalized.brainDump:[];
   normalized.top3=normalized.top3&&typeof normalized.top3==='object'?normalized.top3:{};
   normalized.accounts=normalizeFinancialAccounts(normalized.accounts);
   normalized.categories=resolveCategoryLibrary(normalized.categories);
@@ -2546,11 +2416,16 @@ function normalizeLoadedProfile(data={}){
   return syncCanonicalProfileState(normalized);
 }
 
-function createDailyExecutionTask(text='',overrides={}){
+function createDailyExecutionTask(title='',overrides={}){
+  const resolvedTitle=typeof title==='string'?title:(overrides.title||overrides.text||'');
   return{
     id:overrides.id||`dx-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-    text,
+    title:resolvedTitle,
+    text:resolvedTitle,
     completed:!!overrides.completed,
+    subtasks:Array.isArray(overrides.subtasks)?overrides.subtasks:[],
+    notes:typeof overrides.notes==='string'?overrides.notes:'',
+    createdAt:typeof overrides.createdAt==='string'?overrides.createdAt:(overrides.timestamp||new Date().toISOString()),
     date:overrides.date||getTodayKey(),
     timestamp:overrides.timestamp||new Date().toISOString(),
     updatedAt:overrides.updatedAt||new Date().toISOString(),
@@ -2559,11 +2434,14 @@ function createDailyExecutionTask(text='',overrides={}){
 }
 
 function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
-  return createDailyExecutionTask(typeof task==='string'?task:(task?.text||''),{
+  return createDailyExecutionTask(typeof task==='string'?task:(task?.title||task?.text||''),{
     ...((task&&typeof task==='object'&&!Array.isArray(task))?task:{}),
     id:task?.id||`dx-${dateKey}-${index}`,
     date:normalizeDateKey(task?.date||dateKey,dateKey),
     completed:!!task?.completed,
+    subtasks:Array.isArray(task?.subtasks)?task.subtasks:[],
+    notes:typeof task?.notes==='string'?task.notes:'',
+    createdAt:typeof task?.createdAt==='string'?task.createdAt:(typeof task?.timestamp==='string'?task.timestamp:new Date().toISOString()),
     timestamp:typeof task?.timestamp==='string'?task.timestamp:null,
     updatedAt:typeof task?.updatedAt==='string'?task.updatedAt:new Date().toISOString(),
   });
@@ -2571,20 +2449,22 @@ function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
 
 function normalizeDailyExecutionEntry(entry,dateKey=getTodayKey(),legacyTop3=[]){
   const source=entry&&typeof entry==='object'&&!Array.isArray(entry)?entry:{};
-  const prioritiesSource=Array.isArray(source.priorities)&&source.priorities.length>0
-    ?source.priorities
+  const taskSource=Array.isArray(source.tasks)&&source.tasks.length>0
+    ?source.tasks
+    :Array.isArray(source.priorities)&&source.priorities.length>0
+      ?source.priorities
+      :Array.isArray(source.agenda)&&source.agenda.length>0
+        ?source.agenda
     :Array.isArray(legacyTop3)
       ?legacyTop3.filter(item=>typeof item==='string'&&item.trim())
       :[];
-  const priorities=prioritiesSource.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index));
-  const agenda=Array.isArray(source.agenda)&&source.agenda.length>0
-    ?source.agenda.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index))
-    :[];
+  const tasks=taskSource.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index));
   const mode=source.mode==='execution'?'execution':'planning';
   return{
     date:dateKey,
-    priorities,
-    agenda:mode==='execution'&&agenda.length===0?priorities.map(task=>({...task})):agenda,
+    tasks,
+    priorities:tasks,
+    agenda:tasks,
     mode,
   };
 }
@@ -3513,11 +3393,11 @@ function App(){
   const [showImport,setShowImport]=useState(false);
   const [showCapture,setShowCapture]=useState(false);
   const [captureText,setCaptureText]=useState('');
-  const [captureMode,setCaptureMode]=useState('command');
   const [showWeeklyPlanner,setShowWeeklyPlanner]=useState(false);
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
   const [showHabitsModal,setShowHabitsModal]=useState(false);
+  const [showBrainDumpModal,setShowBrainDumpModal]=useState(false);
   const [habitDraftCompletions,setHabitDraftCompletions]=useState({});
   const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
   const [showProgramPicker,setShowProgramPicker]=useState(false);
@@ -3530,8 +3410,6 @@ function App(){
   const [checkInSleep,setCheckInSleep]=useState(7);
   const [showCheckInNote,setShowCheckInNote]=useState(false);
   const [dismissedMorningCheckinDate,setDismissedMorningCheckinDate]=useState(null);
-  const [showQuickAddModal,setShowQuickAddModal]=useState(false);
-  const [quickAddModalType,setQuickAddModalType]=useState(null);
   const [showWorkoutPlayer,setShowWorkoutPlayer]=useState(false);
   const [tier2Open,setTier2Open]=useState({energy:true,finance:false,habits:false});
   const [homeCardsOpen,setHomeCardsOpen]=useState({habits:false,alerts:false,weekly:false});
@@ -3606,37 +3484,27 @@ function App(){
     });
   },[profile.securitySettings?.analyticsEnabled,updateGrowthState]);
   const openCommandBar=()=>{
-    setCaptureMode('command');
     setCaptureText('');
     setShowCapture(true);
   };
   const openBrainDump=()=>{
-    setCaptureMode('note');
-    setCaptureText('');
-    setShowCapture(true);
+    setShowBrainDumpModal(true);
   };
-  function handleQuickAddTask(taskData){
-    updateDailyExecution(TODAY,entry=>{
-      const nextTask=createDailyExecutionTask(taskData.text||'',{date:TODAY,...taskData});
-      return{
-        ...entry,
-        priorities:[...entry.priorities,nextTask],
-        agenda:entry.mode==='execution'?[...entry.agenda,nextTask]:entry.agenda,
-      };
-    });
-    showNotif('Task added','success');
-    trackGrowthEvent('task_added_quick',{});
-  }
-  function handleQuickAddMeal(mealData){
-    const entry=normalizeMealEntry({...mealData,id:Date.now()},mealData.slot||'snack');
-    applyUndoableProfileUpdate('Meal logged',p=>({...p,meals:{...p.meals,[TODAY]:[...(p.meals?.[TODAY]||[]),entry]}}),`Added to ${mealData.slot||'snack'}.`);
-    trackGrowthEvent('meal_logged',{slot:mealData.slot||'snack',source:'quick_add'});
-    showNotif('Meal logged','success');
-  }
-  function handleQuickAddNote(noteData){
-    const note={id:`note-${Date.now()}`,text:noteData.text,createdAt:new Date().toISOString(),date:TODAY};
-    updateProfile(p=>({...p,captureNotes:[...(p.captureNotes||[]),note]}));
-    showNotif('Note saved','success');
+  function saveBrainDumpEntry(text){
+    const createdAt=new Date().toISOString();
+    updateProfile(p=>({
+      ...p,
+      brainDump:[
+        ...(p.brainDump||[]),
+        {
+          id:`brain-${Date.now()}`,
+          text,
+          createdAt,
+          processed:false,
+        },
+      ],
+    }));
+    showNotif('Captured','success');
   }
   const openTab=useCallback((nextTab,options={})=>{
     if(!APP_TAB_IDS.includes(nextTab))return;
@@ -3997,12 +3865,6 @@ function App(){
       if(key==='k'){
         e.preventDefault();
         openCommandBar();
-      }else if(key==='t'){
-        e.preventDefault();
-        openTab('tasks',{taskTab:'next'});
-        setNewTask(createNewTaskDraft(getTodayKey()));
-        setTaskDraftText('');
-        setShowAddTask(true);
       }else if(key==='w'){
         e.preventDefault();
         openTab('training');
@@ -4624,9 +4486,9 @@ function App(){
   function updateDailyExecution(dateKey,updater){
     const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
     const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
-    const existingCount=existing.priorities.filter(task=>task.text.trim()).length;
-    const nextCount=nextEntry.priorities.filter(task=>task.text.trim()).length;
-    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>task.text||'');
+    const existingCount=existing.tasks.filter(task=>(task.title||task.text||'').trim()).length;
+    const nextCount=nextEntry.tasks.filter(task=>(task.title||task.text||'').trim()).length;
+    const nextTop3=nextEntry.tasks.slice(0,3).map(task=>task.title||task.text||'');
     updateProfile(current=>({
       ...current,
       dailyExecution:{...(current.dailyExecution||{}),[dateKey]:nextEntry},
@@ -5001,39 +4863,35 @@ function App(){
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
     function setDailyExecutionMode(nextMode){
-      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>task.text.trim())){
-        showNotif('Add at least one priority before moving to execution.','warn');
+      if(nextMode==='execution'&&!dailyExecutionEntry.tasks.some(task=>(task.title||task.text||'').trim())){
+        showNotif('Add at least one task before starting the day.','warn');
         return;
       }
       updateDailyExecution(activeDate,entry=>({
         ...entry,
         mode:nextMode,
-        agenda:nextMode==='execution'
-          ?entry.priorities.map(task=>({...task}))
-          :entry.agenda,
       }));
       if(nextMode==='execution')trackGrowthEvent('execution_started',{date:activeDate});
-      showNotif(nextMode==='execution'?'Execution mode enabled':'Returned to planning mode','success');
+      if(nextMode==='execution')showNotif('Day started','success');
     }
 
     function updatePriorityTask(taskId,patch){
+      const normalizedPatch='title' in patch&&!("text" in patch)
+        ?{...patch,text:patch.title}
+        :('text' in patch&&!("title" in patch)?{...patch,title:patch.text}:patch);
       updateDailyExecution(activeDate,entry=>{
-        const priorities=entry.priorities.map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task);
-        const agendaSource=entry.mode==='execution'
-          ?(entry.agenda.length>0?entry.agenda:entry.priorities).map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task)
-          :entry.agenda;
-        return{...entry,priorities,agenda:agendaSource};
+        const tasks=entry.tasks.map(task=>task.id===taskId?{...task,...normalizedPatch,updatedAt:new Date().toISOString()}:task);
+        return{...entry,tasks};
       });
     }
 
     function addPriorityTask(taskData={}){
       updateDailyExecution(activeDate,entry=>{
-        const nextTask=createDailyExecutionTask(taskData.text||'',{date:activeDate,...taskData});
+        const nextTask=createDailyExecutionTask(taskData.title||taskData.text||'',{date:activeDate,...taskData});
         return{
           ...entry,
           mode:entry.mode==='execution'?entry.mode:'planning',
-          priorities:[...entry.priorities,nextTask],
-          agenda:entry.mode==='execution'?[...entry.agenda,nextTask]:entry.agenda,
+          tasks:[...entry.tasks,nextTask],
         };
       });
     }
@@ -5041,22 +4899,18 @@ function App(){
     function removePriorityTask(taskId){
       updateDailyExecution(activeDate,entry=>({
         ...entry,
-        priorities:entry.priorities.filter(task=>task.id!==taskId),
-        agenda:entry.agenda.filter(task=>task.id!==taskId),
+        tasks:entry.tasks.filter(task=>task.id!==taskId),
       }));
     }
 
     function movePriorityTask(taskId,direction){
       updateDailyExecution(activeDate,entry=>{
-        const priorities=[...entry.priorities];
-        const index=priorities.findIndex(task=>task.id===taskId);
+        const tasks=[...entry.tasks];
+        const index=tasks.findIndex(task=>task.id===taskId);
         const target=index+direction;
-        if(index<0||target<0||target>=priorities.length)return entry;
-        [priorities[index],priorities[target]]=[priorities[target],priorities[index]];
-        const orderedAgenda=entry.mode==='execution'
-          ?priorities.map(priorityTask=>entry.agenda.find(task=>task.id===priorityTask.id)||priorityTask)
-          :entry.agenda;
-        return{...entry,priorities,agenda:orderedAgenda};
+        if(index<0||target<0||target>=tasks.length)return entry;
+        [tasks[index],tasks[target]]=[tasks[target],tasks[index]];
+        return{...entry,tasks};
       });
     }
 
@@ -5117,7 +4971,7 @@ function App(){
       pendingInbox.length>0?{label:'Inbox',value:String(pendingInbox.length)}:null,
     ].filter(Boolean);
     const mealCardTitle='Log meal';
-    const mealCardSubtitle=(nextPlannedMeal||missingMealSlots.length>0)?'Quick add':null;
+    const mealCardSubtitle=(nextPlannedMeal||missingMealSlots.length>0)?'Open nutrition':null;
     const workoutCardTitle=getCompactWorkoutTitle(workoutTitle||restDayRecovery.name);
     const workoutCardDuration=workoutDuration||restDayRecovery.dur||'25 min';
     const taskCardTitle=nextTaskItem?.text||'No tasks';
@@ -5210,17 +5064,6 @@ function App(){
       },slotOverride||entry.slot||'snack');
       showNotif(`Repeated ${entry.meal}`,'success');
     }
-    function openMealQuickAdd(){
-      setQuickAddModalType('meal');
-      setShowQuickAddModal(true);
-    }
-    function openAddTaskFlow(){
-      setNewTask(createNewTaskDraft(activeDate,{date:activeDate,bucket:'next'}));
-      setTaskDraftText('');
-      setShowAddTask(true);
-      openTab('tasks',{taskTab:'next'});
-    }
-
     function buildAgendaItemsForDate(dateStr){
       const scheduledItems=(calendarCache[dateStr]||[]).map(event=>({
         id:`event-${dateStr}-${event.id}`,
@@ -5339,25 +5182,24 @@ function App(){
         S={S}
         activationChecklist={growthState.activationChecklist}
         onOpenCheckIn={()=>setShowMorningCheckin(true)}
-        onOpenAddTask={openAddTaskFlow}
+        onOpenBrainDump={openBrainDump}
       />}
       {(shouldShowInstallCta||needsInstallHelp)&&!isInstalled&&<div style={{...S.card,padding:'12px 14px'}}>
         <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Install</div>
         <div style={{fontSize:11,color:C.tx2,lineHeight:1.4,marginBottom:shouldShowInstallCta?10:0}}>{installHelpText}</div>
         {shouldShowInstallCta&&<button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openInstallPrompt}>Install</button>}
       </div>}
-      <TodayList
+      <DayCard
         C={C}
         S={S}
-        FieldInput={FieldInput}
         dailyExecutionEntry={dailyExecutionEntry}
         selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):'Today'}
         isViewingToday={isViewingToday}
-        updatePriorityTask={updatePriorityTask}
-        movePriorityTask={movePriorityTask}
-        removePriorityTask={removePriorityTask}
-        addPriorityTask={addPriorityTask}
-        setDailyExecutionMode={setDailyExecutionMode}
+        updateTask={updatePriorityTask}
+        moveTask={movePriorityTask}
+        removeTask={removePriorityTask}
+        addTask={addPriorityTask}
+        startDay={()=>setDailyExecutionMode('execution')}
       />
       <QuickActions
         C={C}
@@ -5369,15 +5211,15 @@ function App(){
         handleWorkoutDecision={handleWorkoutDecision}
         mealTitle={mealCardTitle}
         mealSubtitle={mealCardSubtitle}
-        onMealAction={openMealQuickAdd}
+        onMealAction={()=>openTab('meals')}
         workoutTitle={workoutCardTitle}
         workoutDuration={workoutCardDuration}
         workoutCta={wktDone?'View':'Start'}
         onWorkoutAction={openTodayWorkoutAction}
         taskTitle={taskCardTitle}
         taskMeta={taskCardMeta}
-        taskCta={nextTaskItem?'Open':'Add task'}
-        onTaskAction={nextTaskItem?()=>openTab('tasks',{taskTab:'next'}):openAddTaskFlow}
+        taskCta="Open"
+        onTaskAction={()=>openTab('tasks',{taskTab:'next'})}
         showTaskDone={!!nextTaskItem}
         onTaskDone={()=>nextTaskItem&&toggleTaskDone(nextTaskItem.id)}
         onOpenCheckIn={()=>setShowMorningCheckin(true)}
@@ -7736,7 +7578,7 @@ function App(){
       {tasksTab==='inbox'&&<div>
         {pendingInbox.length===0&&<div style={{textAlign:'center',padding:'40px 0',color:C.muted,fontSize:13}}>
           Inbox is clear.<br/>
-          <span style={{fontSize:11}}>Use Quick Capture on Home to add ideas.</span>
+          <span style={{fontSize:11}}>Use Brain Dump on Home to capture ideas.</span>
         </div>}
         {pendingInbox.map((item,i)=><div key={item.id} style={{...S.card,marginBottom:8}}>
           <div style={{fontSize:13,color:C.tx,marginBottom:10,lineHeight:1.5}}>{item.text}</div>
@@ -9779,45 +9621,24 @@ function App(){
         onAction={notifAction?.handler}
         onDismiss={clearNotif}
       />
-      <div style={S.hdr}>
-        <div>
-          {tab==='home'?<>
-            <div style={{...S.micro,fontWeight:400}}>{greeting}</div>
-            <button
-              style={{background:'none',border:'none',padding:0,marginTop:1,cursor:'pointer',fontSize:13,fontWeight:500,color:C.muted,lineHeight:1.35,textAlign:'left'}}
-              title={formatDate(NOW,'primaryWithYear')}
-              onClick={()=>{
-                openTab('calendar',{calendarFocusDay:TODAY});
-              }}
-            >
-              {formatDate(NOW,'primary')}
-            </button>
-          </>:<>
-            <div style={S.sectionTitle}>
-              {TAB_TITLES[tab]||TAB_TITLES.home}
-            </div>
-          </>}
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:6}}>
-          <button
-            style={{background:C.surf,border:`1px solid ${C.bd}`,borderRadius:12,padding:'8px',cursor:'pointer',display:'flex',alignItems:'center',position:'relative'}}
-            onClick={()=>openTab('tasks',{taskTab:'inbox'})}
-            title="Inbox"
-            aria-label={pendingInbox.length>0?`Inbox, ${pendingInbox.length} pending item${pendingInbox.length!==1?'s':''}`:'Inbox'}
-          >
-            {pendingInbox.length>0&&<div style={{position:'absolute',top:0,right:0,minWidth:16,height:16,borderRadius:999,background:C.red,color:C.white,fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{Math.min(pendingInbox.length,9)}</div>}
-            <NavIcon id="inbox" active={tab==='tasks'}/>
-          </button>
-          <button
-            style={{background:C.navy,border:'none',borderRadius:12,width:36,height:36,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
-            onClick={()=>{setShowQuickAddModal(true);setQuickAddModalType(null);}}
-            title="Quick add"
-            aria-label="Quick add"
-          >
-            <span style={{color:'var(--white)',fontSize:22,fontWeight:300,lineHeight:1,marginTop:-1}}>+</span>
-          </button>
-        </div>
-      </div>
+      {tab==='home'
+        ?<Header
+          C={C}
+          S={S}
+          greeting={greeting}
+          name={profile.userProfile?.name||'there'}
+          dateLabel={formatDate(NOW,'primary')}
+          dateTitle={formatDate(NOW,'primaryWithYear')}
+          inboxCount={pendingInbox.length}
+          onOpenCalendar={()=>openTab('calendar',{calendarFocusDay:TODAY})}
+          onOpenInbox={()=>openTab('tasks',{taskTab:'inbox'})}
+          onOpenBrainDump={openBrainDump}
+        />
+        :<div style={S.hdr}>
+          <div style={S.sectionTitle}>
+            {TAB_TITLES[tab]||TAB_TITLES.home}
+          </div>
+        </div>}
       <main id="app-main" ref={contentRef} tabIndex={-1} style={{overflowY:'auto',height:'calc(100vh - 64px - 64px)',paddingTop:64,paddingBottom:12}}>
         <ScreenErrorBoundary resetKey={tab} fallback={screenFallback}>
           <ActiveScreen focusDay={calendarFocusDay}/>
@@ -10002,18 +9823,14 @@ function App(){
         </div>
       </div>}
 
-      {/* Quick Capture modal */}
+      {/* Command Bar modal */}
       {showCapture&&(()=>{
-        const routed=captureMode==='note'
-          ?(captureText.trim()?{type:'note',label:'Note',icon:'N',preview:captureText.trim()}:null)
-          :routeCapture(captureText);
+        const routed=routeCapture(captureText);
         return <div style={{position:'fixed',inset:0,background:C.scrim,zIndex:600,display:'flex',alignItems:'flex-end'}}>
           <div style={{background:C.card,borderRadius:'20px 20px 0 0',padding:'24px 16px',width:'100%',maxWidth:430,margin:'0 auto'}}>
-            <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>{captureMode==='note'?'Brain Dump':'Command Bar'}</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.tx,marginBottom:6}}>Command Bar</div>
             <div style={{fontSize:11,color:C.muted,marginBottom:12}}>
-              {captureMode==='note'
-                ?'Capture a note without routing it anywhere else.'
-                :'Try: “Log chicken 120g”, “Start today’s workout”, “Add 5K time 24:10”, or “Add grocery item bananas”.'}
+              Try: “Log chicken 120g”, “Start today’s workout”, “Add 5K time 24:10”, or “Add grocery item bananas”.
             </div>
             <FieldInput
               value={captureText}
@@ -10024,7 +9841,7 @@ function App(){
                 e.preventDefault();
                 confirmCapture(routed);
               }}
-              placeholder={captureMode==='note'?'Type your note...':'Type a command or capture...'}
+              placeholder="Type a command or capture..."
               style={{...S.inp,marginBottom:10,fontSize:15}}
               autoFocus
             />
@@ -10035,17 +9852,24 @@ function App(){
                 <span style={{fontSize:13,fontWeight:600,color:C.tx}}>{routed.label}</span>
                 <span style={{fontSize:11,color:C.muted}}>{routed.preview?.slice(0,40)}</span>
               </div>
-              {captureMode!=='note'&&routed.type!=='command'&&<div style={{display:'flex',gap:5,marginTop:8}}>
+              {routed.type!=='command'&&<div style={{display:'flex',gap:5,marginTop:8}}>
                 {['task','expense','note'].map(type=><button key={type} onClick={()=>confirmCapture({...routed,type,label:type.charAt(0).toUpperCase()+type.slice(1),icon:type==='expense'?'$':type==='note'?'N':'T'})} style={{padding:'4px 10px',borderRadius:7,border:`1px solid ${routed.type===type?C.sage:C.bd}`,background:routed.type===type?C.sage:'transparent',color:routed.type===type?C.white:C.muted,fontSize:10,cursor:'pointer'}}>{type}</button>)}
               </div>}
             </div>}
             <div style={{display:'flex',gap:8}}>
               <button style={S.btnSolid(C.sage)} onClick={()=>routed&&confirmCapture(routed)} disabled={!routed}>Save</button>
-              <button style={{...S.btnGhost,flex:1}} onClick={()=>{setShowCapture(false);setCaptureText('');setCaptureMode('command');}}>Cancel</button>
+              <button style={{...S.btnGhost,flex:1}} onClick={()=>{setShowCapture(false);setCaptureText('');}}>Cancel</button>
             </div>
           </div>
         </div>;
       })()}
+
+      {showBrainDumpModal&&<BrainDumpModal
+        C={C}
+        S={S}
+        onClose={()=>setShowBrainDumpModal(false)}
+        onSave={saveBrainDumpEntry}
+      />}
 
       {/* Quarterly / Annual review modal */}
       {showReview&&(()=>{
@@ -10111,17 +9935,6 @@ function App(){
           </div>
         </div>;
       })()}
-
-      {/* QuickAdd modal */}
-      {showQuickAddModal&&<QuickAddModal
-        C={C}
-        S={S}
-        initialType={quickAddModalType}
-        onClose={()=>{setShowQuickAddModal(false);setQuickAddModalType(null);}}
-        onSaveTask={handleQuickAddTask}
-        onSaveMeal={handleQuickAddMeal}
-        onSaveNote={handleQuickAddNote}
-      />}
 
       {/* Workout player overlay */}
       {showWorkoutPlayer&&wkSess&&<WorkoutPlayer
