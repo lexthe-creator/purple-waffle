@@ -10,6 +10,7 @@ export default function Priorities({
   onCreateEmptyTask,
   onMoveToExecution,
   onMoveBackToPlanning,
+  onMarkDone,
 }) {
   return (
     <section className="task-card priorities-shell">
@@ -30,6 +31,7 @@ export default function Priorities({
           tasks={activeTasks}
           handlers={sharedHandlers}
           onMoveBackToPlanning={onMoveBackToPlanning}
+          onMarkDone={onMarkDone}
         />
         <section className="task-card">
           <div className="task-card-header">
