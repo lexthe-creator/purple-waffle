@@ -433,3 +433,28 @@ textarea:focus-visible {
     justify-content: flex-start;
   }
 }
+
+
+.priority-list {
+  margin: 0;
+  padding-left: 1.5rem;
+  display: grid;
+  gap: 14px;
+}
+
+.priority-list-item {
+  padding-left: 0.25rem;
+}
+
+.priority-list-item .task-item {
+  width: 100%;
+}
+
+.secondary-button:disabled,
+.ghost-button:disabled,
+.primary-button:disabled,
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+}

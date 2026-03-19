@@ -4,8 +4,11 @@ import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
 import PlanningCard from './components/PlanningCard.jsx';
 import ExecutionCard from './components/ExecutionCard.jsx';
+import PrioritiesSection from './components/PrioritiesSection.jsx';
+import TaskFlowCard from './components/TaskFlowCard.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
+import { derivePriorities } from './selectors/priorities.js';
 import './styles.css';
 
 function TaskApp() {
@@ -17,6 +20,7 @@ function TaskApp() {
   const plannedTasks = useMemo(() => tasks.filter(task => task.status === 'planned'), [tasks]);
   const activeTasks = useMemo(() => tasks.filter(task => task.status === 'active'), [tasks]);
   const doneTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
+  const priorities = useMemo(() => derivePriorities(tasks), [tasks]);
 
   function updateTask(taskId, updater) {
     setTasks(current => sortTasks(current.map(task => (task.id === taskId ? updater(task) : task))));
@@ -175,6 +179,13 @@ function TaskApp() {
                 </button>
               </div>
             </section>
+
+            <TaskFlowCard priorities={priorities} />
+
+            <PrioritiesSection
+              tasks={priorities.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
+              handlers={sharedHandlers}
+            />
 
             <PlanningCard
               tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
