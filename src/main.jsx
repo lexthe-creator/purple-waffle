@@ -6,6 +6,7 @@ import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import { formatDate, formatDateRange, getDateParts } from './dateFormatter.ts';
 import './styles.css';
 import { FlowRoot } from './flow/FlowRoot.jsx';
+import DayCard from './components/DayCard.jsx';
 
 const IS_DEV=import.meta.env.DEV;
 const DEV_SW_RESET_KEY='__app_in_my_life_dev_sw_reset__';
@@ -315,93 +316,6 @@ function InlineTaskInput({C,S,onAdd}){
     </div>
     {notesOpen&&<textarea value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Notes…" rows={2} style={{...S.inp,margin:0,resize:'vertical',fontSize:12}}/>}
   </div>;
-}
-
-function TodayList({
-  C,
-  S,
-  FieldInput,
-  dailyExecutionEntry,
-  selectedDateLabel,
-  isViewingToday,
-  updatePriorityTask,
-  movePriorityTask,
-  removePriorityTask,
-  addPriorityTask,
-  setDailyExecutionMode,
-}){
-  const headingId=React.useId();
-  const hasExecutionItems=dailyExecutionEntry.priorities.some(task=>task.text.trim());
-  const isExecution=dailyExecutionEntry.mode==='execution';
-  const visibleTasks=isExecution
-    ?dailyExecutionEntry.agenda
-    :dailyExecutionEntry.priorities;
-
-  return <section style={{...S.card,padding:'14px 14px 12px',display:'grid',gap:10}}>
-    <div style={{...S.row,alignItems:'flex-start',gap:10}}>
-      <div style={{minWidth:0}}>
-        <div style={{fontSize:10,fontWeight:700,letterSpacing:0.5,textTransform:'uppercase',color:C.muted,marginBottom:4}}>Today</div>
-        <h2 id={headingId} style={{fontSize:20,fontWeight:800,color:C.tx,lineHeight:1.1,margin:0}}>{selectedDateLabel}</h2>
-        {!isViewingToday&&<div style={{fontSize:11,color:C.muted,marginTop:4}}>Selected date</div>}
-      </div>
-      <span style={S.pill(isExecution?C.sageL:C.navyL,isExecution?C.sageDk:C.navyDk)}>{isExecution?'Execution':'Planning'}</span>
-    </div>
-    <div style={{display:'grid',gap:8}}>
-      {visibleTasks.length===0&&<div style={{background:C.surf,borderRadius:12,padding:'14px 12px'}}>
-        <div style={{fontSize:14,fontWeight:700,color:C.tx,marginBottom:8}}>No priorities</div>
-        <button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={()=>addPriorityTask()}>Add task</button>
-      </div>}
-      {visibleTasks.map((task,index,items)=><div key={task.id}>
-        <div style={{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:8,alignItems:'center',background:C.surf,borderRadius:12,padding:'10px 12px'}}>
-          <button
-            type="button"
-            aria-pressed={task.completed}
-            aria-label={`${task.completed?'Mark incomplete':'Mark complete'} for ${task.text?.trim()||`priority ${index+1}`}`}
-            style={{width:22,height:22,borderRadius:999,border:`1px solid ${task.completed?C.sage:C.bd}`,background:task.completed?C.sage:'transparent',color:task.completed?C.white:C.muted,cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}
-            onClick={()=>updatePriorityTask(task.id,{completed:!task.completed})}
-          >
-            {task.completed?'✓':''}
-          </button>
-          {!isExecution
-            ?<FieldInput
-              id={`daily-priority-${task.id}`}
-              aria-label={`Priority ${index+1}`}
-              value={task.text||''}
-              placeholder={`Task ${index+1}`}
-              style={{...S.inp,margin:0,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}
-              onChange={e=>updatePriorityTask(task.id,{text:e.target.value})}
-            />
-            :<div style={{minHeight:36,display:'flex',flexDirection:'column',justifyContent:'center',padding:'0 4px',fontSize:14,fontWeight:600,color:C.tx,textDecoration:task.completed?'line-through':'none',opacity:task.completed?0.65:1}}>
-              <span>{task.text||`Task ${index+1}`}</span>
-              {task.notes&&<span style={{fontSize:11,fontWeight:400,color:C.muted,marginTop:2}}>{task.notes}</span>}
-            </div>}
-          <div style={{display:'flex',gap:6,flexShrink:0}}>
-            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} up`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,-1)} disabled={index===0}>↑</button>
-            <button type="button" aria-label={`Move ${task.text?.trim()||`priority ${index+1}`} down`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>movePriorityTask(task.id,1)} disabled={index===items.length-1}>↓</button>
-            {!isExecution&&<button type="button" aria-label={`Remove ${task.text?.trim()||`priority ${index+1}`}`} style={{...S.btnGhost,fontSize:10,padding:'6px 8px'}} onClick={()=>removePriorityTask(task.id)}>Remove</button>}
-          </div>
-        </div>
-        {isExecution&&Array.isArray(task.subtasks)&&task.subtasks.length>0&&<div style={{paddingLeft:30,display:'grid',gap:4,marginTop:4}}>
-          {task.subtasks.map(sub=><div key={sub.id||sub.text} style={{display:'flex',alignItems:'center',gap:8,background:C.bg,borderRadius:10,padding:'7px 10px'}}>
-            <button
-              type="button"
-              aria-pressed={sub.completed}
-              style={{width:18,height:18,borderRadius:999,border:`1px solid ${sub.completed?C.sage:C.bd}`,background:sub.completed?C.sage:'transparent',color:sub.completed?C.white:C.muted,cursor:'pointer',fontSize:10,fontWeight:700,flexShrink:0}}
-              onClick={()=>updatePriorityTask(task.id,{subtasks:task.subtasks.map(s=>s.id===sub.id?{...s,completed:!s.completed}:s)})}
-            >{sub.completed?'✓':''}</button>
-            <span style={{fontSize:12,color:C.tx,textDecoration:sub.completed?'line-through':'none',opacity:sub.completed?0.65:1}}>{sub.text}</span>
-          </div>)}
-        </div>}
-      </div>)}
-    </div>
-    {isExecution&&<InlineTaskInput C={C} S={S} onAdd={addPriorityTask}/>}
-    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-      {!isExecution&&<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>addPriorityTask()}>Add task</button>}
-      {!isExecution
-        ?<button type="button" style={{...S.btnSolid(C.navy),flex:1,opacity:hasExecutionItems?1:0.45,pointerEvents:hasExecutionItems?'auto':'none'}} onClick={()=>setDailyExecutionMode('execution')} disabled={!hasExecutionItems}>Start</button>
-        :<button type="button" style={{...S.btnGhost,flex:1}} onClick={()=>setDailyExecutionMode('planning')}>Edit</button>}
-    </div>
-  </section>;
 }
 
 function QuickActions({
@@ -2546,20 +2460,25 @@ function normalizeLoadedProfile(data={}){
   return syncCanonicalProfileState(normalized);
 }
 
-function createDailyExecutionTask(text='',overrides={}){
+function createDailyExecutionTask(title='',overrides={}){
+  const resolvedTitle=String(overrides.title??overrides.text??title??'');
   return{
     id:overrides.id||`dx-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
-    text,
     completed:!!overrides.completed,
+    subtasks:Array.isArray(overrides.subtasks)?overrides.subtasks:[],
+    notes:typeof overrides.notes==='string'?overrides.notes:'',
+    createdAt:overrides.createdAt||overrides.timestamp||new Date().toISOString(),
     date:overrides.date||getTodayKey(),
     timestamp:overrides.timestamp||new Date().toISOString(),
     updatedAt:overrides.updatedAt||new Date().toISOString(),
     ...overrides,
+    title:resolvedTitle,
+    text:resolvedTitle,
   };
 }
 
 function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
-  return createDailyExecutionTask(typeof task==='string'?task:(task?.text||''),{
+  return createDailyExecutionTask(typeof task==='string'?task:(task?.title||task?.text||''),{
     ...((task&&typeof task==='object'&&!Array.isArray(task))?task:{}),
     id:task?.id||`dx-${dateKey}-${index}`,
     date:normalizeDateKey(task?.date||dateKey,dateKey),
@@ -4624,9 +4543,10 @@ function App(){
   function updateDailyExecution(dateKey,updater){
     const existing=normalizeDailyExecutionEntry(profile.dailyExecution?.[dateKey],dateKey,profile.top3?.[dateKey]||[]);
     const nextEntry=normalizeDailyExecutionEntry(typeof updater==='function'?updater(existing):updater,dateKey,profile.top3?.[dateKey]||[]);
-    const existingCount=existing.priorities.filter(task=>task.text.trim()).length;
-    const nextCount=nextEntry.priorities.filter(task=>task.text.trim()).length;
-    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>task.text||'');
+    const getTaskTitle=task=>String(task?.title||task?.text||'');
+    const existingCount=existing.priorities.filter(task=>getTaskTitle(task).trim()).length;
+    const nextCount=nextEntry.priorities.filter(task=>getTaskTitle(task).trim()).length;
+    const nextTop3=nextEntry.priorities.slice(0,3).map(task=>getTaskTitle(task));
     updateProfile(current=>({
       ...current,
       dailyExecution:{...(current.dailyExecution||{}),[dateKey]:nextEntry},
@@ -5001,7 +4921,7 @@ function App(){
     const alertsVisible=urgentMaintenanceItems.length>0||pendingInbox.length>5;
 
     function setDailyExecutionMode(nextMode){
-      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>task.text.trim())){
+      if(nextMode==='execution'&&!dailyExecutionEntry.priorities.some(task=>String(task.title||task.text||'').trim())){
         showNotif('Add at least one priority before moving to execution.','warn');
         return;
       }
@@ -5028,7 +4948,7 @@ function App(){
 
     function addPriorityTask(taskData={}){
       updateDailyExecution(activeDate,entry=>{
-        const nextTask=createDailyExecutionTask(taskData.text||'',{date:activeDate,...taskData});
+        const nextTask=createDailyExecutionTask(taskData.title||taskData.text||'',{date:activeDate,...taskData});
         return{
           ...entry,
           mode:entry.mode==='execution'?entry.mode:'planning',
@@ -5346,11 +5266,11 @@ function App(){
         <div style={{fontSize:11,color:C.tx2,lineHeight:1.4,marginBottom:shouldShowInstallCta?10:0}}>{installHelpText}</div>
         {shouldShowInstallCta&&<button type="button" style={{...S.btnGhost,fontSize:11,padding:'7px 10px'}} onClick={openInstallPrompt}>Install</button>}
       </div>}
-      <TodayList
+      <DayCard
         C={C}
         S={S}
         FieldInput={FieldInput}
-        dailyExecutionEntry={dailyExecutionEntry}
+        dayEntry={dailyExecutionEntry}
         selectedDateLabel={activeDateParts?formatDate(activeDate,'primary'):'Today'}
         isViewingToday={isViewingToday}
         updatePriorityTask={updatePriorityTask}
