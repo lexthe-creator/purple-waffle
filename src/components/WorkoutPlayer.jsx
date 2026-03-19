@@ -1,366 +1,67 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useState } from 'react';
 
-export default function WorkoutPlayer({ C, S, wkSess, onComplete, onCancel }) {
+export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
   const [elapsed, setElapsed] = useState(0);
-  const [completedSets, setCompletedSets] = useState({});
-  const timerRef = useRef(null);
+  const [completedExerciseIds, setCompletedExerciseIds] = useState([]);
 
   useEffect(() => {
-    timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-    return () => clearInterval(timerRef.current);
+    const timer = window.setInterval(() => setElapsed(current => current + 1), 1000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
-  const exercises = wkSess?.ex || [];
-  const totalSets = exercises.reduce(
-    (sum, ex) => sum + (Number(ex.sets) || 3),
-    0,
-  );
-  const doneSets = Object.values(completedSets).filter(Boolean).length;
-  const progress = totalSets > 0 ? Math.min(1, doneSets / totalSets) : 0;
+  const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const seconds = String(elapsed % 60).padStart(2, '0');
+  const progress = useMemo(() => {
+    if (!workout?.exercises?.length) return 0;
+    return Math.round((completedExerciseIds.length / workout.exercises.length) * 100);
+  }, [completedExerciseIds.length, workout?.exercises?.length]);
 
-  function toggleSet(exIdx, setIdx) {
-    const key = `${exIdx}-${setIdx}`;
-    setCompletedSets((prev) => ({ ...prev, [key]: !prev[key] }));
+  function toggleExercise(exerciseId) {
+    setCompletedExerciseIds(current => (
+      current.includes(exerciseId)
+        ? current.filter(item => item !== exerciseId)
+        : [...current, exerciseId]
+    ));
   }
 
-  const warmup = wkSess?.warmup || [];
-  const cooldown = wkSess?.cooldown || [];
+  if (!workout) return null;
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: C.bg,
-        zIndex: 800,
-        display: "flex",
-        flexDirection: "column",
-        maxWidth: 430,
-        margin: "0 auto",
-        left: "50%",
-        transform: "translateX(-50%)",
-        width: "100%",
-      }}
-    >
-      {/* Sticky header */}
-      <div
-        style={{
-          padding: "16px 16px 12px",
-          borderBottom: `1px solid ${C.bd}`,
-          background: C.card,
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "space-between",
-            marginBottom: 10,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                color: C.muted,
-                marginBottom: 3,
-              }}
-            >
-              Active workout
-            </div>
-            <div
-              style={{
-                fontSize: 18,
-                fontWeight: 800,
-                color: C.tx,
-                lineHeight: 1.1,
-              }}
-            >
-              {wkSess?.name || "Workout"}
-            </div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div
-              style={{
-                fontSize: 32,
-                fontWeight: 800,
-                color: C.navy,
-                letterSpacing: "-1px",
-                lineHeight: 1,
-              }}
-            >
-              {String(mins).padStart(2, "0")}:{String(secs).padStart(2, "0")}
-            </div>
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-              {doneSets}/{totalSets} sets
-            </div>
-          </div>
+    <section className="task-card workout-player">
+      <div className="task-card-header workout-player-header">
+        <div>
+          <p className="eyebrow">Workout player mode</p>
+          <h2>{workout.name}</h2>
         </div>
-        {/* Progress bar */}
-        <div
-          style={{
-            height: 4,
-            background: C.surf,
-            borderRadius: 99,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              width: `${progress * 100}%`,
-              height: "100%",
-              background: C.sage,
-              borderRadius: 99,
-              transition: "width 0.3s ease",
-            }}
-          />
+        <div className="workout-meta-block">
+          <strong>{minutes}:{seconds}</strong>
+          <span>{progress}% complete</span>
         </div>
       </div>
 
-      {/* Scrollable exercise list */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "12px 16px",
-          paddingBottom: 100,
-        }}
-      >
-        {warmup.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                color: C.muted,
-                marginBottom: 8,
-              }}
-            >
-              Warm-up
-            </div>
-            {warmup.map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  background: C.surf,
-                  borderRadius: 10,
-                  padding: "8px 12px",
-                  marginBottom: 6,
-                  fontSize: 13,
-                  color: C.tx,
-                }}
-              >
-                {item.name || item.n || `Warm-up ${i + 1}`}
-                {item.duration ? ` — ${item.duration} min` : ""}
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="progress-bar">
+        <span style={{ width: `${progress}%` }} />
+      </div>
 
-        {exercises.length === 0 && (
-          <div
-            style={{
-              background: C.surf,
-              borderRadius: 12,
-              padding: "24px 16px",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ fontSize: 14, color: C.muted }}>
-              No exercises loaded.
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
-              Tap Complete when you&apos;re done.
-            </div>
-          </div>
-        )}
-
-        {exercises.map((ex, exIdx) => {
-          const setCount = Number(ex.sets) || 3;
-          const reps = ex.reps || ex.rep || 10;
-          const weight = ex.weight || ex.wt || null;
-          const exName = ex.n || ex.name || `Exercise ${exIdx + 1}`;
-          const exDone = Array.from(
-            { length: setCount },
-            (_, si) => !!completedSets[`${exIdx}-${si}`],
-          ).every(Boolean);
-
+      <div className="workout-list">
+        {workout.exercises.map(exercise => {
+          const done = completedExerciseIds.includes(exercise.id);
           return (
-            <div
-              key={exIdx}
-              style={{
-                background: C.card,
-                border: `1px solid ${exDone ? C.sage : C.bd}`,
-                borderRadius: 14,
-                padding: "12px 14px",
-                marginBottom: 10,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 700,
-                  color: exDone ? C.sageDk : C.tx,
-                  marginBottom: 10,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                {exName}
-                {exDone && (
-                  <span
-                    style={{ fontSize: 11, fontWeight: 700, color: C.sageDk }}
-                  >
-                    ✓ Done
-                  </span>
-                )}
+            <button key={exercise.id} type="button" className={`workout-step ${done ? 'is-complete' : ''}`} onClick={() => toggleExercise(exercise.id)}>
+              <div>
+                <strong>{exercise.name}</strong>
+                <p>{exercise.detail}</p>
               </div>
-              <div style={{ display: "grid", gap: 6 }}>
-                {Array.from({ length: setCount }, (_, setIdx) => {
-                  const key = `${exIdx}-${setIdx}`;
-                  const done = !!completedSets[key];
-                  return (
-                    <button
-                      key={setIdx}
-                      type="button"
-                      onClick={() => toggleSet(exIdx, setIdx)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "9px 10px",
-                        borderRadius: 10,
-                        border: `1.5px solid ${done ? C.sage : C.bd}`,
-                        background: done ? C.sageL : C.bg,
-                        cursor: "pointer",
-                        textAlign: "left",
-                        width: "100%",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: 999,
-                          border: `1.5px solid ${done ? C.sage : C.bd}`,
-                          background: done ? C.sage : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {done && (
-                          <span
-                            style={{
-                              color: C.white,
-                              fontSize: 10,
-                              fontWeight: 700,
-                            }}
-                          >
-                            ✓
-                          </span>
-                        )}
-                      </div>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          color: done ? C.sageDk : C.tx,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Set {setIdx + 1}
-                        <span style={{ fontWeight: 400, color: C.muted }}>
-                          {" "}
-                          — {reps} reps{weight ? ` @ ${weight}` : ""}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+              <span>{done ? 'Done' : 'Tap to complete'}</span>
+            </button>
           );
         })}
-
-        {cooldown.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                color: C.muted,
-                marginBottom: 8,
-              }}
-            >
-              Cool-down
-            </div>
-            {cooldown.map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  background: C.surf,
-                  borderRadius: 10,
-                  padding: "8px 12px",
-                  marginBottom: 6,
-                  fontSize: 13,
-                  color: C.tx,
-                }}
-              >
-                {item.name || item.n || `Cool-down ${i + 1}`}
-                {item.duration ? ` — ${item.duration} min` : ""}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Fixed footer controls */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          padding: "12px 16px 32px",
-          borderTop: `1px solid ${C.bd}`,
-          background: C.card,
-          display: "flex",
-          gap: 10,
-        }}
-      >
-        <button
-          type="button"
-          onClick={onCancel}
-          style={{
-            ...S.btnGhost,
-            flex: 1,
-            fontWeight: 800,
-            letterSpacing: 0.6,
-            textTransform: "uppercase",
-          }}
-        >
-          CANCEL
-        </button>
-        <button
-          type="button"
-          onClick={() => onComplete(elapsed)}
-          style={{ ...S.btnSolid(), flex: 2 }}
-        >
-          Complete Workout
-        </button>
+      <div className="workout-controls">
+        <button type="button" className="ghost-button" onClick={onCancel}>Cancel workout</button>
+        <button type="button" className="primary-button" onClick={onComplete}>Complete workout</button>
       </div>
-    </div>
+    </section>
   );
 }
