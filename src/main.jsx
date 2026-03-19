@@ -230,7 +230,7 @@ function getCompactWorkoutTitle(title=''){
   return cleaned?toTitleCaseLabel(cleaned):'Workout';
 }
 
-function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
+function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenBrainDump}){
   const items=[
     {id:'checkInCompleted',label:'Check in'},
     {id:'prioritiesSet',label:'Pick priorities'},
@@ -244,7 +244,7 @@ function SetupCard({C,S,activationChecklist,onOpenCheckIn,onOpenAddTask}){
     <div style={{display:'grid',gap:6}}>
       {items.map(item=>{
         const done=activationChecklist?.[item.id]===true;
-        const onClick=item.id==='checkInCompleted'?onOpenCheckIn:onOpenAddTask;
+        const onClick=item.id==='checkInCompleted'?onOpenCheckIn:onOpenBrainDump;
         return <button
           key={item.id}
           type="button"
@@ -2406,6 +2406,7 @@ const DEFAULT_OPS={
   top3:{},
   dailyExecution:{},
   dailyRecommendations:{},
+  brainDump:[],
   inboxItems:[], // [{id,text,createdDate,suggestedType,status:'pending'|'processed'}]
   googleClientId:null,
   notifications:{morningTime:'07:00',eveningTime:'21:00'},
@@ -2480,6 +2481,7 @@ function normalizeLoadedProfile(data={}){
   normalized.dailyMealPlans=normalized.dailyMealPlans&&typeof normalized.dailyMealPlans==='object'?normalized.dailyMealPlans:{};
   normalized.mealTemplates=Array.isArray(normalized.mealTemplates)?normalized.mealTemplates:[];
   normalized.taskTemplates=Array.isArray(normalized.taskTemplates)?normalized.taskTemplates:[];
+  normalized.brainDump=Array.isArray(normalized.brainDump)?normalized.brainDump:[];
   normalized.top3=normalized.top3&&typeof normalized.top3==='object'?normalized.top3:{};
   normalized.accounts=normalizeFinancialAccounts(normalized.accounts);
   normalized.categories=resolveCategoryLibrary(normalized.categories);
@@ -2569,6 +2571,9 @@ function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
     id:task?.id||`dx-${dateKey}-${index}`,
     date:normalizeDateKey(task?.date||dateKey,dateKey),
     completed:!!task?.completed,
+    subtasks:Array.isArray(task?.subtasks)?task.subtasks:[],
+    notes:typeof task?.notes==='string'?task.notes:'',
+    createdAt:typeof task?.createdAt==='string'?task.createdAt:(typeof task?.timestamp==='string'?task.timestamp:new Date().toISOString()),
     timestamp:typeof task?.timestamp==='string'?task.timestamp:null,
     updatedAt:typeof task?.updatedAt==='string'?task.updatedAt:new Date().toISOString(),
   });
@@ -2576,20 +2581,22 @@ function normalizeDailyExecutionTask(task={},dateKey=getTodayKey(),index=0){
 
 function normalizeDailyExecutionEntry(entry,dateKey=getTodayKey(),legacyTop3=[]){
   const source=entry&&typeof entry==='object'&&!Array.isArray(entry)?entry:{};
-  const prioritiesSource=Array.isArray(source.priorities)&&source.priorities.length>0
-    ?source.priorities
+  const taskSource=Array.isArray(source.tasks)&&source.tasks.length>0
+    ?source.tasks
+    :Array.isArray(source.priorities)&&source.priorities.length>0
+      ?source.priorities
+      :Array.isArray(source.agenda)&&source.agenda.length>0
+        ?source.agenda
     :Array.isArray(legacyTop3)
       ?legacyTop3.filter(item=>typeof item==='string'&&item.trim())
       :[];
-  const priorities=prioritiesSource.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index));
-  const agenda=Array.isArray(source.agenda)&&source.agenda.length>0
-    ?source.agenda.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index))
-    :[];
+  const tasks=taskSource.map((task,index)=>normalizeDailyExecutionTask(task,dateKey,index));
   const mode=source.mode==='execution'?'execution':'planning';
   return{
     date:dateKey,
-    priorities,
-    agenda:mode==='execution'&&agenda.length===0?priorities.map(task=>({...task})):agenda,
+    tasks,
+    priorities:tasks,
+    agenda:tasks,
     mode,
   };
 }
@@ -3496,6 +3503,7 @@ function App(){
   const [showEnergyIn,setShowEnergyIn]=useState(false);
   const [showMorningCheckin,setShowMorningCheckin]=useState(false);
   const [showHabitsModal,setShowHabitsModal]=useState(false);
+  const [showBrainDumpModal,setShowBrainDumpModal]=useState(false);
   const [habitDraftCompletions,setHabitDraftCompletions]=useState({});
   const [showPlannedWorkoutLibrary,setShowPlannedWorkoutLibrary]=useState(false);
   const [showProgramPicker,setShowProgramPicker]=useState(false);
@@ -4898,21 +4906,18 @@ function App(){
       updateDailyExecution(activeDate,entry=>({
         ...entry,
         mode:nextMode,
-        agenda:nextMode==='execution'
-          ?entry.priorities.map(task=>({...task}))
-          :entry.agenda,
       }));
       if(nextMode==='execution')trackGrowthEvent('execution_started',{date:activeDate});
-      showNotif(nextMode==='execution'?'Execution mode enabled':'Returned to planning mode','success');
+      if(nextMode==='execution')showNotif('Day started','success');
     }
 
     function updatePriorityTask(taskId,patch){
+      const normalizedPatch='title' in patch&&!("text" in patch)
+        ?{...patch,text:patch.title}
+        :('text' in patch&&!("title" in patch)?{...patch,title:patch.text}:patch);
       updateDailyExecution(activeDate,entry=>{
-        const priorities=entry.priorities.map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task);
-        const agendaSource=entry.mode==='execution'
-          ?(entry.agenda.length>0?entry.agenda:entry.priorities).map(task=>task.id===taskId?{...task,...patch,updatedAt:new Date().toISOString()}:task)
-          :entry.agenda;
-        return{...entry,priorities,agenda:agendaSource};
+        const tasks=entry.tasks.map(task=>task.id===taskId?{...task,...normalizedPatch,updatedAt:new Date().toISOString()}:task);
+        return{...entry,tasks};
       });
     }
 
@@ -4922,8 +4927,7 @@ function App(){
         return{
           ...entry,
           mode:entry.mode==='execution'?entry.mode:'planning',
-          priorities:[...entry.priorities,nextTask],
-          agenda:entry.mode==='execution'?[...entry.agenda,nextTask]:entry.agenda,
+          tasks:[...entry.tasks,nextTask],
         };
       });
     }
@@ -4931,22 +4935,18 @@ function App(){
     function removePriorityTask(taskId){
       updateDailyExecution(activeDate,entry=>({
         ...entry,
-        priorities:entry.priorities.filter(task=>task.id!==taskId),
-        agenda:entry.agenda.filter(task=>task.id!==taskId),
+        tasks:entry.tasks.filter(task=>task.id!==taskId),
       }));
     }
 
     function movePriorityTask(taskId,direction){
       updateDailyExecution(activeDate,entry=>{
-        const priorities=[...entry.priorities];
-        const index=priorities.findIndex(task=>task.id===taskId);
+        const tasks=[...entry.tasks];
+        const index=tasks.findIndex(task=>task.id===taskId);
         const target=index+direction;
-        if(index<0||target<0||target>=priorities.length)return entry;
-        [priorities[index],priorities[target]]=[priorities[target],priorities[index]];
-        const orderedAgenda=entry.mode==='execution'
-          ?priorities.map(priorityTask=>entry.agenda.find(task=>task.id===priorityTask.id)||priorityTask)
-          :entry.agenda;
-        return{...entry,priorities,agenda:orderedAgenda};
+        if(index<0||target<0||target>=tasks.length)return entry;
+        [tasks[index],tasks[target]]=[tasks[target],tasks[index]];
+        return{...entry,tasks};
       });
     }
 
@@ -9658,7 +9658,7 @@ function App(){
         onAction={notifAction?.handler}
         onDismiss={clearNotif}
       />
-      <div style={S.hdr}>
+     <div style={S.hdr}>
         <div>
           {tab==='home'?<>
             <div style={{...S.micro,fontWeight:400}}>{`${greeting}, ${toTitleCaseLabel(profile.userProfile?.name||'there')}`}</div>
@@ -9880,6 +9880,13 @@ function App(){
           </div>
         </div>
       </div>}
+
+      {showBrainDumpModal&&<BrainDumpModal
+        C={C}
+        S={S}
+        onClose={()=>setShowBrainDumpModal(false)}
+        onSave={saveBrainDumpEntry}
+      />}
 
       {showBrainDumpModal&&<BrainDumpModal
         C={C}
