@@ -2,9 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import BrainDumpModal from './components/BrainDumpModal.jsx';
-import PlanningCard from './components/PlanningCard.jsx';
-import ExecutionCard from './components/ExecutionCard.jsx';
 import InboxView from './views/InboxView.jsx';
+import HomeView from './views/HomeView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import './styles.css';
 
@@ -157,58 +156,18 @@ function TaskApp() {
         )}
 
         {activeView !== 'inbox' && activeView !== 'settings' && (
-          <div className="board-grid">
-            <section className="task-card">
-              <div className="task-card-header">
-                <div>
-                  <p className="eyebrow">Brain Dump → Inbox</p>
-                  <h2>Captured items waiting for triage</h2>
-                </div>
-              </div>
-              <div className="summary-stack">
-                <div className="summary-tile">
-                  <span>Inbox</span>
-                  <strong>{inboxTasks.length}</strong>
-                </div>
-                <button type="button" className="secondary-button full-width" onClick={() => setActiveView('inbox')}>
-                  Open Inbox
-                </button>
-              </div>
-            </section>
-
-            <PlanningCard
-              tasks={plannedTasks.map(task => ({ ...task, shouldFocusTitle: Boolean(task.shouldFocusTitle) }))}
-              handlers={sharedHandlers}
-              onCreateEmptyTask={createEmptyPlannedTask}
-              onMoveToExecution={moveToExecution}
-            />
-
-            <ExecutionCard
-              tasks={activeTasks}
-              handlers={sharedHandlers}
-              onMoveBackToPlanning={moveBackToPlanning}
-            />
-
-            <section className="task-card">
-              <div className="task-card-header">
-                <div>
-                  <p className="eyebrow">Done</p>
-                  <h2>Completed tasks</h2>
-                </div>
-              </div>
-              <div className="task-list compact-list">
-                {doneTasks.length === 0 ? (
-                  <p className="empty-message">Completed work will appear here.</p>
-                ) : (
-                  doneTasks.map(task => (
-                    <div key={task.id} className="transition-row done-row">
-                      <span className="transition-title">{task.title || 'Untitled task'}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
+          <HomeView
+            inboxTasks={inboxTasks}
+            plannedTasks={plannedTasks}
+            activeTasks={activeTasks}
+            doneTasks={doneTasks}
+            sharedHandlers={sharedHandlers}
+            onCreateEmptyTask={createEmptyPlannedTask}
+            onMoveToExecution={moveToExecution}
+            onMoveBackToPlanning={moveBackToPlanning}
+            onOpenInbox={() => setActiveView('inbox')}
+            onOpenBrainDump={() => setBrainDumpOpen(true)}
+          />
         )}
       </main>
 
