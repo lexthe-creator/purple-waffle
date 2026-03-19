@@ -157,7 +157,7 @@ function TaskApp() {
         )}
 
         {activeView !== 'inbox' && activeView !== 'settings' && (
-          <div className="board-grid">
+          <div className="home-stack">
             <section className="task-card">
               <div className="task-card-header">
                 <div>
