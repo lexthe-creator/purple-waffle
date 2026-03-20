@@ -183,6 +183,10 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   const { tasks, setTasks, meals, workouts, notifications, createTask, createSubtask } = useTaskContext();
   const [dailySearch, setDailySearch] = useState('');
   const [priorityOnly, setPriorityOnly] = useState(true);
+  const [agendaExpanded, setAgendaExpanded] = useState(false);
+  const [mealsExpanded, setMealsExpanded] = useState(false);
+  const [prioritiesExpanded, setPrioritiesExpanded] = useState(false);
+  const [stripExpanded, setStripExpanded] = useState(false);
 
   const orderedTasks = useMemo(() => {
     const rank = { active: 0, planned: 1, done: 2 };
@@ -255,8 +259,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
       });
     });
 
-    return items.slice(0, 5);
-  }, [calendarItems, dailySearch, meals, notifications, now, priorityOnly, tasks, workouts, todayKey]);
+    return items.slice(0, agendaExpanded ? 5 : 3);
+  }, [agendaExpanded, calendarItems, dailySearch, meals, notifications, now, priorityOnly, tasks, workouts, todayKey]);
 
   const todayBusyBlocks = useMemo(() => {
     return calendarItems.filter(item => item.date === todayKey && item.type === 'busy');
@@ -283,6 +287,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     [orderedTasks],
   );
 
+  const visiblePriorityItems = prioritiesExpanded ? priorityItems : priorityItems.slice(0, 2);
+
   const sevenDayStrip = useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {
       const day = addDays(now, index);
@@ -298,6 +304,9 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
       };
     }).filter(item => item.flaggedCount > 0);
   }, [meals, now, tasks]);
+
+  const visibleSevenDayStrip = stripExpanded ? sevenDayStrip : sevenDayStrip.slice(0, 3);
+  const visibleMeals = mealsExpanded ? todaysMeals : todaysMeals.slice(0, 1);
 
   function updateTask(taskId, updates) {
     setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
@@ -418,12 +427,17 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             <p className="eyebrow">Agenda</p>
             <h2>Today only</h2>
           </div>
-          <input
-            className="task-title-input compact-search"
-            value={dailySearch}
-            onChange={event => setDailySearch(event.target.value)}
-            placeholder="Filter today"
-          />
+          <div className="header-stack">
+            <input
+              className="task-title-input compact-search"
+              value={dailySearch}
+              onChange={event => setDailySearch(event.target.value)}
+              placeholder="Filter today"
+            />
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setAgendaExpanded(current => !current)}>
+              {agendaExpanded ? 'Less' : 'More'}
+            </button>
+          </div>
         </div>
         <div className="subtle-feed">
           {todaysAgendaItems.length === 0 ? (
@@ -571,15 +585,23 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             <p className="eyebrow">Meal summary</p>
             <h2>Today&apos;s meals only</h2>
           </div>
+          {todaysMeals.length > 1 && (
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setMealsExpanded(current => !current)}>
+              {mealsExpanded ? 'Less' : `${todaysMeals.length} meals`}
+            </button>
+          )}
         </div>
-        {todaysMeals.length > 0 ? (
+        {visibleMeals.length > 0 ? (
           <div className="subtle-feed">
-            {todaysMeals.map(meal => (
+            {visibleMeals.map(meal => (
               <article key={meal.id} className="feed-card">
                 <strong>{meal.name}</strong>
                 <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
               </article>
             ))}
+            {!mealsExpanded && todaysMeals.length > 1 && (
+              <p className="empty-message">{todaysMeals.length - 1} more meals hidden</p>
+            )}
           </div>
         ) : (
           <div className="empty-panel">
@@ -595,15 +617,20 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             <p className="eyebrow">Task priorities</p>
             <h2>What matters now</h2>
           </div>
+          {priorityItems.length > 2 && (
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setPrioritiesExpanded(current => !current)}>
+              {prioritiesExpanded ? 'Less' : 'More'}
+            </button>
+          )}
         </div>
         <div className="subtle-feed">
-          {priorityItems.length === 0 ? (
+          {visiblePriorityItems.length === 0 ? (
             <div className="empty-panel">
               <strong>No active priorities</strong>
               <p>Promote a task to active to surface it here.</p>
             </div>
           ) : (
-            priorityItems.map(task => (
+            visiblePriorityItems.map(task => (
               <article key={task.id} className="feed-card">
                 <strong>{task.title}</strong>
                 <p>{task.status} · {task.subtasks.filter(subtask => subtask.done === false).length} open subtasks</p>
@@ -619,12 +646,17 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             <p className="eyebrow">7-day strip</p>
             <h2>Flagged items only</h2>
           </div>
+          {sevenDayStrip.length > 3 && (
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setStripExpanded(current => !current)}>
+              {stripExpanded ? 'Less' : 'More'}
+            </button>
+          )}
         </div>
         <div className="week-strip">
-          {sevenDayStrip.length === 0 ? (
+          {visibleSevenDayStrip.length === 0 ? (
             <p className="empty-message">No flagged items in the next seven days.</p>
           ) : (
-            sevenDayStrip.map(item => (
+            visibleSevenDayStrip.map(item => (
               <article key={item.id} className="week-strip-item">
                 <strong>{item.label}</strong>
                 <p>Flagged</p>

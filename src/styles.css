@@ -112,7 +112,7 @@ p {
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.18rem;
+  font-size: 1.04rem;
   line-height: 1.1;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -213,14 +213,14 @@ p {
 
 .app-content {
   flex: 1;
-  padding: 12px 14px calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 24px);
+  padding: 10px 12px calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 20px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 .tab-stack {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .root-tab-panel {
@@ -241,9 +241,9 @@ p {
 
 .task-card {
   border-radius: 22px;
-  padding: 14px;
+  padding: 12px;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .task-card-header,
@@ -268,7 +268,7 @@ p {
 .task-card h2,
 .modal-card h2 {
   margin: 4px 0 0;
-  font-size: 1.06rem;
+  font-size: 0.98rem;
   line-height: 1.15;
 }
 
@@ -284,7 +284,7 @@ p {
 .summary-row,
 .energy-strip {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .summary-row {
@@ -314,7 +314,7 @@ p {
 
 .summary-tile,
 .metric-card {
-  padding: 12px;
+  padding: 10px;
   display: grid;
   gap: 4px;
 }
@@ -322,12 +322,12 @@ p {
 .summary-tile span,
 .metric-card span {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.7rem;
 }
 
 .summary-tile strong,
 .metric-card strong {
-  font-size: 1.34rem;
+  font-size: 1.08rem;
   line-height: 1;
 }
 
@@ -346,7 +346,7 @@ p {
 .calendar-form,
 .calendar-time-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -357,11 +357,12 @@ p {
 
 .calendar-form {
   display: grid;
+  gap: 8px;
 }
 
 .calendar-month-control {
   border-radius: 18px;
-  padding: 12px;
+  padding: 10px;
   background: var(--surface);
   border: 1px solid rgba(47, 64, 90, 0.08);
   display: grid;
@@ -371,7 +372,7 @@ p {
 .calendar-month-control p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.74rem;
 }
 
 .week-strip {
@@ -381,12 +382,13 @@ p {
 
 .calendar-week-strip {
   grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
 }
 
 .week-strip-item {
   border: 1px solid rgba(47, 64, 90, 0.08);
   background: var(--surface);
-  padding: 10px 8px;
+  padding: 8px 7px;
   text-align: left;
   display: grid;
   gap: 3px;
@@ -405,18 +407,24 @@ p {
 .week-strip-item p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: 0.7rem;
 }
 
 .compact-search {
-  min-width: 120px;
+  min-width: 100px;
+}
+
+.header-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
 .execution-task-item {
   border-radius: 18px;
   border: 1px solid rgba(47, 64, 90, 0.08);
   background: var(--surface);
-  padding: 14px;
+  padding: 12px;
 }
 
 .execution-task-item.is-done {
@@ -471,13 +479,13 @@ p {
   min-width: 0;
   flex: 1;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .task-header-line {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .task-title-input,
@@ -488,7 +496,7 @@ p {
   border: 1px solid var(--border);
   background: #fff;
   color: var(--text);
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .task-title-input {
@@ -505,7 +513,7 @@ p {
 }
 
 .brain-dump-input {
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .quick-add-textarea {
@@ -547,7 +555,7 @@ p {
 
 .status-chip,
 .segment-button {
-  padding: 9px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   background: #fff;
   color: var(--muted);
@@ -582,7 +590,7 @@ p {
 }
 
 .compact-field {
-  min-width: 140px;
+  min-width: 124px;
 }
 
 .inline-collapse {
@@ -625,7 +633,7 @@ p {
 .notification-item,
 .workout-step,
 .empty-panel {
-  padding: 14px;
+  padding: 11px;
 }
 
 .feed-card {
@@ -638,6 +646,7 @@ p {
 .weekly-item strong,
 .workout-step strong {
   color: var(--text);
+  font-size: 0.92rem;
 }
 
 .feed-card p,
@@ -647,7 +656,8 @@ p {
 .empty-panel p {
   margin: 0;
   color: var(--muted);
-  line-height: 1.45;
+  line-height: 1.28;
+  font-size: 0.82rem;
 }
 
 .workout-player {
@@ -663,8 +673,8 @@ p {
 
 .workout-title {
   display: block;
-  margin-top: 6px;
-  font-size: 1.05rem;
+  margin-top: 4px;
+  font-size: 0.95rem;
 }
 
 .workout-meta-block {
@@ -675,12 +685,12 @@ p {
 }
 
 .workout-meta-block strong {
-  font-size: 1.48rem;
+  font-size: 1.1rem;
   line-height: 1;
 }
 
 .progress-bar {
-  height: 10px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(47, 64, 90, 0.12);
@@ -747,6 +757,15 @@ p {
   width: min(100%, var(--shell-width));
   max-height: calc(100dvh - 24px);
   overflow: auto;
+}
+
+.calendar-detail-panel {
+  gap: 8px;
+}
+
+.calendar-detail-panel .feed-card,
+.calendar-detail-panel .empty-panel {
+  padding: 10px;
 }
 
 .settings-sheet {
@@ -877,6 +896,7 @@ p {
   display: grid;
   place-items: center;
   cursor: pointer;
+  font-size: 0.78rem;
 }
 
 .bottom-nav-button.is-active {
