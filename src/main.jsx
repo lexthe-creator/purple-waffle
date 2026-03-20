@@ -27,6 +27,87 @@ function formatDateLabel(value) {
   }).format(new Date(value));
 }
 
+function formatFullDate(value) {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(new Date(value));
+}
+
+function formatShortMonthDay(value) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value));
+}
+
+function startOfDay(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function toDateKey(value) {
+  return startOfDay(value).toISOString().slice(0, 10);
+}
+
+function addDays(value, amount) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + amount);
+  return date;
+}
+
+function sameDay(left, right) {
+  return toDateKey(left) === toDateKey(right);
+}
+
+function getGreeting(now = new Date()) {
+  const hour = now.getHours();
+
+  if (hour >= 5 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 21) return 'Good evening';
+  return 'Good night';
+}
+
+function createCalendarSeed() {
+  const now = new Date();
+  return [
+    {
+      id: 'calendar-1',
+      type: 'busy',
+      title: 'Deep work block',
+      date: toDateKey(now),
+      startTime: '09:00',
+      endTime: '11:00',
+      repeatWeekly: true,
+      priority: true,
+    },
+    {
+      id: 'calendar-2',
+      type: 'event',
+      title: 'Lunch check-in',
+      date: toDateKey(now),
+      startTime: '12:30',
+      endTime: '13:00',
+      notes: '',
+      repeatWeekly: false,
+      priority: false,
+    },
+    {
+      id: 'calendar-3',
+      type: 'task',
+      taskId: 'task-priority',
+      title: 'Clear follow-ups',
+      date: toDateKey(addDays(now, 1)),
+      startTime: '16:00',
+      endTime: '16:30',
+      priority: true,
+    },
+  ];
+}
+
 function RootTabPanel({ id, activeTab, children }) {
   const isActive = activeTab === id;
 
@@ -98,8 +179,10 @@ function SettingsSheet({ isOpen, onClose }) {
   );
 }
 
-function DashboardScreen({ inboxCount }) {
-  const { tasks, setTasks, createTask, createSubtask } = useTaskContext();
+function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, calendarItems }) {
+  const { tasks, setTasks, meals, workouts, notifications, createTask, createSubtask } = useTaskContext();
+  const [dailySearch, setDailySearch] = useState('');
+  const [priorityOnly, setPriorityOnly] = useState(true);
 
   const orderedTasks = useMemo(() => {
     const rank = { active: 0, planned: 1, done: 2 };
@@ -113,6 +196,108 @@ function DashboardScreen({ inboxCount }) {
 
   const activeTasks = useMemo(() => orderedTasks.filter(task => task.status !== 'done'), [orderedTasks]);
   const completedTasks = useMemo(() => orderedTasks.filter(task => task.status === 'done'), [orderedTasks]);
+  const todayKey = toDateKey(now);
+  const todaysMeals = useMemo(
+    () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
+    [meals, todayKey],
+  );
+  const todaysAgendaItems = useMemo(() => {
+    const items = [];
+
+    tasks.forEach(task => {
+      if (task.status === 'done') return;
+      if (priorityOnly && task.status !== 'active') return;
+      if (dailySearch && !task.title.toLowerCase().includes(dailySearch.toLowerCase())) return;
+      items.push({
+        id: task.id,
+        type: 'task',
+        title: task.title || 'Untitled task',
+        subtitle: task.status === 'active' ? 'In execution' : 'Planned',
+      });
+    });
+
+    meals.forEach(meal => {
+      if (toDateKey(meal.loggedAt) !== todayKey) return;
+      items.push({
+        id: meal.id,
+        type: 'meal',
+        title: meal.name || 'Meal',
+        subtitle: meal.tags.length ? meal.tags.join(' · ') : 'Logged today',
+      });
+    });
+
+    workouts.forEach(workout => {
+      if (workout.status === 'completed' && !sameDay(workout.createdAt, now)) return;
+      items.push({
+        id: workout.id,
+        type: 'workout',
+        title: workout.name,
+        subtitle: `${workout.duration} min · ${workout.status}`,
+      });
+    });
+
+    calendarItems.forEach(item => {
+      if (item.date !== todayKey || item.type !== 'busy') return;
+      items.push({
+        id: item.id,
+        type: 'busy',
+        title: item.title,
+        subtitle: `${item.startTime} - ${item.endTime}`,
+      });
+    });
+
+    notifications.slice(0, 3).forEach(notification => {
+      items.push({
+        id: notification.id,
+        type: 'inbox',
+        title: notification.title,
+        subtitle: notification.detail || 'Inbox item',
+      });
+    });
+
+    return items.slice(0, 5);
+  }, [calendarItems, dailySearch, meals, notifications, now, priorityOnly, tasks, workouts, todayKey]);
+
+  const todayBusyBlocks = useMemo(() => {
+    return calendarItems.filter(item => item.date === todayKey && item.type === 'busy');
+  }, [calendarItems, todayKey]);
+
+  const dailyProgress = useMemo(() => {
+    const completed = tasks.filter(task => task.status === 'done').length;
+    const total = tasks.length || 1;
+    return Math.round((completed / total) * 100);
+  }, [tasks]);
+
+  const activeWorkout = useMemo(() => {
+    if (!activeWorkoutId) return null;
+    return workouts.find(workout => workout.id === activeWorkoutId) ?? null;
+  }, [activeWorkoutId, workouts]);
+
+  const nextWorkout = useMemo(() => {
+    if (activeWorkout) return activeWorkout;
+    return workouts.find(workout => workout.status !== 'completed') ?? workouts[0] ?? null;
+  }, [activeWorkout, workouts]);
+
+  const priorityItems = useMemo(
+    () => orderedTasks.filter(task => task.status === 'active' || task.subtasks.some(subtask => subtask.done === false)).slice(0, 4),
+    [orderedTasks],
+  );
+
+  const sevenDayStrip = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = addDays(now, index);
+      const key = toDateKey(day);
+      return {
+        id: key,
+        label: formatDateLabel(key),
+        date: key,
+        flaggedCount: [
+          ...tasks.filter(task => (task.status === 'active' || task.status === 'planned') && index <= 2),
+          ...meals.filter(meal => toDateKey(meal.loggedAt) === key),
+        ].length > 0 ? 1 : 0,
+      };
+    }).filter(item => item.flaggedCount > 0);
+  }, [meals, now, tasks]);
 
   function updateTask(taskId, updates) {
     setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
@@ -159,12 +344,121 @@ function DashboardScreen({ inboxCount }) {
     setTasks(current => [createTask({ status: 'active', shouldFocusTitle: true }), ...current]);
   }
 
+  function convertInboxToTask(notificationId) {
+    const source = notifications.find(notification => notification.id === notificationId);
+    if (!source) return;
+
+    setTasks(current => [
+      createTask({
+        status: 'active',
+        title: source.title,
+        notes: source.detail,
+        shouldFocusTitle: true,
+      }),
+      ...current,
+    ]);
+  }
+
+  function moveTask(taskId, direction) {
+    setTasks(current => {
+      const index = current.findIndex(task => task.id === taskId);
+      const nextIndex = index + direction;
+
+      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(nextIndex, 0, item);
+      return next;
+    });
+  }
+
   return (
     <div className="tab-stack">
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">{formatFullDate(now)}</p>
+            <h2>{getGreeting(now)}, focus on today</h2>
+          </div>
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
+            {priorityOnly ? 'Priority only' : 'Show all'}
+          </button>
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Today card</p>
+            <h2>Open-day context</h2>
+          </div>
+        </div>
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Tasks</span>
+            <strong>{tasks.filter(task => task.status !== 'done').length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Meals</span>
+            <strong>{todaysMeals.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Blocks</span>
+            <strong>{todayBusyBlocks.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Agenda</p>
+            <h2>Today only</h2>
+          </div>
+          <input
+            className="task-title-input compact-search"
+            value={dailySearch}
+            onChange={event => setDailySearch(event.target.value)}
+            placeholder="Filter today"
+          />
+        </div>
+        <div className="subtle-feed">
+          {todaysAgendaItems.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No items for today</strong>
+              <p>Capture something with the plus button.</p>
+            </div>
+          ) : (
+            todaysAgendaItems.map(item => (
+              <article key={item.id} className="feed-card">
+                <strong>{item.title}</strong>
+                <p>{item.subtitle}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Daily progress</p>
+            <h2>Execution momentum</h2>
+          </div>
+          <strong>{dailyProgress}%</strong>
+        </div>
+        <div className="progress-bar">
+          <span style={{ width: `${dailyProgress}%` }} />
+        </div>
+      </section>
+
       <section className="task-card execution-card">
         <div className="task-card-header">
           <div>
-            <p className="eyebrow">Execution mode</p>
+            <p className="eyebrow">Daily execution</p>
             <h2>Run the day from here</h2>
           </div>
           <button type="button" className="primary-button" onClick={addInlineTask}>
@@ -187,6 +481,15 @@ function DashboardScreen({ inboxCount }) {
           </div>
         </div>
 
+        <div className="quick-entry-row">
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
+            {priorityOnly ? 'Priority focus' : 'All tasks'}
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={addInlineTask}>
+            Quick add task
+          </button>
+        </div>
+
         <div className="execution-list">
           {orderedTasks.length === 0 ? (
             <div className="empty-panel">
@@ -204,58 +507,411 @@ function DashboardScreen({ inboxCount }) {
                 onToggleSubtask={toggleSubtask}
                 onAddSubtask={addSubtask}
                 onSetStatus={setTaskStatus}
+                onMoveUp={() => moveTask(task.id, -1)}
+                onMoveDown={() => moveTask(task.id, 1)}
               />
             ))
           )}
         </div>
       </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Inbox to task</p>
+            <h2>Promote an item</h2>
+          </div>
+        </div>
+        <div className="subtle-feed">
+          {notifications.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No inbox items</strong>
+              <p>Inbox items can be converted directly into tasks.</p>
+            </div>
+          ) : (
+            notifications.slice(0, 3).map(notification => (
+              <article key={notification.id} className="feed-card">
+                <strong>{notification.title}</strong>
+                <p>{notification.detail || 'Inbox item'}</p>
+                <button type="button" className="ghost-button compact-ghost" onClick={() => convertInboxToTask(notification.id)}>
+                  Convert to task
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Today&apos;s workout</p>
+            <h2>Workout card</h2>
+          </div>
+        </div>
+        {nextWorkout ? (
+          <article className="feed-card">
+            <strong>{nextWorkout.name}</strong>
+            <p>{nextWorkout.type || 'Workout'} · {nextWorkout.duration} min · {nextWorkout.status}</p>
+            <button type="button" className="secondary-button" onClick={() => onStartWorkout(nextWorkout.id)}>
+              {activeWorkout ? 'Continue' : 'Start'}
+            </button>
+          </article>
+        ) : (
+          <div className="empty-panel">
+            <strong>No workout exists yet</strong>
+            <p>Add one with quick capture.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Meal summary</p>
+            <h2>Today&apos;s meals only</h2>
+          </div>
+        </div>
+        {todaysMeals.length > 0 ? (
+          <div className="subtle-feed">
+            {todaysMeals.map(meal => (
+              <article key={meal.id} className="feed-card">
+                <strong>{meal.name}</strong>
+                <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-panel">
+            <strong>No meals logged today</strong>
+            <p>Nutrition stays lightweight here.</p>
+          </div>
+        )}
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Task priorities</p>
+            <h2>What matters now</h2>
+          </div>
+        </div>
+        <div className="subtle-feed">
+          {priorityItems.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No active priorities</strong>
+              <p>Promote a task to active to surface it here.</p>
+            </div>
+          ) : (
+            priorityItems.map(task => (
+              <article key={task.id} className="feed-card">
+                <strong>{task.title}</strong>
+                <p>{task.status} · {task.subtasks.filter(subtask => subtask.done === false).length} open subtasks</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">7-day strip</p>
+            <h2>Flagged items only</h2>
+          </div>
+        </div>
+        <div className="week-strip">
+          {sevenDayStrip.length === 0 ? (
+            <p className="empty-message">No flagged items in the next seven days.</p>
+          ) : (
+            sevenDayStrip.map(item => (
+              <article key={item.id} className="week-strip-item">
+                <strong>{item.label}</strong>
+                <p>Flagged</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Quick capture</p>
+            <h2>Access always stays close</h2>
+          </div>
+        </div>
+        <p className="empty-message">Use the floating plus button or the top brain dump action.</p>
+      </section>
     </div>
   );
 }
 
-function CalendarScreen() {
-  const [weeklyItems, setWeeklyItems] = useState(() => {
-    const now = new Date();
+function CalendarScreen({ weeklyItems, setWeeklyItems }) {
+  const { tasks, meals, workouts } = useTaskContext();
+  const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
+  const [draftBusyTitle, setDraftBusyTitle] = useState('');
+  const [draftEventTitle, setDraftEventTitle] = useState('');
+  const [draftStartTime, setDraftStartTime] = useState('09:00');
+  const [draftEndTime, setDraftEndTime] = useState('10:00');
+  const [patternOpen, setPatternOpen] = useState(false);
+  const [savedPattern, setSavedPattern] = useState([]);
 
-    return [
-      {
-        id: 'week-1',
-        title: 'Deep work block',
-        status: 'planned',
-        date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString().slice(0, 10),
-        rescheduleOpen: false,
-      },
-      {
-        id: 'week-2',
-        title: 'Strength session',
-        status: 'completed',
-        date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2).toISOString().slice(0, 10),
-        rescheduleOpen: false,
-      },
-      {
-        id: 'week-3',
-        title: 'Meal prep',
-        status: 'missed',
-        date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 3).toISOString().slice(0, 10),
-        rescheduleOpen: false,
-      },
-    ];
-  });
+  const weekDays = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = addDays(now, index);
+      const key = toDateKey(day);
+      return {
+        key,
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        dateLabel: day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        isToday: sameDay(day, now),
+      };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!weekDays.some(day => day.key === selectedDate)) {
+      setSelectedDate(toDateKey(new Date()));
+    }
+  }, [selectedDate, weekDays]);
+
+  const selectedItems = useMemo(
+    () => [
+      ...(selectedDate === toDateKey(new Date())
+        ? tasks.map(task => ({
+            id: task.id,
+            type: 'task',
+            title: task.title || 'Untitled task',
+            subtitle: `${task.status} task`,
+          }))
+        : []),
+      ...meals
+        .filter(meal => toDateKey(meal.loggedAt) === selectedDate)
+        .map(meal => ({
+          id: meal.id,
+          type: 'meal',
+          title: meal.name || 'Meal',
+          subtitle: meal.tags.length ? meal.tags.join(' · ') : 'Logged today',
+        })),
+      ...workouts
+        .filter(workout => workout.status === 'active' || sameDay(workout.createdAt, selectedDate))
+        .map(workout => ({
+          id: workout.id,
+          type: 'workout',
+          title: workout.name,
+          subtitle: `${workout.duration} min · ${workout.status}`,
+        })),
+      ...weeklyItems
+        .filter(item => item.date === selectedDate)
+        .map(item => ({
+          id: item.id,
+          type: item.type,
+          title: item.title,
+          subtitle: `${item.startTime} - ${item.endTime}`,
+        })),
+    ],
+    [meals, selectedDate, tasks, weeklyItems, workouts],
+  );
+
+  const selectedDateLabel = useMemo(() => formatFullDate(selectedDate), [selectedDate]);
 
   function updateWeeklyItem(itemId, updates) {
     setWeeklyItems(current => current.map(item => (item.id === itemId ? { ...item, ...updates } : item)));
   }
 
+  function createScheduledItem(type) {
+    const title = (type === 'busy' ? draftBusyTitle : draftEventTitle).trim();
+    if (!title) return;
+
+    const item = {
+      id: `calendar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type,
+      title,
+      date: selectedDate,
+      startTime: draftStartTime,
+      endTime: draftEndTime,
+      notes: type === 'event' ? '' : undefined,
+      repeatWeekly: false,
+      priority: false,
+    };
+
+    setWeeklyItems(current => [item, ...current]);
+
+    if (type === 'busy') {
+      setDraftBusyTitle('');
+    } else {
+      setDraftEventTitle('');
+    }
+  }
+
+  const visiblePatternItems = useMemo(
+    () => selectedItems,
+    [selectedItems],
+  );
+
+  function savePattern() {
+    setSavedPattern(selectedItems);
+    setWeeklyItems(current =>
+      current.map(item => (
+        item.date === selectedDate ? { ...item, repeatWeekly: true } : item
+      )),
+    );
+    setPatternOpen(true);
+  }
+
   return (
     <div className="tab-stack">
-      <WeeklyPreview
-        items={weeklyItems.map(item => ({ ...item, dateLabel: formatDateLabel(item.date) }))}
-        onStatusChange={(itemId, status) => updateWeeklyItem(itemId, { status })}
-        onDateChange={(itemId, date) => updateWeeklyItem(itemId, { date })}
-        onToggleReschedule={itemId => updateWeeklyItem(itemId, {
-          rescheduleOpen: !weeklyItems.find(item => item.id === itemId)?.rescheduleOpen,
-        })}
-      />
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Calendar</p>
+            <h2>Weekly preview</h2>
+          </div>
+          <div className="calendar-nav">
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -1)))}>
+              Previous
+            </button>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedDate(toDateKey(new Date()))}>
+              Today
+            </button>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 1)))}>
+              Next
+            </button>
+          </div>
+        </div>
+        <div className="calendar-month-control">
+          <strong>{selectedDateLabel}</strong>
+          <p>Month/date control</p>
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="week-strip calendar-week-strip">
+          {weekDays.map(day => (
+            <button
+              key={day.key}
+              type="button"
+              className={`week-strip-item ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
+              onClick={() => setSelectedDate(day.key)}
+            >
+              <strong>{day.label}</strong>
+              <p>{day.dateLabel}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="task-card calendar-detail-panel">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Selected day</p>
+            <h2>{selectedDateLabel}</h2>
+          </div>
+        </div>
+        <div className="action-row">
+          <button type="button" className="secondary-button">Open daily</button>
+          <button type="button" className="secondary-button" onClick={() => createScheduledItem('busy')}>Add busy</button>
+          <button type="button" className="secondary-button" onClick={() => createScheduledItem('event')}>Add event</button>
+        </div>
+        <div className="subtle-feed">
+          {selectedItems.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No items scheduled</strong>
+              <p>Add a busy block or event below.</p>
+            </div>
+          ) : (
+            selectedItems.map(item => (
+              <article key={item.id} className="feed-card">
+                <strong>{item.title}</strong>
+                <p>{item.type} · {item.startTime} - {item.endTime}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Add busy</p>
+            <h2>Work time not tied to integrations</h2>
+          </div>
+        </div>
+        <div className="calendar-form">
+          <input
+            className="task-title-input"
+            value={draftBusyTitle}
+            onChange={event => setDraftBusyTitle(event.target.value)}
+            placeholder="Busy block title"
+          />
+          <div className="calendar-time-row">
+            <input className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
+            <input className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
+          </div>
+          <button type="button" className="primary-button" onClick={() => createScheduledItem('busy')}>Save busy block</button>
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Add event</p>
+            <h2>Manual event entry</h2>
+          </div>
+        </div>
+        <div className="calendar-form">
+          <input
+            className="task-title-input"
+            value={draftEventTitle}
+            onChange={event => setDraftEventTitle(event.target.value)}
+            placeholder="Event title"
+          />
+          <div className="calendar-time-row">
+            <input className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
+            <input className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
+          </div>
+          <button type="button" className="primary-button" onClick={() => createScheduledItem('event')}>Save event</button>
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Schedule pattern</p>
+            <h2>Save this schedule as a pattern</h2>
+          </div>
+        </div>
+        <div className="subtle-feed">
+          {visiblePatternItems.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No visible pattern items</strong>
+              <p>Selected-day items appear here before saving as a pattern.</p>
+            </div>
+          ) : (
+            visiblePatternItems.map(item => (
+              <article key={item.id} className="feed-card">
+                <strong>{item.title}</strong>
+                <p>{item.type} · weekly pattern ready</p>
+              </article>
+            ))
+          )}
+        </div>
+        <button type="button" className="secondary-button" onClick={savePattern}>Save this schedule as a pattern</button>
+        {patternOpen && <p className="empty-message">Pattern saved locally for repeat weekly use. {savedPattern.length} items captured.</p>}
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Integration</p>
+            <h2>Connect Google</h2>
+          </div>
+        </div>
+        <p className="empty-message">Optional prompt only. Settings remains the place for integration setup.</p>
+        <button type="button" className="ghost-button compact-ghost">Connect Google</button>
+      </section>
     </div>
   );
 }
@@ -332,9 +988,8 @@ function NutritionScreen() {
   );
 }
 
-function FitnessScreen() {
+function FitnessScreen({ activeWorkoutId, onStartWorkout }) {
   const { workouts, setWorkouts, setNotifications, createNotification } = useTaskContext();
-  const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const activeWorkout = useMemo(
     () => workouts.find(workout => workout.id === activeWorkoutId) ?? null,
     [workouts, activeWorkoutId],
@@ -345,7 +1000,7 @@ function FitnessScreen() {
   }
 
   function startWorkout(workoutId) {
-    setActiveWorkoutId(workoutId);
+    onStartWorkout(workoutId);
     setWorkouts(current => current.map(workout => (
       workout.id === workoutId ? { ...workout, status: 'active' } : workout
     )));
@@ -357,7 +1012,7 @@ function FitnessScreen() {
     setWorkouts(current => current.map(workout => (
       workout.id === activeWorkoutId ? { ...workout, status: 'planned' } : workout
     )));
-    setActiveWorkoutId(null);
+    onStartWorkout(null);
   }
 
   function completeWorkout() {
@@ -367,7 +1022,7 @@ function FitnessScreen() {
       workout.id === activeWorkoutId ? { ...workout, status: 'completed' } : workout
     )));
     upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
-    setActiveWorkoutId(null);
+    onStartWorkout(null);
   }
 
   return (
@@ -610,6 +1265,15 @@ function AppShell() {
   } = useTaskContext();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeWorkoutId, setActiveWorkoutId] = useState(null);
+  const [now, setNow] = useState(() => new Date());
+  const [weeklyItems, setWeeklyItems] = useState(() => createCalendarSeed());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const unreadNotifications = useMemo(
     () => notifications.filter(notification => !notification.read),
     [notifications],
@@ -680,11 +1344,17 @@ function AppShell() {
       <main className="app-content">
         <div className="tab-stack">
           <RootTabPanel id="dashboard" activeTab={activeTab}>
-            <DashboardScreen inboxCount={unreadNotifications.length} />
+            <DashboardScreen
+              inboxCount={unreadNotifications.length}
+              now={now}
+              activeWorkoutId={activeWorkoutId}
+              onStartWorkout={setActiveWorkoutId}
+              calendarItems={weeklyItems}
+            />
           </RootTabPanel>
 
           <RootTabPanel id="calendar" activeTab={activeTab}>
-            <CalendarScreen />
+            <CalendarScreen weeklyItems={weeklyItems} setWeeklyItems={setWeeklyItems} />
           </RootTabPanel>
 
           <RootTabPanel id="nutrition" activeTab={activeTab}>
@@ -692,7 +1362,7 @@ function AppShell() {
           </RootTabPanel>
 
           <RootTabPanel id="fitness" activeTab={activeTab}>
-            <FitnessScreen />
+            <FitnessScreen activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />
           </RootTabPanel>
 
           <RootTabPanel id="more" activeTab={activeTab}>

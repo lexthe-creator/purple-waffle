@@ -8,6 +8,8 @@ export default function ExecutionTaskItem({
   onToggleSubtask,
   onAddSubtask,
   onSetStatus,
+  onMoveUp,
+  onMoveDown,
 }) {
   const [notesOpen, setNotesOpen] = useState(Boolean(task.notes));
   const titleRef = useRef(null);
@@ -69,6 +71,16 @@ export default function ExecutionTaskItem({
             {onSetStatus && (
               <button type="button" className="ghost-button compact-ghost" onClick={() => onSetStatus(task.id, nextStatus)}>
                 {statusActionLabel}
+              </button>
+            )}
+            {onMoveUp && (
+              <button type="button" className="ghost-button compact-ghost" onClick={onMoveUp}>
+                ↑
+              </button>
+            )}
+            {onMoveDown && (
+              <button type="button" className="ghost-button compact-ghost" onClick={onMoveDown}>
+                ↓
               </button>
             )}
             <button type="button" className="ghost-button compact-ghost danger-button" onClick={() => onDeleteTask(task.id)}>

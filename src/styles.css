@@ -341,6 +341,77 @@ p {
   gap: 10px;
 }
 
+.action-row,
+.calendar-nav,
+.calendar-form,
+.calendar-time-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.calendar-nav,
+.calendar-time-row {
+  flex-wrap: wrap;
+}
+
+.calendar-form {
+  display: grid;
+}
+
+.calendar-month-control {
+  border-radius: 18px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid rgba(47, 64, 90, 0.08);
+  display: grid;
+  gap: 4px;
+}
+
+.calendar-month-control p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.week-strip {
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-week-strip {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.week-strip-item {
+  border: 1px solid rgba(47, 64, 90, 0.08);
+  background: var(--surface);
+  padding: 10px 8px;
+  text-align: left;
+  display: grid;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.week-strip-item.is-active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.week-strip-item.is-today strong {
+  color: var(--primary);
+}
+
+.week-strip-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.compact-search {
+  min-width: 120px;
+}
+
 .execution-task-item {
   border-radius: 18px;
   border: 1px solid rgba(47, 64, 90, 0.08);
