@@ -41,7 +41,9 @@ export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickA
     <header className="app-header">
       <div className="header-copy">
         <p className="header-date">{dateLabel}</p>
-        <h1>{greeting}, {userName}</h1>
+        <h1>
+          {greeting}, <span>{userName}</span>
+        </h1>
       </div>
 
       <div className="header-actions" role="toolbar" aria-label="Global actions">
