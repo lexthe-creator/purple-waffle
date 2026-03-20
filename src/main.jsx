@@ -5,6 +5,7 @@ import QuickAddModal from './components/QuickAddModal.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import WeeklyPreview from './components/WeeklyPreview.jsx';
+import HomeView from './views/HomeView.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
@@ -122,14 +123,17 @@ function Dashboard() {
     ];
   });
 
-  const executionTasks = useMemo(() => tasks.filter(task => task.status !== 'done'), [tasks]);
-  const completedTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
+  const plannedTasks = useMemo(() => tasks.filter(task => task.status === 'planned'), [tasks]);
+  const activeTasks = useMemo(() => tasks.filter(task => task.status === 'active'), [tasks]);
+  const doneTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
+  const completedTasks = doneTasks;
   const unreadNotifications = useMemo(() => notifications.filter(notification => !notification.read), [notifications]);
   const activeWorkout = useMemo(
     () => workouts.find(workout => workout.id === activeWorkoutId) ?? null,
     [workouts, activeWorkoutId],
   );
   const latestMeal = meals[0];
+  const dashboardWorkout = activeWorkout ?? workouts[0] ?? null;
   const weeklyViewItems = useMemo(
     () => weeklyItems.map(item => ({ ...item, dateLabel: formatDateLabel(item.date) })),
     [weeklyItems],
@@ -143,12 +147,47 @@ function Dashboard() {
     setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
   }
 
+  function moveTask(taskId, direction) {
+    setTasks(current => {
+      const index = current.findIndex(task => task.id === taskId);
+      if (index === -1) return current;
+
+      const nextIndex = Math.max(0, Math.min(current.length - 1, index + direction));
+      if (nextIndex === index) return current;
+
+      const next = [...current];
+      const [task] = next.splice(index, 1);
+      next.splice(nextIndex, 0, task);
+      return next;
+    });
+  }
+
+  function commitTaskTitle(taskId, title) {
+    updateTask(taskId, { title });
+  }
+
+  function commitTaskNotes(taskId, notes) {
+    updateTask(taskId, { notes });
+  }
+
   function addInlineTask() {
     setTasks(current => [createTask({ status: 'active', shouldFocusTitle: true }), ...current]);
   }
 
+  function addEmptyPriorityTask() {
+    setTasks(current => [createTask({ status: 'planned', shouldFocusTitle: true }), ...current]);
+  }
+
   function deleteTask(taskId) {
     setTasks(current => current.filter(task => task.id !== taskId));
+  }
+
+  function moveTaskToExecution(taskId) {
+    updateTask(taskId, { status: 'active' });
+  }
+
+  function moveTaskBackToPlanning(taskId) {
+    updateTask(taskId, { status: 'planned' });
   }
 
   function toggleTaskDone(taskId) {
@@ -272,73 +311,32 @@ function Dashboard() {
 
   function renderDashboardPanel() {
     return (
-      <div className="tab-panel">
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">Execution mode</p>
-              <h2>Run the day from here</h2>
-              <p className="section-copy">Inline capture, meals, workouts, and notes stay inside the same flow.</p>
-            </div>
-            <button type="button" className="secondary-button" onClick={addInlineTask}>+ Add task</button>
-          </div>
-
-          <div className="energy-strip">
-            <div className="metric-card">
-              <span>Energy</span>
-              <strong>{energyState.value}/5</strong>
-            </div>
-            <div className="metric-card">
-              <span>Sleep</span>
-              <strong>{energyState.sleepHours}h</strong>
-              <small>{energyState.sleepSource === 'manual' ? 'Manual' : energyState.sleepSource === 'integrated' ? 'Integrated' : 'Auto-filled'}</small>
-            </div>
-            <div className="metric-actions">
-              <button type="button" className="ghost-button" onClick={() => applyEnergyCheckIn(4, 7.5, 'manual')}>Check in</button>
-              <button type="button" className="ghost-button" onClick={skipCheckIn}>Skip</button>
-            </div>
-          </div>
-
-          <div className="execution-list">
-            {executionTasks.map(task => (
-              <ExecutionTaskItem
-                key={task.id}
-                task={task}
-                onUpdateTask={updateTask}
-                onDeleteTask={deleteTask}
-                onToggleDone={toggleTaskDone}
-                onToggleSubtask={toggleSubtask}
-                onAddSubtask={addSubtask}
-                onAddSibling={addInlineTask}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">Quick glance</p>
-              <h2>Most recent activity</h2>
-            </div>
-          </div>
-
-          <div className="simple-feed">
-            <article className="feed-card">
-              <strong>{latestMeal?.name || 'No meals logged yet'}</strong>
-              <p>{latestMeal?.tags?.length ? latestMeal.tags.join(' · ') : 'Meal capture is ready.'}</p>
-            </article>
-            <article className="feed-card">
-              <strong>{activeWorkout?.name || 'No active workout'}</strong>
-              <p>{activeWorkout ? `${activeWorkout.duration} min · in progress` : 'Workout tracking is standing by.'}</p>
-            </article>
-            <article className="feed-card">
-              <strong>{unreadNotifications.length} unread notifications</strong>
-              <p>{unreadNotifications.length ? 'Open More to review the inbox.' : 'Everything is read.'}</p>
-            </article>
-          </div>
-        </section>
-      </div>
+      <HomeView
+        inboxCount={unreadNotifications.length}
+        plannedTasks={plannedTasks}
+        activeTasks={activeTasks}
+        doneTasks={doneTasks}
+        sharedHandlers={{
+          onCommitTitle: commitTaskTitle,
+          onCommitNotes: commitTaskNotes,
+          onDelete: deleteTask,
+          onMove: moveTask,
+        }}
+        onCreateEmptyTask={addEmptyPriorityTask}
+        onMoveToExecution={moveTaskToExecution}
+        onMoveBackToPlanning={moveTaskBackToPlanning}
+        onOpenInbox={() => setNotificationCenterOpen(true)}
+        onOpenNutrition={() => setActiveTab('nutrition')}
+        onOpenWorkout={workout => {
+          if (workout?.id) {
+            beginWorkout(workout.id);
+          }
+          setActiveTab('fitness');
+        }}
+        onMarkTaskDone={toggleTaskDone}
+        meal={latestMeal}
+        workout={dashboardWorkout}
+      />
     );
   }
 
