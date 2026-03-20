@@ -227,6 +227,10 @@ p {
   display: block;
 }
 
+.root-tab-panel[hidden] {
+  display: none !important;
+}
+
 .dashboard-stack {
   display: grid;
   gap: 12px;
