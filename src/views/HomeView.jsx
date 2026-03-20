@@ -1,17 +1,12 @@
-import React from 'react';
-import CheckInGate from '../components/CheckInGate.jsx';
+import React, { useState } from 'react';
 import GetToFirstValue from '../components/GetToFirstValue.jsx';
-import DailyExecutionStrip from '../components/DailyExecutionStrip.jsx';
 import Priorities from '../components/Priorities.jsx';
 import MealCard from '../components/MealCard.jsx';
 import WorkoutCard from '../components/WorkoutCard.jsx';
-import WeeklyPreviewCard from '../components/WeeklyPreviewCard.jsx';
-import WeekAheadCard from '../components/WeekAheadCard.jsx';
-import SomedaySoonCard from '../components/SomedaySoonCard.jsx';
 import TaskFlowCard from '../components/TaskFlowCard.jsx';
 
 export default function HomeView({
-  inboxTasks,
+  inboxCount,
   plannedTasks,
   activeTasks,
   doneTasks,
@@ -20,33 +15,92 @@ export default function HomeView({
   onMoveToExecution,
   onMoveBackToPlanning,
   onOpenInbox,
-  onOpenBrainDump,
   onOpenNutrition,
   onOpenWorkout,
   onMarkTaskDone,
+  meal,
+  workout,
 }) {
+  const [setupVisible, setSetupVisible] = useState(true);
+  const [setupCollapsed, setSetupCollapsed] = useState(false);
+  const [collapsedCards, setCollapsedCards] = useState({
+    meal: false,
+    workout: false,
+    flow: false,
+  });
+
+  const plannedCount = plannedTasks.length;
+  const activeCount = activeTasks.length;
+  const doneCount = doneTasks.length;
+
+  function toggleCard(key) {
+    setCollapsedCards(current => ({ ...current, [key]: !current[key] }));
+  }
+
+  function openWorkout() {
+    onOpenWorkout(workout);
+  }
+
   return (
-    <div className="home-stack">
-      <CheckInGate onOpenBrainDump={onOpenBrainDump} />
-      <GetToFirstValue inboxCount={inboxTasks.length} plannedCount={plannedTasks.length} onOpenInbox={onOpenInbox} />
-      <DailyExecutionStrip activeCount={activeTasks.length} doneCount={doneTasks.length} plannedCount={plannedTasks.length} />
-      <Priorities
-        plannedTasks={plannedTasks}
-        activeTasks={activeTasks}
-        doneTasks={doneTasks}
-        sharedHandlers={sharedHandlers}
-        onCreateEmptyTask={onCreateEmptyTask}
-        onMoveToExecution={onMoveToExecution}
-        onMoveBackToPlanning={onMoveBackToPlanning}
-        onMarkDone={onMarkTaskDone}
-      />
-      <div className="context-card-grid">
-        <MealCard onOpenNutrition={onOpenNutrition} />
-        <WorkoutCard onOpenWorkout={onOpenWorkout} />
-        <WeeklyPreviewCard />
-        <WeekAheadCard />
-        <SomedaySoonCard />
-        <TaskFlowCard plannedCount={plannedTasks.length} activeCount={activeTasks.length} doneCount={doneTasks.length} />
+    <div className="home-stack dashboard-home">
+      {setupVisible ? (
+        <GetToFirstValue
+          inboxCount={inboxCount}
+          plannedCount={plannedCount}
+          onOpenInbox={onOpenInbox}
+          onDismiss={() => setSetupVisible(false)}
+          collapsed={setupCollapsed}
+          onToggleCollapse={() => setSetupCollapsed(current => !current)}
+        />
+      ) : (
+        <button
+          type="button"
+          className="ghost-button setup-reveal-button"
+          onClick={() => {
+            setSetupVisible(true);
+            setSetupCollapsed(false);
+          }}
+        >
+          Show setup
+        </button>
+      )}
+
+      <section className="daily-execution-shell">
+        <Priorities
+          plannedTasks={plannedTasks}
+          activeTasks={activeTasks}
+          doneTasks={doneTasks}
+          sharedHandlers={sharedHandlers}
+          onCreateEmptyTask={onCreateEmptyTask}
+          onMoveToExecution={onMoveToExecution}
+          onMoveBackToPlanning={onMoveBackToPlanning}
+          onMarkDone={onMarkTaskDone}
+        />
+      </section>
+
+      <div className="supporting-card-stack">
+        <MealCard
+          meal={meal}
+          onOpenNutrition={onOpenNutrition}
+          collapsed={collapsedCards.meal}
+          onToggleCollapse={() => toggleCard('meal')}
+          toggleLabel={collapsedCards.meal ? 'Expand' : 'Collapse'}
+        />
+        <WorkoutCard
+          workout={workout}
+          onOpenWorkout={openWorkout}
+          collapsed={collapsedCards.workout}
+          onToggleCollapse={() => toggleCard('workout')}
+          toggleLabel={collapsedCards.workout ? 'Expand' : 'Collapse'}
+        />
+        <TaskFlowCard
+          plannedCount={plannedCount}
+          activeCount={activeCount}
+          doneCount={doneCount}
+          collapsed={collapsedCards.flow}
+          onToggleCollapse={() => toggleCard('flow')}
+          toggleLabel={collapsedCards.flow ? 'Expand' : 'Collapse'}
+        />
       </div>
     </div>
   );
