@@ -16,7 +16,15 @@ function BrainIcon() {
   );
 }
 
-export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickAdd }) {
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="toolbar-icon">
+      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.2 3.5c0-.36-.03-.7-.09-1.04l2.06-1.61-1.95-3.38-2.5 1a8.02 8.02 0 0 0-1.8-1.04l-.38-2.65H9.46l-.38 2.65c-.64.25-1.24.6-1.8 1.04l-2.5-1-1.95 3.38 2.06 1.61c-.06.34-.09.68-.09 1.04s.03.7.09 1.04L2.83 14.65l1.95 3.38 2.5-1c.56.44 1.16.79 1.8 1.04l.38 2.65h5.88l.38-2.65c.64-.25 1.24-.6 1.8-1.04l2.5 1 1.95-3.38-2.06-1.61c.06-.34.09-.68.09-1.04Z" />
+    </svg>
+  );
+}
+
+export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickAdd, onOpenSettings }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -53,6 +61,9 @@ export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickA
         </button>
         <button type="button" className="icon-button filled-icon-button" onClick={onOpenQuickAdd} aria-label="Open quick add">
           <BrainIcon />
+        </button>
+        <button type="button" className="icon-button" onClick={onOpenSettings} aria-label="Open settings">
+          <SettingsIcon />
         </button>
       </div>
     </header>

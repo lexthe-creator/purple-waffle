@@ -14,6 +14,7 @@
   --shadow: 0 12px 30px rgba(31, 39, 48, 0.08);
   --shell-width: 430px;
   --header-height: 72px;
+  --bottom-nav-height: 76px;
 }
 
 * {
@@ -77,6 +78,7 @@ p {
   flex-direction: column;
   background: rgba(255, 255, 255, 0.36);
   backdrop-filter: blur(10px);
+  position: relative;
 }
 
 .app-header {
@@ -87,7 +89,7 @@ p {
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  padding: 16px 16px 12px;
+  padding: calc(env(safe-area-inset-top) + 16px) 16px 12px;
   min-height: var(--header-height);
   background: rgba(243, 239, 232, 0.9);
   border-bottom: 1px solid rgba(214, 221, 228, 0.75);
@@ -211,8 +213,18 @@ p {
 
 .app-content {
   flex: 1;
-  padding: 12px 14px calc(env(safe-area-inset-bottom) + 20px);
+  padding: 12px 14px calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 24px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.root-tab-panel {
+  display: block;
 }
 
 .dashboard-stack {
@@ -666,6 +678,36 @@ p {
   overflow: auto;
 }
 
+.settings-sheet {
+  width: min(100%, var(--shell-width));
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+}
+
+.settings-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-card {
+  border-radius: 18px;
+  border: 1px solid rgba(47, 64, 90, 0.08);
+  background: var(--surface);
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.settings-card strong {
+  color: var(--text);
+}
+
+.settings-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .notification-item.is-read {
   opacity: 0.62;
 }
@@ -722,10 +764,9 @@ p {
 
 .fab-button {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 18px;
-  z-index: 25;
+  right: max(16px, calc((100vw - var(--shell-width)) / 2 + 16px));
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  z-index: 31;
   width: 56px;
   height: 56px;
   border: none;
@@ -736,6 +777,41 @@ p {
   line-height: 1;
   box-shadow: var(--shadow);
   cursor: pointer;
+}
+
+.bottom-nav {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: min(100%, var(--shell-width));
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  padding: 10px 10px calc(env(safe-area-inset-bottom) + 10px);
+  background: rgba(243, 239, 232, 0.96);
+  border-top: 1px solid rgba(214, 221, 228, 0.88);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 -10px 28px rgba(31, 39, 48, 0.08);
+}
+
+.bottom-nav-button {
+  min-height: 54px;
+  padding: 8px 6px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.bottom-nav-button.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  font-weight: 700;
 }
 
 @media (max-width: 420px) {
@@ -759,5 +835,10 @@ p {
 
   .modal-backdrop {
     padding: 12px;
+  }
+
+  .fab-button {
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom) + 84px);
   }
 }
