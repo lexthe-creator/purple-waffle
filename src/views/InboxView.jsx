@@ -11,7 +11,9 @@ export default function InboxView({ isOpen, notifications, onClose, onMarkAllRea
             <p className="eyebrow">Inbox</p>
             <h2>Notification center</h2>
           </div>
-          <button type="button" className="ghost-button" onClick={onMarkAllRead}>Mark all read</button>
+          <button type="button" className="ghost-button compact-ghost" onClick={onMarkAllRead}>
+            Mark all read
+          </button>
         </div>
         <div className="notification-list">
           {notifications.length === 0 ? (

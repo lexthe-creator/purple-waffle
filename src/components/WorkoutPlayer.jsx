@@ -5,12 +5,18 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
   const [completedExerciseIds, setCompletedExerciseIds] = useState([]);
 
   useEffect(() => {
+    setElapsed(0);
+    setCompletedExerciseIds([]);
+  }, [workout?.id]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setElapsed(current => current + 1), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
   const seconds = String(elapsed % 60).padStart(2, '0');
+
   const progress = useMemo(() => {
     if (!workout?.exercises?.length) return 0;
     return Math.round((completedExerciseIds.length / workout.exercises.length) * 100);
@@ -30,8 +36,9 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
     <section className="task-card workout-player">
       <div className="task-card-header workout-player-header">
         <div>
-          <p className="eyebrow">Workout player mode</p>
-          <h2>{workout.name}</h2>
+          <p className="eyebrow">Workout player</p>
+          <h2>Active workout</h2>
+          <strong className="workout-title">{workout.name}</strong>
         </div>
         <div className="workout-meta-block">
           <strong>{minutes}:{seconds}</strong>
@@ -47,7 +54,12 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
         {workout.exercises.map(exercise => {
           const done = completedExerciseIds.includes(exercise.id);
           return (
-            <button key={exercise.id} type="button" className={`workout-step ${done ? 'is-complete' : ''}`} onClick={() => toggleExercise(exercise.id)}>
+            <button
+              key={exercise.id}
+              type="button"
+              className={`workout-step ${done ? 'is-complete' : ''}`}
+              onClick={() => toggleExercise(exercise.id)}
+            >
               <div>
                 <strong>{exercise.name}</strong>
                 <p>{exercise.detail}</p>
@@ -59,8 +71,12 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
       </div>
 
       <div className="workout-controls">
-        <button type="button" className="ghost-button" onClick={onCancel}>Cancel workout</button>
-        <button type="button" className="primary-button" onClick={onComplete}>Complete workout</button>
+        <button type="button" className="ghost-button compact-ghost" onClick={onCancel}>
+          Cancel workout
+        </button>
+        <button type="button" className="primary-button" onClick={onComplete}>
+          Complete workout
+        </button>
       </div>
     </section>
   );

@@ -1,70 +1,26 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import WeeklyPreview from './components/WeeklyPreview.jsx';
-import HomeView from './views/HomeView.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
 import './styles.css';
 
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
-const TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'nutrition', label: 'Nutrition' },
-  { id: 'fitness', label: 'Fitness' },
-  { id: 'more', label: 'More' },
-];
 
 function formatDateLabel(value) {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(value));
 }
 
-function DashboardIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
-      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h5A1.5 1.5 0 0 1 12 5.5v4A1.5 1.5 0 0 1 10.5 11h-5A1.5 1.5 0 0 1 4 9.5v-4Zm8 0A1.5 1.5 0 0 1 13.5 4h5A1.5 1.5 0 0 1 20 5.5v7A1.5 1.5 0 0 1 18.5 14h-5A1.5 1.5 0 0 1 12 12.5v-7Zm-8 8A1.5 1.5 0 0 1 5.5 12h5A1.5 1.5 0 0 1 12 13.5v5A1.5 1.5 0 0 1 10.5 20h-5A1.5 1.5 0 0 1 4 18.5v-5Zm8 4A1.5 1.5 0 0 1 13.5 16h5A1.5 1.5 0 0 1 20 17.5v1A1.5 1.5 0 0 1 18.5 20h-5A1.5 1.5 0 0 1 12 18.5v-1Z" />
-    </svg>
-  );
-}
-
-function CalendarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
-      <path d="M7 3.5a1 1 0 0 1 1 1V5h8v-.5a1 1 0 1 1 2 0V5h.5A2.5 2.5 0 0 1 21 7.5v11A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5v-11A2.5 2.5 0 0 1 5.5 5H6v-.5a1 1 0 0 1 1-1Zm11.5 7.5v-3h-13v3h13Z" />
-    </svg>
-  );
-}
-
-function NutritionIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
-      <path d="M7.5 4a1 1 0 0 1 1 1v5c0 1.1.9 2 2 2V5a1 1 0 1 1 2 0v7c1.1 0 2-.9 2-2V5a1 1 0 1 1 2 0v5c0 2.14-1.62 3.91-3.7 4.14V20a1 1 0 1 1-2 0v-5.86C9.12 13.91 7.5 12.14 7.5 10V5a1 1 0 0 1 1-1Z" />
-    </svg>
-  );
-}
-
-function FitnessIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
-      <path d="M5 8a2 2 0 1 1 4 0v8a2 2 0 1 1-4 0V8Zm10-1a1 1 0 0 1 1 1v1h1a2 2 0 1 1 0 4h-1v1a1 1 0 1 1-2 0v-1h-4v1a1 1 0 1 1-2 0v-1H7a2 2 0 1 1 0-4h1V8a1 1 0 1 1 2 0v1h4V8a1 1 0 0 1 1-1Zm4 1a2 2 0 1 1 0 4v-4Z" />
-    </svg>
-  );
-}
-
-function MoreIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
-      <path d="M5 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm5 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm5 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
-    </svg>
-  );
-}
-
-function Dashboard() {
+function AppShell() {
   const {
     quickAddOpen,
     setQuickAddOpen,
@@ -92,12 +48,17 @@ function Dashboard() {
     createSubtask,
   } = useTaskContext();
 
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [quickMealName, setQuickMealName] = useState('');
-  const [quickMealTags, setQuickMealTags] = useState([]);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
+  const [mealName, setMealName] = useState('');
+  const [mealTags, setMealTags] = useState([]);
+  const [energyDraft, setEnergyDraft] = useState({
+    value: energyState.value ?? 3,
+    sleepHours: energyState.sleepHours ?? 7,
+    sleepSource: energyState.sleepSource === 'integrated' ? 'integrated' : 'manual',
+  });
   const [weeklyItems, setWeeklyItems] = useState(() => {
     const now = new Date();
+
     return [
       {
         id: 'week-1',
@@ -123,21 +84,37 @@ function Dashboard() {
     ];
   });
 
-  const plannedTasks = useMemo(() => tasks.filter(task => task.status === 'planned'), [tasks]);
-  const activeTasks = useMemo(() => tasks.filter(task => task.status === 'active'), [tasks]);
-  const doneTasks = useMemo(() => tasks.filter(task => task.status === 'done'), [tasks]);
-  const completedTasks = doneTasks;
-  const unreadNotifications = useMemo(() => notifications.filter(notification => !notification.read), [notifications]);
+  useEffect(() => {
+    setEnergyDraft({
+      value: energyState.value ?? 3,
+      sleepHours: energyState.sleepHours ?? 7,
+      sleepSource: energyState.sleepSource === 'integrated' ? 'integrated' : 'manual',
+    });
+  }, [energyState.value, energyState.sleepHours, energyState.sleepSource]);
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter(notification => !notification.read),
+    [notifications],
+  );
+
+  const orderedTasks = useMemo(() => {
+    const rank = { active: 0, planned: 1, done: 2 };
+    return [...tasks].sort((a, b) => {
+      const statusDelta = rank[a.status] - rank[b.status];
+      if (statusDelta !== 0) return statusDelta;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+  }, [tasks]);
+
+  const activeTasks = useMemo(() => orderedTasks.filter(task => task.status !== 'done'), [orderedTasks]);
+  const completedTasks = useMemo(() => orderedTasks.filter(task => task.status === 'done'), [orderedTasks]);
+  const latestMeal = meals[0] ?? null;
+  const latestNote = notes[0] ?? null;
   const activeWorkout = useMemo(
     () => workouts.find(workout => workout.id === activeWorkoutId) ?? null,
     [workouts, activeWorkoutId],
   );
-  const latestMeal = meals[0];
-  const dashboardWorkout = activeWorkout ?? workouts[0] ?? null;
-  const weeklyViewItems = useMemo(
-    () => weeklyItems.map(item => ({ ...item, dateLabel: formatDateLabel(item.date) })),
-    [weeklyItems],
-  );
+  const nextWorkout = workouts[0] ?? null;
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
@@ -147,47 +124,8 @@ function Dashboard() {
     setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
   }
 
-  function moveTask(taskId, direction) {
-    setTasks(current => {
-      const index = current.findIndex(task => task.id === taskId);
-      if (index === -1) return current;
-
-      const nextIndex = Math.max(0, Math.min(current.length - 1, index + direction));
-      if (nextIndex === index) return current;
-
-      const next = [...current];
-      const [task] = next.splice(index, 1);
-      next.splice(nextIndex, 0, task);
-      return next;
-    });
-  }
-
-  function commitTaskTitle(taskId, title) {
-    updateTask(taskId, { title });
-  }
-
-  function commitTaskNotes(taskId, notes) {
-    updateTask(taskId, { notes });
-  }
-
-  function addInlineTask() {
-    setTasks(current => [createTask({ status: 'active', shouldFocusTitle: true }), ...current]);
-  }
-
-  function addEmptyPriorityTask() {
-    setTasks(current => [createTask({ status: 'planned', shouldFocusTitle: true }), ...current]);
-  }
-
   function deleteTask(taskId) {
     setTasks(current => current.filter(task => task.id !== taskId));
-  }
-
-  function moveTaskToExecution(taskId) {
-    updateTask(taskId, { status: 'active' });
-  }
-
-  function moveTaskBackToPlanning(taskId) {
-    updateTask(taskId, { status: 'planned' });
   }
 
   function toggleTaskDone(taskId) {
@@ -196,6 +134,10 @@ function Dashboard() {
         ? { ...task, status: task.status === 'done' ? 'active' : 'done' }
         : task
     )));
+  }
+
+  function setTaskStatus(taskId, status) {
+    updateTask(taskId, { status });
   }
 
   function toggleSubtask(taskId, subtaskId) {
@@ -219,48 +161,60 @@ function Dashboard() {
     )));
   }
 
-  function handleQuickAdd({ type, value, meta }) {
+  function addInlineTask() {
+    setTasks(current => [createTask({ status: 'active', shouldFocusTitle: true }), ...current]);
+  }
+
+  function handleQuickAdd({ type, title, notes: noteText, tags, duration, content }) {
     if (type === 'task') {
-      setTasks(current => [createTask({ status: 'active', title: value, notes: meta }), ...current]);
-      upsertNotification('Task captured', value);
+      const taskTitle = title.trim();
+      if (!taskTitle) return;
+
+      setTasks(current => [createTask({ status: 'active', title: taskTitle, notes: noteText }), ...current]);
+      upsertNotification('Task captured', taskTitle);
       return;
     }
 
     if (type === 'meal') {
-      setMeals(current => [
-        createMeal({
-          name: value,
-          tags: meta ? meta.split(',').map(tag => tag.trim()).filter(Boolean) : [],
-        }),
-        ...current,
-      ]);
-      upsertNotification('Meal logged', value);
+      const mealTitle = title.trim();
+      if (!mealTitle) return;
+
+      setMeals(current => [createMeal({ name: mealTitle, tags }), ...current]);
+      upsertNotification('Meal logged', mealTitle);
       return;
     }
 
     if (type === 'workout') {
-      setWorkouts(current => [createWorkout({ name: value, duration: Number.parseInt(meta, 10) || 30 }), ...current]);
-      upsertNotification('Workout ready', value);
+      const workoutTitle = title.trim();
+      if (!workoutTitle) return;
+
+      setWorkouts(current => [createWorkout({ name: workoutTitle, duration: Number.isFinite(duration) ? duration : 30 }), ...current]);
+      upsertNotification('Workout saved', workoutTitle);
       return;
     }
 
-    setNotes(current => [createNote({ content: value + (meta ? ` — ${meta}` : '') }), ...current]);
-    upsertNotification('Note saved', value);
+    const note = content.trim();
+    if (!note) return;
+
+    setNotes(current => [createNote({ content: note }), ...current]);
+    upsertNotification('Note saved', note.slice(0, 40));
   }
 
-  function submitQuickMeal() {
-    const trimmed = quickMealName.trim();
+  function submitMeal() {
+    const trimmed = mealName.trim();
     if (!trimmed) return;
 
-    setMeals(current => [createMeal({ name: trimmed, tags: quickMealTags }), ...current]);
-    setQuickMealName('');
-    setQuickMealTags([]);
-    upsertNotification('Quick meal added', trimmed);
+    setMeals(current => [createMeal({ name: trimmed, tags: mealTags }), ...current]);
+    setMealName('');
+    setMealTags([]);
+    upsertNotification('Meal logged', trimmed);
   }
 
-  function beginWorkout(workoutId) {
+  function startWorkout(workoutId) {
     setActiveWorkoutId(workoutId);
-    setWorkouts(current => current.map(workout => (workout.id === workoutId ? { ...workout, status: 'active' } : workout)));
+    setWorkouts(current => current.map(workout => (
+      workout.id === workoutId ? { ...workout, status: 'active' } : workout
+    )));
   }
 
   function cancelWorkout() {
@@ -282,23 +236,36 @@ function Dashboard() {
     setActiveWorkoutId(null);
   }
 
-  function applyEnergyCheckIn(value, sleepHours, sleepSource) {
+  function saveEnergyCheckIn() {
     setEnergyState({
-      value,
-      sleepHours,
-      sleepSource,
+      value: Number.isFinite(energyDraft.value) ? energyDraft.value : 3,
+      sleepHours: Number.isFinite(energyDraft.sleepHours) ? energyDraft.sleepHours : 7,
+      sleepSource: energyDraft.sleepSource,
       lastCheckIn: new Date().toISOString(),
     });
+    upsertNotification('Check-in saved', 'Energy and sleep updated');
   }
 
-  function skipCheckIn() {
-    setEnergyState(current => ({
-      value: current.value ?? 3,
-      sleepHours: current.sleepHours ?? 7,
-      sleepSource: current.lastCheckIn ? 'last known' : 'baseline',
-      lastCheckIn: current.lastCheckIn,
-    }));
-    upsertNotification('Energy auto-generated', 'Using your last known energy baseline.');
+  function skipEnergyCheckIn() {
+    setEnergyState(current => {
+      const fallbackValue = current.value ?? 3;
+      const fallbackSleep = current.sleepHours ?? 7;
+      const fallbackSource =
+        current.sleepSource === 'integrated'
+          ? 'integrated'
+          : current.lastCheckIn
+            ? 'last known'
+            : 'baseline';
+
+      return {
+        value: fallbackValue,
+        sleepHours: fallbackSleep,
+        sleepSource: fallbackSource,
+        lastCheckIn: new Date().toISOString(),
+      };
+    });
+
+    upsertNotification('Energy auto-generated', 'Using your latest known baseline');
   }
 
   function updateWeeklyItem(itemId, updates) {
@@ -309,201 +276,11 @@ function Dashboard() {
     setNotifications(current => current.map(notification => ({ ...notification, read: true })));
   }
 
-  function renderDashboardPanel() {
-    return (
-      <HomeView
-        inboxCount={unreadNotifications.length}
-        plannedTasks={plannedTasks}
-        activeTasks={activeTasks}
-        doneTasks={doneTasks}
-        sharedHandlers={{
-          onCommitTitle: commitTaskTitle,
-          onCommitNotes: commitTaskNotes,
-          onDelete: deleteTask,
-          onMove: moveTask,
-        }}
-        onCreateEmptyTask={addEmptyPriorityTask}
-        onMoveToExecution={moveTaskToExecution}
-        onMoveBackToPlanning={moveTaskBackToPlanning}
-        onOpenInbox={() => setNotificationCenterOpen(true)}
-        onOpenNutrition={() => setActiveTab('nutrition')}
-        onOpenWorkout={workout => {
-          if (workout?.id) {
-            beginWorkout(workout.id);
-          }
-          setActiveTab('fitness');
-        }}
-        onMarkTaskDone={toggleTaskDone}
-        meal={latestMeal}
-        workout={dashboardWorkout}
-      />
-    );
-  }
-
-  function renderCalendarPanel() {
-    return (
-      <div className="tab-panel">
-        <WeeklyPreview
-          items={weeklyViewItems}
-          onStatusChange={(itemId, status) => updateWeeklyItem(itemId, { status })}
-          onDateChange={(itemId, date) => updateWeeklyItem(itemId, { date })}
-          onToggleReschedule={itemId => updateWeeklyItem(itemId, {
-            rescheduleOpen: !weeklyItems.find(item => item.id === itemId)?.rescheduleOpen,
-          })}
-        />
-      </div>
-    );
-  }
-
-  function renderNutritionPanel() {
-    return (
-      <div className="tab-panel">
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">Nutrition</p>
-              <h2>Quick add meal</h2>
-            </div>
-          </div>
-          <div className="quick-entry-row">
-            <input
-              className="task-title-input"
-              value={quickMealName}
-              onChange={event => setQuickMealName(event.target.value)}
-              placeholder="Meal name"
-            />
-            <button type="button" className="primary-button" onClick={submitQuickMeal}>Save</button>
-          </div>
-          <div className="tag-row">
-            {QUICK_MEAL_TAGS.map(tag => (
-              <button
-                key={tag}
-                type="button"
-                className={`status-chip ${quickMealTags.includes(tag) ? 'is-active' : ''}`}
-                onClick={() => setQuickMealTags(current => (
-                  current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]
-                ))}
-              >
-                {tag}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">Recent meals</p>
-              <h2>Logged items</h2>
-            </div>
-          </div>
-          <div className="simple-feed">
-            {meals.length === 0 ? (
-              <p className="empty-message">No meals logged yet.</p>
-            ) : (
-              meals.map(meal => (
-                <article key={meal.id} className="feed-card">
-                  <strong>{meal.name}</strong>
-                  <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-  function renderFitnessPanel() {
-    return (
-      <div className="tab-panel">
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">Fitness</p>
-              <h2>Start and finish in one place</h2>
-            </div>
-          </div>
-          {activeWorkout ? (
-            <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
-          ) : (
-            <div className="workout-stack">
-              {workouts.map(workout => (
-                <article key={workout.id} className="feed-card">
-                  <strong>{workout.name}</strong>
-                  <p>{workout.duration} min · {workout.status}</p>
-                  <button type="button" className="secondary-button" onClick={() => beginWorkout(workout.id)}>
-                    {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
-                  </button>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    );
-  }
-
-  function renderMorePanel() {
-    return (
-      <div className="tab-panel">
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">More</p>
-              <h2>Recent notes</h2>
-            </div>
-          </div>
-          <div className="simple-feed">
-            {notes.length === 0 ? (
-              <p className="empty-message">No notes captured yet.</p>
-            ) : (
-              notes.map(note => (
-                <article key={note.id} className="feed-card">
-                  <p>{note.content}</p>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="task-card quiet-card">
-          <div className="task-card-header compact-header">
-            <div>
-              <p className="eyebrow">Completed</p>
-              <h2>Finished today</h2>
-            </div>
-          </div>
-          <div className="simple-feed">
-            {completedTasks.length === 0 ? (
-              <p className="empty-message">Completed tasks will land here.</p>
-            ) : (
-              completedTasks.map(task => (
-                <article key={task.id} className="feed-card done-card">
-                  <strong>{task.title || 'Untitled task'}</strong>
-                </article>
-              ))
-            )}
-          </div>
-        </section>
-      </div>
-    );
-  }
-
-  function renderActivePanel() {
-    switch (activeTab) {
-      case 'calendar':
-        return renderCalendarPanel();
-      case 'nutrition':
-        return renderNutritionPanel();
-      case 'fitness':
-        return renderFitnessPanel();
-      case 'more':
-        return renderMorePanel();
-      case 'dashboard':
-      default:
-        return renderDashboardPanel();
-    }
+  function getEnergyLabel() {
+    if (energyState.sleepSource === 'integrated') return 'Integrated';
+    if (energyState.sleepSource === 'manual') return 'Manual';
+    if (energyState.sleepSource === 'last known') return 'Last known';
+    return 'Baseline';
   }
 
   return (
@@ -529,43 +306,238 @@ function Dashboard() {
       />
 
       <main className="app-content">
-        {renderActivePanel()}
+        <div className="dashboard-stack">
+          <section className="task-card execution-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Execution mode</p>
+                <h2>Run the day from here</h2>
+              </div>
+              <button type="button" className="primary-button" onClick={addInlineTask}>
+                + Add task
+              </button>
+            </div>
+
+            <div className="summary-row">
+              <div className="summary-tile">
+                <span>Active</span>
+                <strong>{activeTasks.length}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Done</span>
+                <strong>{completedTasks.length}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Inbox</span>
+                <strong>{unreadNotifications.length}</strong>
+              </div>
+            </div>
+
+            <div className="execution-list">
+              {orderedTasks.length === 0 ? (
+                <div className="empty-panel">
+                  <strong>No tasks yet</strong>
+                  <p>Capture one inline and keep moving.</p>
+                </div>
+              ) : (
+                orderedTasks.map(task => (
+                  <ExecutionTaskItem
+                    key={task.id}
+                    task={task}
+                    onUpdateTask={updateTask}
+                    onDeleteTask={deleteTask}
+                    onToggleDone={toggleTaskDone}
+                    onToggleSubtask={toggleSubtask}
+                    onAddSubtask={addSubtask}
+                    onSetStatus={setTaskStatus}
+                  />
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Quick meal</p>
+                <h2>Add a meal in one step</h2>
+              </div>
+            </div>
+
+            <div className="quick-entry-row">
+              <input
+                className="task-title-input"
+                value={mealName}
+                onChange={event => setMealName(event.target.value)}
+                placeholder="Meal name"
+              />
+              <button type="button" className="primary-button" onClick={submitMeal}>
+                Save
+              </button>
+            </div>
+
+            <div className="tag-row">
+              {QUICK_MEAL_TAGS.map(tag => (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`status-chip ${mealTags.includes(tag) ? 'is-active' : ''}`}
+                  onClick={() => setMealTags(current => (
+                    current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]
+                  ))}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+
+            <div className="subtle-feed">
+              {latestMeal ? (
+                <div className="feed-card">
+                  <strong>{latestMeal.name}</strong>
+                  <p>{latestMeal.tags.length ? latestMeal.tags.join(' · ') : 'No tags yet'}</p>
+                </div>
+              ) : (
+                <p className="empty-message">No meals logged yet.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Workout</p>
+                <h2>Start and finish in one place</h2>
+              </div>
+            </div>
+
+            {activeWorkout ? (
+              <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
+            ) : (
+              <div className="workout-stack">
+                {workouts.length === 0 ? (
+                  <div className="empty-panel">
+                    <strong>No workout yet</strong>
+                    <p>Capture one with the add button or start from a template.</p>
+                  </div>
+                ) : (
+                  workouts.map(workout => (
+                    <article key={workout.id} className="feed-card workout-card">
+                      <strong>{workout.name}</strong>
+                      <p>{workout.duration} min · {workout.status}</p>
+                      <button type="button" className="secondary-button" onClick={() => startWorkout(workout.id)}>
+                        {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
+                      </button>
+                    </article>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Energy</p>
+                <h2>Check in without breaking flow</h2>
+              </div>
+            </div>
+
+            <div className="energy-strip">
+              <div className="metric-card">
+                <span>Energy</span>
+                <strong>{energyState.value}/5</strong>
+              </div>
+              <div className="metric-card">
+                <span>Sleep</span>
+                <strong>{energyState.sleepHours}h</strong>
+              </div>
+              <div className="metric-card">
+                <span>Source</span>
+                <strong>{getEnergyLabel()}</strong>
+              </div>
+              <div className="metric-actions">
+                <div className="status-chip-group" role="group" aria-label="Energy rating">
+                  {[1, 2, 3, 4, 5].map(value => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`status-chip ${energyDraft.value === value ? 'is-active' : ''}`}
+                      onClick={() => setEnergyDraft(current => ({ ...current, value }))}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+                <label className="field-stack compact-field">
+                  <span>Sleep hours</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    className="task-title-input"
+                    value={energyDraft.sleepHours}
+                    onChange={event => setEnergyDraft(current => ({
+                      ...current,
+                      sleepHours: Number.parseFloat(event.target.value),
+                    }))}
+                  />
+                </label>
+                <div className="status-chip-group" role="group" aria-label="Sleep source">
+                  <button
+                    type="button"
+                    className={`status-chip ${energyDraft.sleepSource === 'manual' ? 'is-active' : ''}`}
+                    onClick={() => setEnergyDraft(current => ({ ...current, sleepSource: 'manual' }))}
+                  >
+                    Manual
+                  </button>
+                  <button
+                    type="button"
+                    className={`status-chip ${energyDraft.sleepSource === 'integrated' ? 'is-active' : ''}`}
+                    onClick={() => setEnergyDraft(current => ({ ...current, sleepSource: 'integrated' }))}
+                  >
+                    Integrated
+                  </button>
+                </div>
+                <button type="button" className="secondary-button" onClick={saveEnergyCheckIn}>
+                  Save check-in
+                </button>
+                <button type="button" className="ghost-button compact-ghost" onClick={skipEnergyCheckIn}>
+                  Skip check-in
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <WeeklyPreview
+            items={weeklyItems.map(item => ({ ...item, dateLabel: formatDateLabel(item.date) }))}
+            onStatusChange={(itemId, status) => updateWeeklyItem(itemId, { status })}
+            onDateChange={(itemId, date) => updateWeeklyItem(itemId, { date })}
+            onToggleReschedule={itemId => updateWeeklyItem(itemId, {
+              rescheduleOpen: !weeklyItems.find(item => item.id === itemId)?.rescheduleOpen,
+            })}
+          />
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Notes</p>
+                <h2>Recent captures</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {latestNote ? (
+                <article className="feed-card">
+                  <strong>{latestNote.content}</strong>
+                </article>
+              ) : (
+                <p className="empty-message">No notes captured yet.</p>
+              )}
+            </div>
+          </section>
+        </div>
       </main>
 
-      <button
-        type="button"
-        className="fab-button"
-        onClick={() => setQuickAddOpen(true)}
-        aria-label="Quick add"
-      >
-        +
-      </button>
-
-      <nav className="bottom-nav" aria-label="Primary navigation">
-        {TABS.map(tab => {
-          const active = activeTab === tab.id;
-          const icon = (
-            tab.id === 'dashboard' ? <DashboardIcon /> :
-            tab.id === 'calendar' ? <CalendarIcon /> :
-            tab.id === 'nutrition' ? <NutritionIcon /> :
-            tab.id === 'fitness' ? <FitnessIcon /> :
-            <MoreIcon />
-          );
-
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              className={`bottom-nav-item ${active ? 'is-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-              aria-current={active ? 'page' : undefined}
-            >
-              {icon}
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
     </div>
   );
 }
@@ -574,7 +546,7 @@ function App() {
   return (
     <TaskProvider>
       <AppProvider>
-        <Dashboard />
+        <AppShell />
       </AppProvider>
     </TaskProvider>
   );

@@ -2,62 +2,119 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const TYPES = ['task', 'meal', 'workout', 'note'];
 
+const INITIAL_STATE = {
+  type: 'task',
+  title: '',
+  notes: '',
+  tags: '',
+  duration: '',
+  content: '',
+};
+
 export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
-  const [type, setType] = useState('task');
-  const [value, setValue] = useState('');
-  const [meta, setMeta] = useState('');
-  const inputRef = useRef(null);
+  const [type, setType] = useState(INITIAL_STATE.type);
+  const [title, setTitle] = useState(INITIAL_STATE.title);
+  const [notes, setNotes] = useState(INITIAL_STATE.notes);
+  const [tags, setTags] = useState(INITIAL_STATE.tags);
+  const [duration, setDuration] = useState(INITIAL_STATE.duration);
+  const [content, setContent] = useState(INITIAL_STATE.content);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const titleRef = useRef(null);
+  const contentRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen) {
-      setType('task');
-      setValue('');
-      setMeta('');
+      setType(INITIAL_STATE.type);
+      setTitle(INITIAL_STATE.title);
+      setNotes(INITIAL_STATE.notes);
+      setTags(INITIAL_STATE.tags);
+      setDuration(INITIAL_STATE.duration);
+      setContent(INITIAL_STATE.content);
+      setNotesOpen(false);
       return undefined;
     }
 
-    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [isOpen]);
+    setTitle(INITIAL_STATE.title);
+    setNotes(INITIAL_STATE.notes);
+    setTags(INITIAL_STATE.tags);
+    setDuration(INITIAL_STATE.duration);
+    setContent(INITIAL_STATE.content);
+    setNotesOpen(false);
 
-  const config = useMemo(() => ({
-    task: {
-      title: 'Quick capture',
-      label: 'Task',
-      placeholder: 'What needs doing?',
-      metaLabel: 'Notes',
-      metaPlaceholder: 'Optional note',
-    },
-    meal: {
-      title: 'Quick capture',
-      label: 'Meal',
-      placeholder: 'What did you eat?',
-      metaLabel: 'Tags',
-      metaPlaceholder: 'protein, carbs, quick',
-    },
-    workout: {
-      title: 'Quick capture',
-      label: 'Workout',
-      placeholder: 'Workout name',
-      metaLabel: 'Duration',
-      metaPlaceholder: '30 min',
-    },
-    note: {
+    const frame = window.requestAnimationFrame(() => {
+      const focusTarget = type === 'note' ? contentRef.current : titleRef.current;
+      focusTarget?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen, type]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') onClose();
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  const config = useMemo(() => {
+    if (type === 'task') {
+      return {
+        title: 'Quick capture',
+        label: 'Task name',
+        placeholder: 'What needs attention?',
+        submitLabel: 'Save task',
+      };
+    }
+
+    if (type === 'meal') {
+      return {
+        title: 'Quick capture',
+        label: 'Meal name',
+        placeholder: 'What did you eat?',
+        submitLabel: 'Save meal',
+      };
+    }
+
+    if (type === 'workout') {
+      return {
+        title: 'Quick capture',
+        label: 'Workout name',
+        placeholder: 'Workout name',
+        submitLabel: 'Save workout',
+      };
+    }
+
+    return {
       title: 'Quick capture',
       label: 'Note',
       placeholder: 'Capture the thought',
-      metaLabel: 'Context',
-      metaPlaceholder: 'Optional context',
-    },
-  })[type], [type]);
+      submitLabel: 'Save note',
+    };
+  }, [type]);
 
   if (!isOpen) return null;
 
   function handleSubmit(event) {
     event.preventDefault();
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    onSubmit({ type, value: trimmed, meta: meta.trim() });
+
+    const trimmedTitle = title.trim();
+    const trimmedContent = content.trim();
+
+    if (type !== 'note' && !trimmedTitle) return;
+    if (type === 'note' && !trimmedContent) return;
+
+    onSubmit({
+      type,
+      title: trimmedTitle,
+      notes: notes.trim(),
+      tags: tags.split(',').map(tag => tag.trim()).filter(Boolean),
+      duration: Number.parseInt(duration, 10),
+      content: trimmedContent,
+    });
     onClose();
   }
 
@@ -67,7 +124,7 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
         <div className="modal-header">
           <div>
             <p className="eyebrow">{config.title}</p>
-            <h2>Add without leaving the flow</h2>
+            <h2>Capture without leaving the screen</h2>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close quick add">
             ×
@@ -88,26 +145,75 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
         </div>
 
         <form className="quick-add-form" onSubmit={handleSubmit}>
-          <label className="field-stack">
-            <span>{config.label}</span>
-            <input
-              ref={inputRef}
-              className="brain-dump-input"
-              value={value}
-              onChange={event => setValue(event.target.value)}
-              placeholder={config.placeholder}
-            />
-          </label>
-          <label className="field-stack">
-            <span>{config.metaLabel}</span>
-            <input
-              className="brain-dump-input"
-              value={meta}
-              onChange={event => setMeta(event.target.value)}
-              placeholder={config.metaPlaceholder}
-            />
-          </label>
-          <button type="submit" className="primary-button full-width">Save {type}</button>
+          {type === 'note' ? (
+            <label className="field-stack">
+              <span>{config.label}</span>
+              <textarea
+                ref={contentRef}
+                className="brain-dump-input quick-add-textarea"
+                value={content}
+                onChange={event => setContent(event.target.value)}
+                placeholder={config.placeholder}
+              />
+            </label>
+          ) : (
+            <label className="field-stack">
+              <span>{config.label}</span>
+              <input
+                ref={titleRef}
+                className="brain-dump-input"
+                value={title}
+                onChange={event => setTitle(event.target.value)}
+                placeholder={config.placeholder}
+              />
+            </label>
+          )}
+
+          {type === 'task' && (
+            <div className="inline-collapse">
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setNotesOpen(current => !current)}>
+                {notesOpen ? 'Hide notes' : 'Add notes'}
+              </button>
+              {notesOpen && (
+                <textarea
+                  className="notes-textarea"
+                  value={notes}
+                  onChange={event => setNotes(event.target.value)}
+                  placeholder="Optional notes"
+                />
+              )}
+            </div>
+          )}
+
+          {type === 'meal' && (
+            <label className="field-stack">
+              <span>Quick tags</span>
+              <input
+                className="brain-dump-input"
+                value={tags}
+                onChange={event => setTags(event.target.value)}
+                placeholder="protein, carbs, quick"
+              />
+            </label>
+          )}
+
+          {type === 'workout' && (
+            <label className="field-stack">
+              <span>Minutes</span>
+              <input
+                className="brain-dump-input"
+                type="number"
+                min="1"
+                value={duration}
+                onChange={event => setDuration(event.target.value)}
+                placeholder="30"
+              />
+            </label>
+          )}
+
+          <button type="submit" className="primary-button full-width">
+            {config.submitLabel}
+          </button>
         </form>
       </div>
     </div>
