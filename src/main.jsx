@@ -11,9 +11,56 @@ import { AppProvider, useAppContext } from './context/AppContext.jsx';
 import './styles.css';
 
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
+const TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'nutrition', label: 'Nutrition' },
+  { id: 'fitness', label: 'Fitness' },
+  { id: 'more', label: 'More' },
+];
 
 function formatDateLabel(value) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+}
+
+function DashboardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
+      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h5A1.5 1.5 0 0 1 12 5.5v4A1.5 1.5 0 0 1 10.5 11h-5A1.5 1.5 0 0 1 4 9.5v-4Zm8 0A1.5 1.5 0 0 1 13.5 4h5A1.5 1.5 0 0 1 20 5.5v7A1.5 1.5 0 0 1 18.5 14h-5A1.5 1.5 0 0 1 12 12.5v-7Zm-8 8A1.5 1.5 0 0 1 5.5 12h5A1.5 1.5 0 0 1 12 13.5v5A1.5 1.5 0 0 1 10.5 20h-5A1.5 1.5 0 0 1 4 18.5v-5Zm8 4A1.5 1.5 0 0 1 13.5 16h5A1.5 1.5 0 0 1 20 17.5v1A1.5 1.5 0 0 1 18.5 20h-5A1.5 1.5 0 0 1 12 18.5v-1Z" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
+      <path d="M7 3.5a1 1 0 0 1 1 1V5h8v-.5a1 1 0 1 1 2 0V5h.5A2.5 2.5 0 0 1 21 7.5v11A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5v-11A2.5 2.5 0 0 1 5.5 5H6v-.5a1 1 0 0 1 1-1Zm11.5 7.5v-3h-13v3h13Z" />
+    </svg>
+  );
+}
+
+function NutritionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
+      <path d="M7.5 4a1 1 0 0 1 1 1v5c0 1.1.9 2 2 2V5a1 1 0 1 1 2 0v7c1.1 0 2-.9 2-2V5a1 1 0 1 1 2 0v5c0 2.14-1.62 3.91-3.7 4.14V20a1 1 0 1 1-2 0v-5.86C9.12 13.91 7.5 12.14 7.5 10V5a1 1 0 0 1 1-1Z" />
+    </svg>
+  );
+}
+
+function FitnessIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
+      <path d="M5 8a2 2 0 1 1 4 0v8a2 2 0 1 1-4 0V8Zm10-1a1 1 0 0 1 1 1v1h1a2 2 0 1 1 0 4h-1v1a1 1 0 1 1-2 0v-1h-4v1a1 1 0 1 1-2 0v-1H7a2 2 0 1 1 0-4h1V8a1 1 0 1 1 2 0v1h4V8a1 1 0 0 1 1-1Zm4 1a2 2 0 1 1 0 4v-4Z" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="tab-icon">
+      <path d="M5 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm5 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm5 0a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" />
+    </svg>
+  );
 }
 
 function Dashboard() {
@@ -44,6 +91,7 @@ function Dashboard() {
     createSubtask,
   } = useTaskContext();
 
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [quickMealName, setQuickMealName] = useState('');
   const [quickMealTags, setQuickMealTags] = useState([]);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
@@ -222,29 +270,9 @@ function Dashboard() {
     setNotifications(current => current.map(notification => ({ ...notification, read: true })));
   }
 
-  return (
-    <div className="app-shell">
-      <Header
-        userName="Alex"
-        inboxCount={unreadNotifications.length}
-        onOpenInbox={() => setNotificationCenterOpen(true)}
-        onOpenQuickAdd={() => setQuickAddOpen(true)}
-      />
-
-      <QuickAddModal
-        isOpen={quickAddOpen}
-        onClose={() => setQuickAddOpen(false)}
-        onSubmit={handleQuickAdd}
-      />
-
-      <InboxView
-        isOpen={notificationCenterOpen}
-        notifications={notifications}
-        onClose={() => setNotificationCenterOpen(false)}
-        onMarkAllRead={markAllNotificationsRead}
-      />
-
-      <main className="app-content single-flow-layout">
+  function renderDashboardPanel() {
+    return (
+      <div className="tab-panel">
         <section className="task-card quiet-card">
           <div className="task-card-header compact-header">
             <div>
@@ -287,110 +315,36 @@ function Dashboard() {
           </div>
         </section>
 
-        <div className="dashboard-columns">
-          <section className="task-card quiet-card">
-            <div className="task-card-header compact-header">
-              <div>
-                <p className="eyebrow">Meals</p>
-                <h2>Quick add meal</h2>
-              </div>
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">Quick glance</p>
+              <h2>Most recent activity</h2>
             </div>
-            <div className="quick-entry-row">
-              <input
-                className="task-title-input"
-                value={quickMealName}
-                onChange={event => setQuickMealName(event.target.value)}
-                placeholder="Meal name"
-              />
-              <button type="button" className="primary-button" onClick={submitQuickMeal}>Save</button>
-            </div>
-            <div className="tag-row">
-              {QUICK_MEAL_TAGS.map(tag => (
-                <button
-                  key={tag}
-                  type="button"
-                  className={`status-chip ${quickMealTags.includes(tag) ? 'is-active' : ''}`}
-                  onClick={() => setQuickMealTags(current => (
-                    current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]
-                  ))}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-            <div className="feed-card">
+          </div>
+
+          <div className="simple-feed">
+            <article className="feed-card">
               <strong>{latestMeal?.name || 'No meals logged yet'}</strong>
-              <p>{latestMeal?.tags?.length ? latestMeal.tags.join(' · ') : 'Single-step meal logging is ready.'}</p>
-            </div>
-          </section>
+              <p>{latestMeal?.tags?.length ? latestMeal.tags.join(' · ') : 'Meal capture is ready.'}</p>
+            </article>
+            <article className="feed-card">
+              <strong>{activeWorkout?.name || 'No active workout'}</strong>
+              <p>{activeWorkout ? `${activeWorkout.duration} min · in progress` : 'Workout tracking is standing by.'}</p>
+            </article>
+            <article className="feed-card">
+              <strong>{unreadNotifications.length} unread notifications</strong>
+              <p>{unreadNotifications.length ? 'Open More to review the inbox.' : 'Everything is read.'}</p>
+            </article>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
-          <section className="task-card quiet-card">
-            <div className="task-card-header compact-header">
-              <div>
-                <p className="eyebrow">Workout</p>
-                <h2>Start and finish in one place</h2>
-              </div>
-            </div>
-            {activeWorkout ? (
-              <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
-            ) : (
-              <div className="workout-stack">
-                {workouts.map(workout => (
-                  <article key={workout.id} className="feed-card">
-                    <strong>{workout.name}</strong>
-                    <p>{workout.duration} min · {workout.status}</p>
-                    <button type="button" className="secondary-button" onClick={() => beginWorkout(workout.id)}>
-                      {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
-                    </button>
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <div className="dashboard-columns">
-          <section className="task-card quiet-card">
-            <div className="task-card-header compact-header">
-              <div>
-                <p className="eyebrow">Notes</p>
-                <h2>Recent captures</h2>
-              </div>
-            </div>
-            <div className="simple-feed">
-              {notes.length === 0 ? (
-                <p className="empty-message">No notes captured yet.</p>
-              ) : (
-                notes.map(note => (
-                  <article key={note.id} className="feed-card">
-                    <p>{note.content}</p>
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="task-card quiet-card">
-            <div className="task-card-header compact-header">
-              <div>
-                <p className="eyebrow">Completed</p>
-                <h2>Finished today</h2>
-              </div>
-            </div>
-            <div className="simple-feed">
-              {completedTasks.length === 0 ? (
-                <p className="empty-message">Completed tasks will land here.</p>
-              ) : (
-                completedTasks.map(task => (
-                  <article key={task.id} className="feed-card done-card">
-                    <strong>{task.title || 'Untitled task'}</strong>
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-
+  function renderCalendarPanel() {
+    return (
+      <div className="tab-panel">
         <WeeklyPreview
           items={weeklyViewItems}
           onStatusChange={(itemId, status) => updateWeeklyItem(itemId, { status })}
@@ -399,7 +353,221 @@ function Dashboard() {
             rescheduleOpen: !weeklyItems.find(item => item.id === itemId)?.rescheduleOpen,
           })}
         />
+      </div>
+    );
+  }
+
+  function renderNutritionPanel() {
+    return (
+      <div className="tab-panel">
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">Nutrition</p>
+              <h2>Quick add meal</h2>
+            </div>
+          </div>
+          <div className="quick-entry-row">
+            <input
+              className="task-title-input"
+              value={quickMealName}
+              onChange={event => setQuickMealName(event.target.value)}
+              placeholder="Meal name"
+            />
+            <button type="button" className="primary-button" onClick={submitQuickMeal}>Save</button>
+          </div>
+          <div className="tag-row">
+            {QUICK_MEAL_TAGS.map(tag => (
+              <button
+                key={tag}
+                type="button"
+                className={`status-chip ${quickMealTags.includes(tag) ? 'is-active' : ''}`}
+                onClick={() => setQuickMealTags(current => (
+                  current.includes(tag) ? current.filter(item => item !== tag) : [...current, tag]
+                ))}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">Recent meals</p>
+              <h2>Logged items</h2>
+            </div>
+          </div>
+          <div className="simple-feed">
+            {meals.length === 0 ? (
+              <p className="empty-message">No meals logged yet.</p>
+            ) : (
+              meals.map(meal => (
+                <article key={meal.id} className="feed-card">
+                  <strong>{meal.name}</strong>
+                  <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  function renderFitnessPanel() {
+    return (
+      <div className="tab-panel">
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">Fitness</p>
+              <h2>Start and finish in one place</h2>
+            </div>
+          </div>
+          {activeWorkout ? (
+            <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
+          ) : (
+            <div className="workout-stack">
+              {workouts.map(workout => (
+                <article key={workout.id} className="feed-card">
+                  <strong>{workout.name}</strong>
+                  <p>{workout.duration} min · {workout.status}</p>
+                  <button type="button" className="secondary-button" onClick={() => beginWorkout(workout.id)}>
+                    {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
+  function renderMorePanel() {
+    return (
+      <div className="tab-panel">
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">More</p>
+              <h2>Recent notes</h2>
+            </div>
+          </div>
+          <div className="simple-feed">
+            {notes.length === 0 ? (
+              <p className="empty-message">No notes captured yet.</p>
+            ) : (
+              notes.map(note => (
+                <article key={note.id} className="feed-card">
+                  <p>{note.content}</p>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="task-card quiet-card">
+          <div className="task-card-header compact-header">
+            <div>
+              <p className="eyebrow">Completed</p>
+              <h2>Finished today</h2>
+            </div>
+          </div>
+          <div className="simple-feed">
+            {completedTasks.length === 0 ? (
+              <p className="empty-message">Completed tasks will land here.</p>
+            ) : (
+              completedTasks.map(task => (
+                <article key={task.id} className="feed-card done-card">
+                  <strong>{task.title || 'Untitled task'}</strong>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  function renderActivePanel() {
+    switch (activeTab) {
+      case 'calendar':
+        return renderCalendarPanel();
+      case 'nutrition':
+        return renderNutritionPanel();
+      case 'fitness':
+        return renderFitnessPanel();
+      case 'more':
+        return renderMorePanel();
+      case 'dashboard':
+      default:
+        return renderDashboardPanel();
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <Header
+        userName="Alex"
+        inboxCount={unreadNotifications.length}
+        onOpenInbox={() => setNotificationCenterOpen(true)}
+        onOpenQuickAdd={() => setQuickAddOpen(true)}
+      />
+
+      <QuickAddModal
+        isOpen={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
+        onSubmit={handleQuickAdd}
+      />
+
+      <InboxView
+        isOpen={notificationCenterOpen}
+        notifications={notifications}
+        onClose={() => setNotificationCenterOpen(false)}
+        onMarkAllRead={markAllNotificationsRead}
+      />
+
+      <main className="app-content">
+        {renderActivePanel()}
       </main>
+
+      <button
+        type="button"
+        className="fab-button"
+        onClick={() => setQuickAddOpen(true)}
+        aria-label="Quick add"
+      >
+        +
+      </button>
+
+      <nav className="bottom-nav" aria-label="Primary navigation">
+        {TABS.map(tab => {
+          const active = activeTab === tab.id;
+          const icon = (
+            tab.id === 'dashboard' ? <DashboardIcon /> :
+            tab.id === 'calendar' ? <CalendarIcon /> :
+            tab.id === 'nutrition' ? <NutritionIcon /> :
+            tab.id === 'fitness' ? <FitnessIcon /> :
+            <MoreIcon />
+          );
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              className={`bottom-nav-item ${active ? 'is-active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+              aria-current={active ? 'page' : undefined}
+            >
+              {icon}
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
