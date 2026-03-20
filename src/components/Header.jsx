@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 function InboxIcon() {
   return (
@@ -17,17 +17,31 @@ function BrainIcon() {
 }
 
 export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickAdd }) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const dateLabel = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-  }).format(new Date());
+  }).format(now);
+
+  const hour = now.getHours();
+  const greeting =
+    hour >= 5 && hour < 12 ? 'Good morning' :
+    hour >= 12 && hour < 17 ? 'Good afternoon' :
+    hour >= 17 && hour < 21 ? 'Good evening' :
+    'Good night';
 
   return (
     <header className="app-header">
       <div className="header-copy">
         <p className="header-date">{dateLabel}</p>
-        <h1>Good morning, {userName}</h1>
+        <h1>{greeting}, {userName}</h1>
       </div>
 
       <div className="header-actions" role="toolbar" aria-label="Global actions">
