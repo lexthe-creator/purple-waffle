@@ -220,12 +220,12 @@ p {
 .app-content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 24px);
+  padding: 10px 14px calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 20px);
 }
 
 .tab-panel {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .task-card,
@@ -237,9 +237,9 @@ p {
 
 .task-card {
   border-radius: 22px;
-  padding: 16px;
+  padding: 14px;
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .task-card-header {
@@ -250,7 +250,7 @@ p {
 .task-card h2,
 .modal-card h2 {
   margin: 4px 0 0;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   line-height: 1.15;
 }
 
@@ -592,7 +592,7 @@ p {
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
   border-top: 1px solid rgba(216, 224, 231, 0.85);
   background: rgba(244, 241, 236, 0.96);
   backdrop-filter: blur(14px);
@@ -602,11 +602,12 @@ p {
   border: none;
   background: transparent;
   color: var(--muted);
-  padding: 8px 4px;
+  padding: 10px 6px;
   display: grid;
   justify-items: center;
   gap: 4px;
   cursor: pointer;
+  border-radius: 16px;
 }
 
 .bottom-nav-item span {
@@ -617,6 +618,8 @@ p {
 .bottom-nav-item.is-active {
   color: var(--primary);
   font-weight: 700;
+  background: rgba(47, 62, 92, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(47, 62, 92, 0.08);
 }
 
 .bottom-nav-item.is-active .tab-icon {
@@ -683,7 +686,7 @@ p {
 .summary-row,
 .summary-row-tight {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .summary-row {
@@ -698,6 +701,52 @@ p {
   display: grid;
   gap: 4px;
   justify-items: start;
+}
+
+.summary-tile-standalone {
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(47, 62, 92, 0.08);
+  background: var(--surface);
+}
+
+.summary-tile-standalone p {
+  margin: 0;
+}
+
+.dashboard-card-body {
+  display: grid;
+  gap: 10px;
+}
+
+.empty-fallback {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px dashed rgba(47, 62, 92, 0.16);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.card-toggle-button {
+  padding: 9px 12px;
+}
+
+.setup-reveal-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.full-width {
+  width: 100%;
 }
 
 .summary-tile strong {
@@ -720,14 +769,20 @@ p {
 
 .home-stack {
   display: grid;
-  gap: 16px;
+  gap: 12px;
+}
+
+.dashboard-home,
+.supporting-card-stack {
+  display: grid;
+  gap: 12px;
 }
 
 .context-card-grid,
 .dashboard-columns,
 .priorities-grid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: 1fr;
 }
 
