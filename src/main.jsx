@@ -582,8 +582,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   const [agendaExpanded, setAgendaExpanded] = useState(false);
   const [executionExpanded, setExecutionExpanded] = useState(true);
   const [mealsExpanded, setMealsExpanded] = useState(false);
-  const [prioritiesExpanded, setPrioritiesExpanded] = useState(false);
-  const [stripExpanded, setStripExpanded] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
   const dragStateRef = useRef({
     taskId: null,
@@ -670,32 +668,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     return workouts.find(workout => workout.status !== 'completed') ?? workouts[0] ?? null;
   }, [activeWorkout, workouts]);
 
-  const priorityItems = useMemo(
-    () => orderedTasks.filter(task => task.status === 'active' || task.subtasks.some(subtask => subtask.done === false)).slice(0, 4),
-    [orderedTasks],
-  );
-
-  const visiblePriorityItems = prioritiesExpanded ? priorityItems : priorityItems.slice(0, 2);
   const visibleExecutionTasks = executionExpanded ? orderedTasks : orderedTasks.slice(0, 3);
   const executionOverflowCount = Math.max(0, orderedTasks.length - visibleExecutionTasks.length);
-
-  const sevenDayStrip = useMemo(() => {
-    return Array.from({ length: 7 }, (_, index) => {
-      const day = addDays(now, index);
-      const key = toDateKey(day);
-      return {
-        id: key,
-        label: formatDateLabel(key),
-        date: key,
-        flaggedCount: [
-          ...tasks.filter(task => (task.status === 'active' || task.status === 'planned') && index <= 2),
-          ...meals.filter(meal => toDateKey(meal.loggedAt) === key),
-        ].length > 0 ? 1 : 0,
-      };
-    }).filter(item => item.flaggedCount > 0);
-  }, [meals, now, tasks]);
-
-  const visibleSevenDayStrip = stripExpanded ? sevenDayStrip : sevenDayStrip.slice(0, 3);
   const visibleMeals = mealsExpanded ? todaysMeals : todaysMeals.slice(0, 1);
 
   useEffect(() => {
@@ -914,250 +888,209 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
 
   return (
     <div className="tab-stack">
-      {/* 1. CONTEXT — greeting + summary tiles */}
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">{formatFullDate(now)}</p>
-            <h2>{getGreeting(now)}</h2>
-          </div>
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
-            {priorityOnly ? 'Priority only' : 'Show all'}
-          </button>
-        </div>
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Tasks</span>
-            <strong>{tasks.filter(task => task.status !== 'done').length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Meals</span>
-            <strong>{todaysMeals.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Blocks</span>
-            <strong>{todayBusyBlocks.length}</strong>
-          </div>
-        </div>
-      </section>
+      <section className="task-card today-surface">
 
-      {/* 2. WORKOUT */}
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Today&apos;s workout</p>
-            <h2>Workout card</h2>
-          </div>
-        </div>
-        {nextWorkout ? (
-          <article className="feed-card">
-            <strong>{nextWorkout.name}</strong>
-            <p>{nextWorkout.type || 'Workout'} · {nextWorkout.duration} min · {nextWorkout.status}</p>
-            <button type="button" className="secondary-button" onClick={() => onStartWorkout(nextWorkout.id)}>
-              {activeWorkout ? 'Continue' : 'Start'}
-            </button>
-          </article>
-        ) : (
-          <div className="empty-panel">
-            <strong>No workout exists yet</strong>
-            <p>Add one with quick capture.</p>
-          </div>
-        )}
-      </section>
-
-      {/* 3. EXECUTION — progress bar + task list */}
-      <section className="task-card execution-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Daily execution</p>
-            <h2>Run the day from here</h2>
-          </div>
-          <div className="header-stack">
-            <strong>{dailyProgress}%</strong>
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
-              {executionExpanded ? 'Collapse' : 'Expand'}
-            </button>
-            <button type="button" className="primary-button" onClick={openExecutionComposer}>
-              + Add task
-            </button>
-          </div>
-        </div>
-
-        <div className="progress-bar">
-          <span style={{ width: `${dailyProgress}%` }} />
-        </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Active</span>
-            <strong>{activeTasks.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Done</span>
-            <strong>{completedTasks.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Inbox</span>
-            <strong>{inboxCount}</strong>
-          </div>
-        </div>
-
-        <div className="quick-entry-row">
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
-            {priorityOnly ? 'Priority focus' : 'All tasks'}
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={openExecutionComposer}>
-            Quick add task
-          </button>
-        </div>
-
-        <div className="execution-list">
-          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
-
-          {orderedTasks.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No tasks yet</strong>
-              <p>Capture one inline and keep moving.</p>
+        {/* A. Context */}
+        <div className="today-zone">
+          <div className="task-card-header">
+            <div>
+              <p className="eyebrow">{formatFullDate(now)}</p>
+              <h2>{getGreeting(now)}</h2>
             </div>
-          ) : (
-            visibleExecutionTasks.map(task => (
-              <ExecutionTaskItem
-                key={task.id}
-                task={task}
-                onUpdateTask={updateTask}
-                onDeleteTask={deleteTask}
-                onToggleDone={toggleTaskDone}
-                onToggleSubtask={toggleSubtask}
-                onAddSubtask={addSubtask}
-                onSetStatus={setTaskStatus}
-                onMoveUp={() => moveTask(task.id, -1)}
-                onMoveDown={() => moveTask(task.id, 1)}
-
-                onStartDrag={startTaskDrag}
-                onMoveDrag={moveTaskDrag}
-                onEndDrag={endTaskDrag}
-                isDragging={draggingTaskId === task.id}
-              />
-            ))
-          )}
-
-          {!executionExpanded && executionOverflowCount > 0 && (
-            <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
-              + {executionOverflowCount} more
+            <button
+              type="button"
+              className={`icon-button priority-toggle${priorityOnly ? ' is-active' : ''}`}
+              onClick={() => setPriorityOnly(current => !current)}
+              aria-label={priorityOnly ? 'Showing priority only — tap to show all' : 'Showing all tasks — tap for priority only'}
+              title={priorityOnly ? 'Priority only' : 'Show all'}
+            >
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M3 4a1 1 0 0 1 1-1h12a1 1 0 0 1 .78 1.625L13 9.5V15a1 1 0 0 1-1.447.894l-3-1.5A1 1 0 0 1 8 13.5V9.5L3.22 4.625A1 1 0 0 1 3 4Z" />
+              </svg>
             </button>
-          )}
-
-          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+          </div>
         </div>
-      </section>
 
-      {/* 4. AGENDA */}
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
+        {/* B. Workout */}
+        <div className="today-zone">
+          <p className="eyebrow">Workout</p>
+          {nextWorkout ? (
+            <article className="feed-card" style={{ marginTop: 8 }}>
+              <strong>{nextWorkout.name}</strong>
+              <p>{nextWorkout.type || 'Workout'} · {nextWorkout.duration} min · {nextWorkout.status}</p>
+              <button type="button" className="secondary-button" onClick={() => onStartWorkout(nextWorkout.id)}>
+                {activeWorkout ? 'Continue' : 'Start'}
+              </button>
+            </article>
+          ) : (
+            <div className="empty-panel" style={{ marginTop: 8 }}>
+              <strong>No workout yet</strong>
+              <p>Add one via quick capture.</p>
+            </div>
+          )}
+        </div>
+
+        {/* C. Execution */}
+        <div className="today-zone today-zone-execution">
+          <div className="task-card-header">
+            <p className="eyebrow">Execution</p>
+            <div className="header-stack">
+              <strong>{dailyProgress}%</strong>
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
+                {executionExpanded ? 'Collapse' : 'Expand'}
+              </button>
+              <button type="button" className="primary-button" onClick={openExecutionComposer}>
+                + Add task
+              </button>
+            </div>
+          </div>
+
+          <div className="progress-bar">
+            <span style={{ width: `${dailyProgress}%` }} />
+          </div>
+
+          <div className="execution-list">
+            <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+
+            {orderedTasks.length === 0 ? (
+              <div className="empty-panel">
+                <strong>No tasks yet</strong>
+                <p>Capture one inline and keep moving.</p>
+              </div>
+            ) : (
+              visibleExecutionTasks.map(task => (
+                <ExecutionTaskItem
+                  key={task.id}
+                  task={task}
+                  onUpdateTask={updateTask}
+                  onDeleteTask={deleteTask}
+                  onToggleDone={toggleTaskDone}
+                  onToggleSubtask={toggleSubtask}
+                  onAddSubtask={addSubtask}
+                  onSetStatus={setTaskStatus}
+                  onMoveUp={() => moveTask(task.id, -1)}
+                  onMoveDown={() => moveTask(task.id, 1)}
+                  onStartDrag={startTaskDrag}
+                  onMoveDrag={moveTaskDrag}
+                  onEndDrag={endTaskDrag}
+                  isDragging={draggingTaskId === task.id}
+                />
+              ))
+            )}
+
+            {!executionExpanded && executionOverflowCount > 0 && (
+              <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
+                + {executionOverflowCount} more
+              </button>
+            )}
+
+            <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+          </div>
+        </div>
+
+        {/* D. Agenda */}
+        <div className="today-zone">
+          <div className="task-card-header">
             <p className="eyebrow">Agenda</p>
-            <h2>Today only</h2>
-          </div>
-          <div className="header-stack">
-            <input
-              className="task-title-input compact-search"
-              value={dailySearch}
-              onChange={event => setDailySearch(event.target.value)}
-              placeholder="Filter today"
-            />
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setAgendaExpanded(current => !current)}>
-              {agendaExpanded ? 'Less' : 'More'}
-            </button>
-          </div>
-        </div>
-        <div
-          className="subtle-feed agenda-groups"
-          role="button"
-          tabIndex={0}
-          onClick={() => setAgendaExpanded(current => !current)}
-          onKeyDown={event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              setAgendaExpanded(current => !current);
-            }
-          }}
-        >
-          {agendaGroups.every(group => group.items.length === 0) ? (
-            <div className="empty-panel">
-              <strong>No items for today</strong>
-              <p>Capture something with the plus button.</p>
+            <div className="header-stack">
+              <input
+                className="task-title-input compact-search"
+                value={dailySearch}
+                onChange={event => setDailySearch(event.target.value)}
+                placeholder="Filter today"
+              />
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setAgendaExpanded(current => !current)}>
+                {agendaExpanded ? 'Less' : 'More'}
+              </button>
             </div>
-          ) : (
-            agendaGroups.map(group => {
-              const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
-              const overflowCount = Math.max(0, group.items.length - visibleItems.length);
-
-              if (group.items.length === 0) return null;
-
-              return (
-                <article key={group.key} className="feed-card agenda-group">
-                  <div className="agenda-group-header">
-                    <strong>{group.label}</strong>
-                    <span>{group.items.length}</span>
-                  </div>
-                  <div className="agenda-group-list">
-                    {visibleItems.map(item => (
-                      <div key={item.id} className="agenda-item">
-                        <strong>{item.title}</strong>
-                        <span>{item.subtitle}</span>
-                      </div>
-                    ))}
-                    {!agendaExpanded && overflowCount > 0 && (
-                      <button
-                        type="button"
-                        className="agenda-overflow"
-                        onClick={event => {
-                          event.stopPropagation();
-                          setAgendaExpanded(true);
-                        }}
-                      >
-                        + {overflowCount} more
-                      </button>
-                    )}
-                  </div>
-                </article>
-              );
-            })
-          )}
-        </div>
-      </section>
-
-      {/* 5. MEALS */}
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Meal summary</p>
-            <h2>Today&apos;s meals only</h2>
           </div>
-          {todaysMeals.length > 1 && (
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setMealsExpanded(current => !current)}>
-              {mealsExpanded ? 'Less' : `${todaysMeals.length} meals`}
-            </button>
-          )}
-        </div>
-        {visibleMeals.length > 0 ? (
-          <div className="subtle-feed">
-            {visibleMeals.map(meal => (
-              <article key={meal.id} className="feed-card">
-                <strong>{meal.name}</strong>
-                <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
-              </article>
-            ))}
-            {!mealsExpanded && todaysMeals.length > 1 && (
-              <p className="empty-message">{todaysMeals.length - 1} more meals hidden</p>
+          <div
+            className="subtle-feed agenda-groups"
+            role="button"
+            tabIndex={0}
+            onClick={() => setAgendaExpanded(current => !current)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setAgendaExpanded(current => !current);
+              }
+            }}
+          >
+            {agendaGroups.every(group => group.items.length === 0) ? (
+              <div className="empty-panel">
+                <strong>No items for today</strong>
+                <p>Capture something with the plus button.</p>
+              </div>
+            ) : (
+              agendaGroups.map(group => {
+                const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
+                const overflowCount = Math.max(0, group.items.length - visibleItems.length);
+
+                if (group.items.length === 0) return null;
+
+                return (
+                  <article key={group.key} className="feed-card agenda-group">
+                    <div className="agenda-group-header">
+                      <strong>{group.label}</strong>
+                      <span>{group.items.length}</span>
+                    </div>
+                    <div className="agenda-group-list">
+                      {visibleItems.map(item => (
+                        <div key={item.id} className="agenda-item">
+                          <strong>{item.title}</strong>
+                          <span>{item.subtitle}</span>
+                        </div>
+                      ))}
+                      {!agendaExpanded && overflowCount > 0 && (
+                        <button
+                          type="button"
+                          className="agenda-overflow"
+                          onClick={event => {
+                            event.stopPropagation();
+                            setAgendaExpanded(true);
+                          }}
+                        >
+                          + {overflowCount} more
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })
             )}
           </div>
-        ) : (
-          <div className="empty-panel">
-            <strong>No meals logged today</strong>
-            <p>Nutrition stays lightweight here.</p>
+        </div>
+
+        {/* E. Meals */}
+        <div className="today-zone">
+          <div className="task-card-header">
+            <p className="eyebrow">Meals</p>
+            {todaysMeals.length > 1 && (
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setMealsExpanded(current => !current)}>
+                {mealsExpanded ? 'Less' : `${todaysMeals.length} meals`}
+              </button>
+            )}
           </div>
-        )}
+          {visibleMeals.length > 0 ? (
+            <div className="subtle-feed">
+              {visibleMeals.map(meal => (
+                <article key={meal.id} className="feed-card">
+                  <strong>{meal.name}</strong>
+                  <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
+                </article>
+              ))}
+              {!mealsExpanded && todaysMeals.length > 1 && (
+                <p className="empty-message">{todaysMeals.length - 1} more meals hidden</p>
+              )}
+            </div>
+          ) : (
+            <div className="empty-panel">
+              <strong>No meals logged today</strong>
+              <p>Nutrition stays lightweight here.</p>
+            </div>
+          )}
+        </div>
+
       </section>
     </div>
   );
