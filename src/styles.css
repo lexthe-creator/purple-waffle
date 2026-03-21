@@ -72,13 +72,14 @@ p {
 
 .app-shell {
   width: min(100%, var(--shell-width));
-  min-height: 100dvh;
+  height: 100dvh;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   background: rgba(255, 255, 255, 0.36);
   backdrop-filter: blur(10px);
   position: relative;
+  overflow: hidden;
 }
 
 .app-header {
