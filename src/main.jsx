@@ -668,32 +668,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     return workouts.find(workout => workout.status !== 'completed') ?? workouts[0] ?? null;
   }, [activeWorkout, workouts]);
 
-  const priorityItems = useMemo(
-    () => orderedTasks.filter(task => task.status === 'active' || task.subtasks.some(subtask => subtask.done === false)).slice(0, 4),
-    [orderedTasks],
-  );
-
-  const visiblePriorityItems = prioritiesExpanded ? priorityItems : priorityItems.slice(0, 2);
   const visibleExecutionTasks = executionExpanded ? orderedTasks : orderedTasks.slice(0, 3);
   const executionOverflowCount = Math.max(0, orderedTasks.length - visibleExecutionTasks.length);
-
-  const sevenDayStrip = useMemo(() => {
-    return Array.from({ length: 7 }, (_, index) => {
-      const day = addDays(now, index);
-      const key = toDateKey(day);
-      return {
-        id: key,
-        label: formatDateLabel(key),
-        date: key,
-        flaggedCount: [
-          ...tasks.filter(task => (task.status === 'active' || task.status === 'planned') && index <= 2),
-          ...meals.filter(meal => toDateKey(meal.loggedAt) === key),
-        ].length > 0 ? 1 : 0,
-      };
-    }).filter(item => item.flaggedCount > 0);
-  }, [meals, now, tasks]);
-
-  const visibleSevenDayStrip = stripExpanded ? sevenDayStrip : sevenDayStrip.slice(0, 3);
   const visibleMeals = mealsExpanded ? todaysMeals : todaysMeals.slice(0, 1);
 
   useEffect(() => {
