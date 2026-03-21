@@ -2234,8 +2234,15 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(
+const rootElement = document.getElementById('root');
+const loadingElement = document.getElementById('loading');
+
+createRoot(rootElement).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
 );
+
+requestAnimationFrame(() => {
+  loadingElement?.remove();
+});
