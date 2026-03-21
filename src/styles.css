@@ -708,6 +708,7 @@ p {
 }
 
 .workout-list {
+  display: grid;
   gap: 10px;
 }
 
@@ -892,21 +893,41 @@ p {
 
 .bottom-nav-button {
   min-height: 54px;
-  padding: 8px 6px;
+  padding: 6px 4px;
   border: 1px solid transparent;
   border-radius: 16px;
   background: transparent;
   color: var(--muted);
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   cursor: pointer;
-  font-size: 0.78rem;
 }
 
 .bottom-nav-button.is-active {
   color: var(--primary);
   background: var(--primary-soft);
   font-weight: 700;
+}
+
+.nav-icon {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+
+.nav-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
 }
 
 @media (max-width: 420px) {
