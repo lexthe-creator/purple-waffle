@@ -30,7 +30,7 @@ const ROOT_TABS = [
   {
     id: 'fitness',
     label: 'Fitness',
-    iconPath: '<circle cx="18.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="18.5" r="2.5"/><line x1="9" y1="15" x2="15" y2="9"/><line x1="7" y1="7" x2="7" y2="12"/><line x1="7" y1="7" x2="12" y2="7"/><line x1="17" y1="17" x2="17" y2="12"/><line x1="17" y1="17" x2="12" y2="17"/>',
+    iconPath: '<rect x="6" y="9" width="12" height="6" rx="3"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="M7.5 9V7.5"/><path d="M16.5 9V7.5"/><path d="M7.5 15v1.5"/><path d="M16.5 15v1.5"/>',
   },
   {
     id: 'more',
@@ -38,6 +38,237 @@ const ROOT_TABS = [
     iconPath: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
   },
 ];
+
+const FITNESS_SUBTABS = [
+  { id: 'today', label: 'Today' },
+  { id: 'plan', label: 'Plan' },
+  { id: 'library', label: 'Workout Library' },
+  { id: 'logging', label: 'Logging' },
+];
+
+const FITNESS_PROGRAMS = {
+  hyrox: {
+    id: 'hyrox',
+    name: 'HYROX',
+    description: 'Hybrid prep with stations, strength, and runs.',
+    tags: ['Race prep', 'Hybrid', 'Engine'],
+    goalLabel: 'Race build',
+    countdownLabel: 'Race countdown',
+    focus: 'hybrid',
+    schedules: {
+      '4-day': [
+        { offset: 0, title: 'Strength + stations', detail: 'Lower body and sled patterning' },
+        { offset: 1, title: 'Run intervals', detail: 'Short repeats with controlled breathing' },
+        { offset: 3, title: 'Hybrid brick', detail: 'Mixed station work and tempo running' },
+        { offset: 5, title: 'Recovery reset', detail: 'Mobility, easy spin, and tissue work' },
+      ],
+      '5-day': [
+        { offset: 0, title: 'Strength + stations', detail: 'Heavy compound work' },
+        { offset: 1, title: 'Run intervals', detail: 'Quality speed work' },
+        { offset: 2, title: 'Engine builder', detail: 'Aerobic conditioning' },
+        { offset: 4, title: 'Hybrid brick', detail: 'Race-specific combinations' },
+        { offset: 5, title: 'Recovery reset', detail: 'Mobility and easy movement' },
+      ],
+    },
+  },
+  strength: {
+    id: 'strength',
+    name: 'Strength',
+    description: 'Progressive lifting with enough recovery to keep moving.',
+    tags: ['Lift', 'Progressive', 'Base'],
+    goalLabel: 'Strength build',
+    countdownLabel: null,
+    focus: 'strength',
+    schedules: {
+      '4-day': [
+        { offset: 0, title: 'Lower body', detail: 'Squat pattern and accessory work' },
+        { offset: 1, title: 'Upper body', detail: 'Press, pull, and trunk control' },
+        { offset: 3, title: 'Full body', detail: 'Compound lifts with moderate volume' },
+        { offset: 5, title: 'Recovery', detail: 'Walk, mobility, and reset' },
+      ],
+      '5-day': [
+        { offset: 0, title: 'Lower body', detail: 'Primary strength session' },
+        { offset: 1, title: 'Upper body', detail: 'Push and pull volume' },
+        { offset: 2, title: 'Power', detail: 'Explosive work and carries' },
+        { offset: 4, title: 'Full body', detail: 'Second heavy lift' },
+        { offset: 5, title: 'Recovery', detail: 'Mobility and tissue work' },
+      ],
+    },
+  },
+  running: {
+    id: 'running',
+    name: 'Running',
+    description: 'Mileage and quality work with compact recovery support.',
+    tags: ['Mileage', 'Intervals', 'Tempo'],
+    goalLabel: 'Race / mileage build',
+    countdownLabel: 'Goal countdown',
+    focus: 'running',
+    schedules: {
+      '4-day': [
+        { offset: 0, title: 'Easy run', detail: 'Aerobic base and cadence' },
+        { offset: 1, title: 'Intervals', detail: 'Threshold or VO2 reps' },
+        { offset: 3, title: 'Tempo', detail: 'Steady effort with pace control' },
+        { offset: 5, title: 'Long run', detail: 'The week’s mileage anchor' },
+      ],
+      '5-day': [
+        { offset: 0, title: 'Easy run', detail: 'Light aerobic volume' },
+        { offset: 1, title: 'Intervals', detail: 'Quality speed session' },
+        { offset: 2, title: 'Recovery jog', detail: 'Short shakeout' },
+        { offset: 4, title: 'Tempo', detail: 'Controlled steady effort' },
+        { offset: 5, title: 'Long run', detail: 'Mileage anchor' },
+      ],
+    },
+  },
+  pilates: {
+    id: 'pilates',
+    name: 'Pilates',
+    description: 'Core control, posture, and smooth movement quality.',
+    tags: ['Core', 'Mobility', 'Control'],
+    goalLabel: 'Movement quality',
+    countdownLabel: null,
+    focus: 'mobility',
+    schedules: {
+      '4-day': [
+        { offset: 0, title: 'Mat flow', detail: 'Core and breath-led control' },
+        { offset: 1, title: 'Stability', detail: 'Balance and trunk sequencing' },
+        { offset: 3, title: 'Reformer / flow', detail: 'Longer controlled session' },
+        { offset: 5, title: 'Recovery walk', detail: 'Light reset and mobility' },
+      ],
+      '5-day': [
+        { offset: 0, title: 'Mat flow', detail: 'Spine articulation and core' },
+        { offset: 1, title: 'Stability', detail: 'Single-leg control' },
+        { offset: 2, title: 'Mobility', detail: 'Restore range and posture' },
+        { offset: 4, title: 'Reformer / flow', detail: 'Longer session' },
+        { offset: 5, title: 'Recovery walk', detail: 'Easy movement' },
+      ],
+    },
+  },
+  recovery: {
+    id: 'recovery',
+    name: 'Recovery',
+    description: 'Restore first, then stack the next session.',
+    tags: ['Recovery', 'Reset', 'Low load'],
+    goalLabel: 'Restore',
+    countdownLabel: null,
+    focus: 'recovery',
+    schedules: {
+      '4-day': [
+        { offset: 0, title: 'Mobility', detail: 'Gentle full-body range work' },
+        { offset: 1, title: 'Easy walk', detail: 'Keep circulation moving' },
+        { offset: 3, title: 'Breath + mobility', detail: 'Short reset block' },
+        { offset: 5, title: 'Soft tissue', detail: 'Self-massage and unwind' },
+      ],
+      '5-day': [
+        { offset: 0, title: 'Mobility', detail: 'Gentle reset' },
+        { offset: 1, title: 'Easy walk', detail: 'Very low intensity' },
+        { offset: 2, title: 'Breath work', detail: 'Recovery emphasis' },
+        { offset: 4, title: 'Mobility', detail: 'Second reset touchpoint' },
+        { offset: 5, title: 'Soft tissue', detail: 'Unwind and prepare' },
+      ],
+    },
+  },
+};
+
+const FITNESS_PROGRAM_ORDER = ['hyrox', 'strength', 'running', 'pilates', 'recovery'];
+const FITNESS_FREQUENCIES = ['4-day', '5-day'];
+const FITNESS_ANCHORS = ['Sunday', 'Monday', 'Wednesday'];
+const WEEKDAY_INDEX = {
+  Sunday: 0,
+  Monday: 1,
+  Tuesday: 2,
+  Wednesday: 3,
+  Thursday: 4,
+  Friday: 5,
+  Saturday: 6,
+};
+
+function inferWorkoutProgram(workout) {
+  const rawType = typeof workout?.type === 'string' ? workout.type.toLowerCase() : '';
+  const rawName = `${workout?.programName || workout?.name || ''}`.toLowerCase();
+
+  if (['hyrox', 'strength', 'running', 'pilates', 'recovery'].includes(rawType)) return rawType;
+  if (rawName.includes('hyrox')) return 'hyrox';
+  if (rawName.includes('pilates')) return 'pilates';
+  if (rawName.includes('recover') || rawName.includes('mobility') || rawName.includes('stretch')) return 'recovery';
+  if (rawName.includes('run')) return 'running';
+  return 'strength';
+}
+
+function alignDateToAnchor(date, anchorDay) {
+  const base = startOfDay(date);
+  const targetIndex = WEEKDAY_INDEX[anchorDay] ?? 1;
+  const currentIndex = base.getDay();
+  const delta = (currentIndex - targetIndex + 7) % 7;
+  return addDays(base, -delta);
+}
+
+function formatCountdown(targetDate, now = new Date()) {
+  const ms = startOfDay(targetDate).getTime() - startOfDay(now).getTime();
+  const days = Math.max(0, Math.round(ms / 86_400_000));
+
+  if (days === 0) return 'Today';
+  if (days === 1) return '1 day';
+  return `${days} days`;
+}
+
+function getProgramPhase(weekNumber) {
+  if (weekNumber <= 2) return 'Base';
+  if (weekNumber <= 4) return 'Build';
+  if (weekNumber <= 6) return 'Peak';
+  return 'Taper';
+}
+
+function getWorkoutProgramKey(workout) {
+  return inferWorkoutProgram(workout);
+}
+
+function buildWeeklySchedule(program, frequency, anchorDay, now) {
+  const template = program?.schedules?.[frequency] || [];
+  const weekStart = alignDateToAnchor(now, anchorDay);
+
+  return template.map(session => {
+    const date = addDays(weekStart, session.offset);
+    return {
+      ...session,
+      date,
+      dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      dateLabel: formatShortMonthDay(date),
+    };
+  });
+}
+
+function getWorkoutStats(workouts, now, selectedProgramId) {
+  const weekStart = alignDateToAnchor(now, 'Monday');
+  const nextWeekStart = addDays(weekStart, 7);
+  const previousWeekStart = addDays(weekStart, -7);
+
+  const inRange = (workout, start, end) => {
+    const createdAt = new Date(workout.createdAt);
+    return createdAt >= start && createdAt < end;
+  };
+
+  const currentWeek = workouts.filter(workout => inRange(workout, weekStart, nextWeekStart));
+  const previousWeek = workouts.filter(workout => inRange(workout, previousWeekStart, weekStart));
+
+  const completedCurrent = currentWeek.filter(workout => workout.status === 'completed');
+  const completedPrevious = previousWeek.filter(workout => workout.status === 'completed');
+  const selectedCurrent = currentWeek.filter(workout => getWorkoutProgramKey(workout) === selectedProgramId);
+
+  const milesCompleted = completedCurrent.reduce((total, workout) => total + (Number.isFinite(workout.distanceMiles) ? workout.distanceMiles : 0), 0);
+  const strengthSessions = completedCurrent.filter(workout => ['strength', 'hyrox'].includes(getWorkoutProgramKey(workout))).length;
+  const recoverySessions = completedCurrent.filter(workout => ['recovery', 'pilates'].includes(getWorkoutProgramKey(workout))).length;
+  const workoutsCompleted = completedCurrent.length;
+  const workoutTrend = workoutsCompleted - completedPrevious.length;
+
+  return {
+    workoutsCompleted,
+    milesCompleted,
+    strengthSessions,
+    recoverySessions,
+    workoutTrend,
+    currentWeekWorkouts: selectedCurrent,
+  };
+}
 
 function formatDateLabel(value) {
   return new Intl.DateTimeFormat('en-US', {
@@ -1046,21 +1277,114 @@ function NutritionScreen() {
   );
 }
 
-function FitnessScreen({ activeWorkoutId, onStartWorkout }) {
-  const { workouts, setWorkouts, setNotifications, createNotification } = useTaskContext();
+function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
+  const { workouts, notes, setWorkouts, setNotifications, createNotification } = useTaskContext();
+  const { energyState, setEnergyState } = useAppContext();
+  const [activeSubTab, setActiveSubTab] = useState('today');
+  const [selectedProgramId, setSelectedProgramId] = useState(() => getWorkoutProgramKey(workouts[0]) || 'strength');
+  const [selectedFrequency, setSelectedFrequency] = useState(() => (workouts[0]?.frequency === '5-day' ? '5-day' : '4-day'));
+  const [programAnchor, setProgramAnchor] = useState(() => (FITNESS_ANCHORS.includes(workouts[0]?.anchorDay) ? workouts[0].anchorDay : 'Monday'));
+  const [programStartDate, setProgramStartDate] = useState(() => alignDateToAnchor(now, programAnchor));
+  const [checkInDraft, setCheckInDraft] = useState(() => ({
+    mood: energyState.mood || 'steady',
+    energy: Number.isFinite(energyState.value) ? energyState.value : 3,
+    sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
+  }));
+  const [acceptedRecovery, setAcceptedRecovery] = useState(false);
+
+  useEffect(() => {
+    setProgramStartDate(alignDateToAnchor(now, programAnchor));
+  }, [programAnchor]);
+
+  useEffect(() => {
+    setCheckInDraft({
+      mood: energyState.mood || 'steady',
+      energy: Number.isFinite(energyState.value) ? energyState.value : 3,
+      sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
+    });
+  }, [energyState.mood, energyState.value, energyState.sleepHours]);
+
   const activeWorkout = useMemo(
     () => workouts.find(workout => workout.id === activeWorkoutId) ?? null,
     [workouts, activeWorkoutId],
   );
+
+  const activeProgramId = activeWorkout ? getWorkoutProgramKey(activeWorkout) : selectedProgramId;
+  const activeProgram = FITNESS_PROGRAMS[activeProgramId] || FITNESS_PROGRAMS.strength;
+  const weeklyStats = useMemo(() => getWorkoutStats(workouts, now, selectedProgramId), [workouts, now, selectedProgramId]);
+  const programWeek = Math.max(1, Math.floor((startOfDay(now).getTime() - programStartDate.getTime()) / 86_400_000 / 7) + 1);
+  const programPhase = getProgramPhase(programWeek);
+  const programGoalDate = useMemo(() => {
+    if (activeProgramId === 'hyrox') return addDays(programStartDate, 42);
+    if (activeProgramId === 'running') return addDays(programStartDate, 28);
+    return null;
+  }, [activeProgramId, programStartDate]);
+  const programCountdown = programGoalDate ? formatCountdown(programGoalDate, now) : null;
+  const weeklySchedule = useMemo(
+    () => buildWeeklySchedule(activeProgram, selectedFrequency, programAnchor, now),
+    [activeProgram, now, programAnchor, selectedFrequency],
+  );
+  const programOptions = useMemo(
+    () => FITNESS_PROGRAM_ORDER.map(programId => FITNESS_PROGRAMS[programId]).filter(Boolean),
+    [],
+  );
+  const programLibrary = useMemo(
+    () => FITNESS_PROGRAM_ORDER.map(programId => ({
+      program: FITNESS_PROGRAMS[programId],
+      workouts: workouts.filter(workout => getWorkoutProgramKey(workout) === programId),
+    })),
+    [workouts],
+  );
+  const workoutLogs = useMemo(() => workouts.filter(workout => workout.status !== 'completed' || sameDay(workout.createdAt, now)), [workouts, now]);
+  const runLogs = useMemo(() => workouts.filter(workout => getWorkoutProgramKey(workout) === 'running'), [workouts]);
+  const strengthLogs = useMemo(() => workouts.filter(workout => getWorkoutProgramKey(workout) === 'strength' || getWorkoutProgramKey(workout) === 'hyrox'), [workouts]);
+  const recoveryLogs = useMemo(() => workouts.filter(workout => getWorkoutProgramKey(workout) === 'recovery' || getWorkoutProgramKey(workout) === 'pilates'), [workouts]);
+  const needsCheckIn = !energyState.lastCheckIn || !sameDay(energyState.lastCheckIn, now);
+  const recoverySuggested =
+    acceptedRecovery
+      ? null
+      : ((checkInDraft.energy <= 2 || checkInDraft.sleepHours <= 6 || ['flat', 'tired', 'low'].includes(checkInDraft.mood))
+          ? {
+              title: 'Recovery recommendation',
+              detail: 'Low energy, short sleep, or a flat mood should move today toward recovery only if you accept it.',
+            }
+          : null);
+  const currentWorkout = useMemo(() => {
+    if (activeWorkout) return activeWorkout;
+    return workouts.find(workout => getWorkoutProgramKey(workout) === selectedProgramId && workout.status !== 'completed')
+      ?? workouts.find(workout => workout.status !== 'completed')
+      ?? workouts[0]
+      ?? null;
+  }, [activeWorkout, workouts, selectedProgramId]);
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
   }
 
   function startWorkout(workoutId) {
+    const workout = workouts.find(item => item.id === workoutId);
+    if (workout) {
+      const workoutProgramId = getWorkoutProgramKey(workout);
+      setSelectedProgramId(workoutProgramId);
+      setSelectedFrequency(workout.frequency === '5-day' ? '5-day' : '4-day');
+      if (FITNESS_ANCHORS.includes(workout.anchorDay)) {
+        setProgramAnchor(workout.anchorDay);
+      }
+    }
+
     onStartWorkout(workoutId);
     setWorkouts(current => current.map(workout => (
-      workout.id === workoutId ? { ...workout, status: 'active' } : workout
+      workout.id === workoutId
+        ? {
+            ...workout,
+            status: 'active',
+            type: getWorkoutProgramKey(workout),
+            programId: getWorkoutProgramKey(workout),
+            programName: FITNESS_PROGRAMS[getWorkoutProgramKey(workout)]?.name || workout.programName,
+          }
+        : workout.status === 'active'
+          ? { ...workout, status: 'planned' }
+        : workout
     )));
   }
 
@@ -1083,39 +1407,488 @@ function FitnessScreen({ activeWorkoutId, onStartWorkout }) {
     onStartWorkout(null);
   }
 
+  function saveCheckIn() {
+    setEnergyState(current => ({
+      ...current,
+      value: Number.isFinite(checkInDraft.energy) ? checkInDraft.energy : current.value ?? 3,
+      sleepHours: Number.isFinite(checkInDraft.sleepHours) ? checkInDraft.sleepHours : current.sleepHours ?? 7,
+      sleepSource: 'manual',
+      mood: checkInDraft.mood,
+      lastCheckIn: new Date().toISOString(),
+    }));
+    upsertNotification('Fitness check-in saved', `${checkInDraft.mood} · ${checkInDraft.energy}/5`);
+    setAcceptedRecovery(false);
+  }
+
+  function skipCheckIn() {
+    setEnergyState(current => ({
+      ...current,
+      lastCheckIn: new Date().toISOString(),
+    }));
+    setAcceptedRecovery(false);
+  }
+
+  function acceptRecoverySuggestion() {
+    setSelectedProgramId('recovery');
+    setAcceptedRecovery(true);
+    upsertNotification('Recovery accepted', 'Today is now recovery-first.');
+  }
+
+  function cycleProgram(direction = 1) {
+    const currentIndex = FITNESS_PROGRAM_ORDER.indexOf(selectedProgramId);
+    const nextIndex = (currentIndex + direction + FITNESS_PROGRAM_ORDER.length) % FITNESS_PROGRAM_ORDER.length;
+    setSelectedProgramId(FITNESS_PROGRAM_ORDER[nextIndex]);
+  }
+
   return (
-    <div className="tab-stack">
-      <section className="task-card">
+    <div className="tab-stack fitness-stack">
+      {activeWorkout && (
+        <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
+      )}
+
+      <section className="task-card fitness-nav-card">
         <div className="task-card-header">
           <div>
-            <p className="eyebrow">Workout</p>
-            <h2>Start and finish in one place</h2>
+            <p className="eyebrow">Fitness</p>
+            <h2>{activeProgram.name} program</h2>
           </div>
+          <button type="button" className="ghost-button compact-ghost" onClick={() => cycleProgram(1)}>
+            Change
+          </button>
         </div>
 
-        {activeWorkout ? (
-          <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
-        ) : (
-          <div className="workout-stack">
-            {workouts.length === 0 ? (
-              <div className="empty-panel">
-                <strong>No workout yet</strong>
-                <p>Capture one with the add button or start from a template.</p>
+        <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness sections">
+          {FITNESS_SUBTABS.map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeSubTab === tab.id}
+              className={`status-chip ${activeSubTab === tab.id ? 'is-active' : ''}`}
+              onClick={() => setActiveSubTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {activeSubTab === 'today' && (
+        <>
+          {needsCheckIn && (
+            <section className="task-card">
+              <div className="task-card-header">
+                <div>
+                  <p className="eyebrow">Daily check-in</p>
+                  <h2>Open the day with recovery context</h2>
+                </div>
               </div>
+              <div className="fitness-checkin-grid">
+                <label className="field-stack compact-field">
+                  <span>Mood</span>
+                  <div className="status-chip-group">
+                    {['steady', 'charged', 'flat', 'tired'].map(mood => (
+                      <button
+                        key={mood}
+                        type="button"
+                        className={`status-chip ${checkInDraft.mood === mood ? 'is-active' : ''}`}
+                        onClick={() => setCheckInDraft(current => ({ ...current, mood }))}
+                      >
+                        {mood}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+                <label className="field-stack compact-field">
+                  <span>Energy</span>
+                  <div className="status-chip-group" role="group" aria-label="Energy rating">
+                    {[1, 2, 3, 4, 5].map(value => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`status-chip ${checkInDraft.energy === value ? 'is-active' : ''}`}
+                        onClick={() => setCheckInDraft(current => ({ ...current, energy: value }))}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+                <label className="field-stack compact-field">
+                  <span>Sleep</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    className="task-title-input"
+                    value={checkInDraft.sleepHours}
+                    onChange={event => setCheckInDraft(current => ({
+                      ...current,
+                      sleepHours: Number.parseFloat(event.target.value),
+                    }))}
+                  />
+                </label>
+              </div>
+              <div className="quick-entry-row">
+                <button type="button" className="secondary-button" onClick={saveCheckIn}>
+                  Save check-in
+                </button>
+                <button type="button" className="ghost-button compact-ghost" onClick={skipCheckIn}>
+                  Skip check-in
+                </button>
+              </div>
+              {recoverySuggested && (
+                <div className="feed-card">
+                  <strong>{recoverySuggested.title}</strong>
+                  <p>{recoverySuggested.detail}</p>
+                  <div className="quick-entry-row">
+                    <button type="button" className="secondary-button" onClick={acceptRecoverySuggestion}>
+                      Accept recovery day
+                    </button>
+                    <button type="button" className="ghost-button compact-ghost" onClick={() => setAcceptedRecovery(true)}>
+                      Keep current plan
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Today&apos;s workout</p>
+                <h2>{currentWorkout?.name || 'No workout yet'}</h2>
+              </div>
+            </div>
+            {currentWorkout ? (
+              <article className="feed-card">
+                <strong>{currentWorkout.name}</strong>
+                <p>{FITNESS_PROGRAMS[getWorkoutProgramKey(currentWorkout)]?.name || currentWorkout.programName || 'Workout'} · {currentWorkout.duration} min · {currentWorkout.status}</p>
+                <p>Week {programWeek} · {programPhase}</p>
+                <button type="button" className="secondary-button" onClick={() => startWorkout(currentWorkout.id)}>
+                  {activeWorkout ? 'Continue Workout' : 'Start Workout'}
+                </button>
+              </article>
             ) : (
-              workouts.map(workout => (
-                <article key={workout.id} className="feed-card workout-card">
+              <div className="empty-panel">
+                <strong>No workout exists yet</strong>
+                <p>Add one with quick capture or from the library.</p>
+              </div>
+            )}
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Weekly stats</p>
+                <h2>Training progress and trend</h2>
+              </div>
+            </div>
+            <div className="summary-row fitness-stats-row">
+              <div className="summary-tile">
+                <span>Workouts completed</span>
+                <strong>{weeklyStats.workoutsCompleted}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Miles completed</span>
+                <strong>{weeklyStats.milesCompleted.toFixed(1)}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Strength sessions</span>
+                <strong>{weeklyStats.strengthSessions}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Recovery sessions</span>
+                <strong>{weeklyStats.recoverySessions}</strong>
+              </div>
+            </div>
+            <p className="empty-message">
+              Trend: {weeklyStats.workoutTrend >= 0 ? '+' : ''}{weeklyStats.workoutTrend} workouts versus the previous 7 days.
+            </p>
+          </section>
+        </>
+      )}
+
+      {activeSubTab === 'plan' && (
+        <>
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Active program</p>
+                <h2>{activeProgram.name}</h2>
+              </div>
+              <button type="button" className="ghost-button compact-ghost" onClick={() => cycleProgram(1)}>
+                Change
+              </button>
+            </div>
+            <p className="empty-message">{activeProgram.description}</p>
+            <div className="tag-row">
+              {activeProgram.tags.map(tag => (
+                <span key={tag} className="status-chip is-active">{tag}</span>
+              ))}
+            </div>
+            <div className="summary-row">
+              <div className="summary-tile">
+                <span>Current week</span>
+                <strong>{programWeek}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Current phase</span>
+                <strong>{programPhase}</strong>
+              </div>
+              <div className="summary-tile">
+                <span>Frequency</span>
+                <strong>{selectedFrequency}</strong>
+              </div>
+            </div>
+          </section>
+
+          {activeProgram.goalLabel && (
+            <section className="task-card">
+              <div className="task-card-header">
+                <div>
+                  <p className="eyebrow">Goal card</p>
+                  <h2>{activeProgram.goalLabel}</h2>
+                </div>
+              </div>
+              <div className="summary-row">
+                <div className="summary-tile">
+                  <span>Anchor</span>
+                  <strong>{programAnchor}</strong>
+                </div>
+                <div className="summary-tile">
+                  <span>Countdown</span>
+                  <strong>{programCountdown || 'Not set'}</strong>
+                </div>
+                <div className="summary-tile">
+                  <span>Program week</span>
+                  <strong>{programWeek}</strong>
+                </div>
+              </div>
+              <p className="empty-message">
+                {activeProgram.countdownLabel ? `${activeProgram.countdownLabel}: ${programCountdown || 'Not set'}` : 'No race countdown for this program yet.'}
+              </p>
+            </section>
+          )}
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Training controls</p>
+                <h2>Frequency and anchor</h2>
+              </div>
+            </div>
+            <div className="segmented-control">
+              {FITNESS_FREQUENCIES.map(frequency => (
+                <button
+                  key={frequency}
+                  type="button"
+                  className={`status-chip ${selectedFrequency === frequency ? 'is-active' : ''}`}
+                  onClick={() => setSelectedFrequency(frequency)}
+                >
+                  {frequency}
+                </button>
+              ))}
+            </div>
+            <div className="segmented-control">
+              {FITNESS_ANCHORS.map(anchor => (
+                <button
+                  key={anchor}
+                  type="button"
+                  className={`status-chip ${programAnchor === anchor ? 'is-active' : ''}`}
+                  onClick={() => setProgramAnchor(anchor)}
+                >
+                  {anchor}
+                </button>
+              ))}
+            </div>
+            <div className="tag-row">
+              {programOptions.map(program => (
+                <button
+                  key={program.id}
+                  type="button"
+                  className={`status-chip ${selectedProgramId === program.id ? 'is-active' : ''}`}
+                  onClick={() => setSelectedProgramId(program.id)}
+                >
+                  {program.name}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Weekly schedule</p>
+                <h2>Program week layout</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {weeklySchedule.map(session => (
+                <article key={`${session.title}-${session.offset}`} className="feed-card">
+                  <strong>{session.dayLabel} · {session.title}</strong>
+                  <p>{session.dateLabel} · {session.detail}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      {activeSubTab === 'library' && (
+        <>
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Workout library</p>
+                <h2>Program-first templates</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {programLibrary.map(({ program, workouts: programWorkouts }) => (
+                <article key={program.id} className="feed-card">
+                  <strong>{program.name}</strong>
+                  <p>{program.description}</p>
+                  <p>{programWorkouts.length} saved workouts</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Saved workouts</p>
+                <h2>Templates and finishes</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {programLibrary.some(entry => entry.workouts.length > 0) ? (
+                programLibrary.map(({ program, workouts: programWorkouts }) => (
+                  programWorkouts.length === 0 ? null : (
+                    <article key={`${program.id}-saved`} className="feed-card">
+                      <strong>{program.name}</strong>
+                      <p>{programWorkouts.map(workout => workout.name).join(' · ')}</p>
+                      <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedProgramId(program.id)}>
+                        View program
+                      </button>
+                    </article>
+                  )
+                ))
+              ) : (
+                <div className="empty-panel">
+                  <strong>No saved workouts yet</strong>
+                  <p>Program templates will show up here as workouts are captured.</p>
+                </div>
+              )}
+            </div>
+          </section>
+        </>
+      )}
+
+      {activeSubTab === 'logging' && (
+        <>
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Logging</p>
+                <h2>Lightweight and expandable</h2>
+              </div>
+            </div>
+            <div className="summary-row">
+              <div className="summary-tile"><span>Workouts</span><strong>{workoutLogs.length}</strong></div>
+              <div className="summary-tile"><span>Runs</span><strong>{runLogs.length}</strong></div>
+              <div className="summary-tile"><span>Strength</span><strong>{strengthLogs.length}</strong></div>
+              <div className="summary-tile"><span>Recovery</span><strong>{recoveryLogs.length}</strong></div>
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Workouts</p>
+                <h2>Session history</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {workoutLogs.slice(0, 3).map(workout => (
+                <article key={workout.id} className="feed-card">
                   <strong>{workout.name}</strong>
                   <p>{workout.duration} min · {workout.status}</p>
-                  <button type="button" className="secondary-button" onClick={() => startWorkout(workout.id)}>
-                    {workout.status === 'completed' ? 'Restart workout' : 'Start workout'}
-                  </button>
                 </article>
-              ))
-            )}
-          </div>
-        )}
-      </section>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Runs</p>
+                <h2>Distance or speed notes</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {runLogs.slice(0, 3).map(workout => (
+                <article key={workout.id} className="feed-card">
+                  <strong>{workout.name}</strong>
+                  <p>{workout.distanceMiles ? `${workout.distanceMiles.toFixed(1)} miles` : `${workout.duration} min`} · {workout.status}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Strength</p>
+                <h2>Load and volume placeholders</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {strengthLogs.slice(0, 3).map(workout => (
+                <article key={workout.id} className="feed-card">
+                  <strong>{workout.name}</strong>
+                  <p>{workout.programName || 'Strength'} · {workout.status}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Recovery</p>
+                <h2>Downshift sessions</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {recoveryLogs.slice(0, 3).map(workout => (
+                <article key={workout.id} className="feed-card">
+                  <strong>{workout.name}</strong>
+                  <p>{workout.programName || 'Recovery'} · {workout.status}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Notes</p>
+                <h2>Quick log entry</h2>
+              </div>
+            </div>
+            <div className="subtle-feed">
+              {notes.slice(0, 3).map(note => (
+                <article key={note.id} className="feed-card">
+                  <strong>{note.content}</strong>
+                </article>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -1422,7 +2195,7 @@ function AppShell() {
           </RootTabPanel>
 
           <RootTabPanel id="fitness" activeTab={activeTab}>
-            <FitnessScreen activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />
+            <FitnessScreen now={now} activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />
           </RootTabPanel>
 
           <RootTabPanel id="more" activeTab={activeTab}>

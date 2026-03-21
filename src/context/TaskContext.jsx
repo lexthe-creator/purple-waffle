@@ -57,8 +57,16 @@ function createWorkout(overrides = {}) {
   return {
     id: generateId('workout'),
     name: 'Focus Session',
+    programId: 'strength',
+    programName: 'Strength Base',
+    type: 'strength',
     status: 'planned',
     duration: 30,
+    distanceMiles: 0,
+    phase: 'Base',
+    week: 1,
+    frequency: '4-day',
+    anchorDay: 'Monday',
     exercises: [
       { id: generateId('exercise'), name: 'Warm-up', detail: '5 min mobility' },
       { id: generateId('exercise'), name: 'Main set', detail: '3 rounds' },
@@ -67,6 +75,18 @@ function createWorkout(overrides = {}) {
     createdAt: Date.now(),
     ...overrides,
   };
+}
+
+function inferWorkoutProgram(workout) {
+  const rawType = typeof workout?.type === 'string' ? workout.type.toLowerCase() : '';
+  const rawName = `${workout?.programName || workout?.name || ''}`.toLowerCase();
+
+  if (['hyrox', 'strength', 'running', 'pilates', 'recovery'].includes(rawType)) return rawType;
+  if (rawName.includes('hyrox')) return 'hyrox';
+  if (rawName.includes('pilates')) return 'pilates';
+  if (rawName.includes('recover') || rawName.includes('mobility') || rawName.includes('stretch')) return 'recovery';
+  if (rawName.includes('run')) return 'running';
+  return 'strength';
 }
 
 function createNotification(overrides = {}) {
@@ -115,11 +135,28 @@ function normalizeNote(note, index) {
 }
 
 function normalizeWorkout(workout, index) {
+  const programId = inferWorkoutProgram(workout);
+  const defaultProgramName = {
+    hyrox: 'HYROX',
+    strength: 'Strength Base',
+    running: 'Running Build',
+    pilates: 'Pilates Flow',
+    recovery: 'Recovery Reset',
+  }[programId];
+
   return {
     id: workout?.id || generateId('workout'),
     name: typeof workout?.name === 'string' ? workout.name : 'Focus Session',
+    programId,
+    programName: typeof workout?.programName === 'string' && workout.programName ? workout.programName : defaultProgramName,
+    type: programId,
     status: ['planned', 'active', 'completed'].includes(workout?.status) ? workout.status : 'planned',
     duration: Number.isFinite(workout?.duration) ? workout.duration : 30,
+    distanceMiles: Number.isFinite(workout?.distanceMiles) ? workout.distanceMiles : 0,
+    phase: typeof workout?.phase === 'string' && workout.phase ? workout.phase : 'Base',
+    week: Number.isFinite(workout?.week) ? workout.week : 1,
+    frequency: workout?.frequency === '5-day' ? '5-day' : '4-day',
+    anchorDay: ['Sunday', 'Monday', 'Wednesday'].includes(workout?.anchorDay) ? workout.anchorDay : 'Monday',
     exercises: Array.isArray(workout?.exercises)
       ? workout.exercises.map((exercise, exerciseIndex) => ({
           id: exercise?.id || generateId(`exercise-${exerciseIndex}`),

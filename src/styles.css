@@ -223,6 +223,27 @@ p {
   gap: 10px;
 }
 
+.fitness-stack {
+  gap: 12px;
+}
+
+.fitness-nav-card {
+  gap: 12px;
+}
+
+.fitness-subnav {
+  gap: 6px;
+}
+
+.fitness-subnav .status-chip {
+  flex: 1 1 auto;
+}
+
+.fitness-checkin-grid {
+  display: grid;
+  gap: 10px;
+}
+
 .root-tab-panel {
   display: block;
 }
@@ -293,6 +314,10 @@ p {
 
 .summary-row {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.fitness-stats-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .summary-tile,
@@ -952,6 +977,18 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .fitness-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fitness-subnav .status-chip {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .fitness-checkin-grid {
+    gap: 8px;
+  }
+
   .week-strip {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -978,6 +1015,10 @@ p {
 
 @media (max-width: 360px) {
   .summary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .fitness-stats-row {
     grid-template-columns: 1fr;
   }
 }
