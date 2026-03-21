@@ -28,6 +28,7 @@ function createTask(overrides = {}) {
     title: '',
     notes: '',
     status: 'planned',
+    priority: false,
     subtasks: [],
     createdAt,
     ...overrides,
@@ -106,6 +107,7 @@ function normalizeTask(task, index) {
     title: typeof task?.title === 'string' ? task.title : '',
     notes: typeof task?.notes === 'string' ? task.notes : '',
     status: ['planned', 'active', 'done'].includes(task?.status) ? task.status : 'planned',
+    priority: task?.priority === true,
     subtasks: Array.isArray(task?.subtasks)
       ? task.subtasks.map(subtask => ({
           id: subtask?.id || generateId('subtask'),
@@ -195,7 +197,7 @@ function loadInitialState() {
 function buildDefaultState() {
   return {
     tasks: [
-      createTask({ title: 'Ship quick wins', status: 'active', notes: 'Stay in one flow.', subtasks: [createSubtask('Tighten header'), createSubtask('Clean execution mode')] }),
+      createTask({ title: 'Ship quick wins', status: 'active', priority: true, notes: 'Stay in one flow.', subtasks: [createSubtask('Tighten header'), createSubtask('Clean execution mode')] }),
       createTask({ title: 'Clear follow-ups', status: 'planned', subtasks: [createSubtask('Reply to inbox'), createSubtask('Schedule tomorrow')] }),
     ],
     meals: [createMeal({ name: 'Greek yogurt bowl', tags: ['protein', 'quick'] })],

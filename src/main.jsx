@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Header from './components/Header.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
@@ -483,6 +483,63 @@ function BottomNav({ activeTab, onChange }) {
   );
 }
 
+function InlineTaskComposer({ defaultPriority, onSubmit }) {
+  const [expanded, setExpanded] = useState(false);
+  const [title, setTitle] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (expanded) {
+      inputRef.current?.focus();
+    }
+  }, [expanded]);
+
+  function handleSubmit(event) {
+    event.preventDefault();
+
+    const trimmed = title.trim();
+    if (!trimmed) return;
+
+    onSubmit(trimmed);
+    setTitle('');
+    setExpanded(false);
+  }
+
+  function collapse() {
+    setTitle('');
+    setExpanded(false);
+  }
+
+  if (!expanded) {
+    return (
+      <button type="button" className="ghost-button compact-ghost inline-task-trigger" onClick={() => setExpanded(true)}>
+        {defaultPriority ? '+ Add priority task' : '+ Add task'}
+      </button>
+    );
+  }
+
+  return (
+    <form className="inline-task-composer" onSubmit={handleSubmit}>
+      <input
+        ref={inputRef}
+        className="task-title-input inline-task-input"
+        value={title}
+        onChange={event => setTitle(event.target.value)}
+        placeholder="Task for today"
+        aria-label="Task for today"
+      />
+      <div className="inline-task-actions">
+        <button type="submit" className="primary-button compact-primary">
+          Add
+        </button>
+        <button type="button" className="ghost-button compact-ghost" onClick={collapse}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function SettingsSheet({ isOpen, onClose }) {
   if (!isOpen) return null;
 
@@ -519,13 +576,23 @@ function SettingsSheet({ isOpen, onClose }) {
 }
 
 function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, calendarItems }) {
-  const { tasks, setTasks, meals, workouts, notifications, createTask, createSubtask } = useTaskContext();
+  const { tasks, setTasks, meals, notes, workouts, notifications, createTask, createSubtask } = useTaskContext();
   const [dailySearch, setDailySearch] = useState('');
   const [priorityOnly, setPriorityOnly] = useState(true);
   const [agendaExpanded, setAgendaExpanded] = useState(false);
+  const [executionExpanded, setExecutionExpanded] = useState(true);
   const [mealsExpanded, setMealsExpanded] = useState(false);
   const [prioritiesExpanded, setPrioritiesExpanded] = useState(false);
   const [stripExpanded, setStripExpanded] = useState(false);
+  const [draggingTaskId, setDraggingTaskId] = useState(null);
+  const dragStateRef = useRef({
+    taskId: null,
+    pointerId: null,
+    timer: null,
+    startX: 0,
+    startY: 0,
+    active: false,
+  });
 
   const orderedTasks = useMemo(() => {
     const rank = { active: 0, planned: 1, done: 2 };
@@ -544,62 +611,49 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
     [meals, todayKey],
   );
-  const todaysAgendaItems = useMemo(() => {
-    const items = [];
-
-    tasks.forEach(task => {
-      if (task.status === 'done') return;
-      if (priorityOnly && task.status !== 'active') return;
-      if (dailySearch && !task.title.toLowerCase().includes(dailySearch.toLowerCase())) return;
-      items.push({
-        id: task.id,
-        type: 'task',
-        title: task.title || 'Untitled task',
-        subtitle: task.status === 'active' ? 'In execution' : 'Planned',
-      });
-    });
-
-    meals.forEach(meal => {
-      if (toDateKey(meal.loggedAt) !== todayKey) return;
-      items.push({
-        id: meal.id,
-        type: 'meal',
-        title: meal.name || 'Meal',
-        subtitle: meal.tags.length ? meal.tags.join(' · ') : 'Logged today',
-      });
-    });
-
-    workouts.forEach(workout => {
-      if (workout.status === 'completed' && !sameDay(workout.createdAt, now)) return;
-      items.push({
-        id: workout.id,
-        type: 'workout',
-        title: workout.name,
-        subtitle: `${workout.duration} min · ${workout.status}`,
-      });
-    });
-
-    calendarItems.forEach(item => {
-      if (item.date !== todayKey || item.type !== 'busy') return;
-      items.push({
+  const agendaGroups = useMemo(() => {
+    const busyBlocks = calendarItems
+      .filter(item => item.date === todayKey && item.type === 'busy')
+      .map(item => ({
         id: item.id,
-        type: 'busy',
         title: item.title,
         subtitle: `${item.startTime} - ${item.endTime}`,
-      });
-    });
+      }));
 
-    notifications.slice(0, 3).forEach(notification => {
-      items.push({
-        id: notification.id,
-        type: 'inbox',
-        title: notification.title,
-        subtitle: notification.detail || 'Inbox item',
-      });
-    });
+    const workoutItems = workouts
+      .filter(workout => workout.status !== 'completed' || sameDay(workout.createdAt, now))
+      .map(workout => ({
+        id: workout.id,
+        title: workout.name,
+        subtitle: `${workout.duration} min · ${workout.status}`,
+      }));
 
-    return items.slice(0, agendaExpanded ? 5 : 3);
-  }, [agendaExpanded, calendarItems, dailySearch, meals, notifications, now, priorityOnly, tasks, workouts, todayKey]);
+    const taskItems = orderedTasks
+      .filter(task => {
+        if (task.status === 'done') return false;
+        if (priorityOnly && !task.priority) return false;
+        if (dailySearch && !task.title.toLowerCase().includes(dailySearch.toLowerCase())) return false;
+        return true;
+      })
+      .map(task => ({
+        id: task.id,
+        title: task.title || 'Untitled task',
+        subtitle: `${task.status} · ${task.priority ? 'priority' : 'normal'}`,
+      }));
+
+    const noteItems = notes.slice(0, 3).map(note => ({
+      id: note.id,
+      title: note.content || 'Note',
+      subtitle: note.createdAt ? formatShortMonthDay(note.createdAt) : 'Saved note',
+    }));
+
+    return [
+      { key: 'busy', label: 'Busy blocks', items: busyBlocks },
+      { key: 'workouts', label: 'Workouts', items: workoutItems },
+      { key: 'tasks', label: 'Tasks', items: taskItems },
+      { key: 'notes', label: 'Notes', items: noteItems },
+    ];
+  }, [calendarItems, dailySearch, notes, now, orderedTasks, priorityOnly, todayKey, workouts]);
 
   const todayBusyBlocks = useMemo(() => {
     return calendarItems.filter(item => item.date === todayKey && item.type === 'busy');
@@ -627,6 +681,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   );
 
   const visiblePriorityItems = prioritiesExpanded ? priorityItems : priorityItems.slice(0, 2);
+  const visibleExecutionTasks = executionExpanded ? orderedTasks : orderedTasks.slice(0, 3);
+  const executionOverflowCount = Math.max(0, orderedTasks.length - visibleExecutionTasks.length);
 
   const sevenDayStrip = useMemo(() => {
     return Array.from({ length: 7 }, (_, index) => {
@@ -646,6 +702,40 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
 
   const visibleSevenDayStrip = stripExpanded ? sevenDayStrip : sevenDayStrip.slice(0, 3);
   const visibleMeals = mealsExpanded ? todaysMeals : todaysMeals.slice(0, 1);
+
+  useEffect(() => {
+    return () => {
+      if (dragStateRef.current.timer) {
+        window.clearTimeout(dragStateRef.current.timer);
+      }
+    };
+  }, []);
+
+  function preserveExecutionScrollPosition(runUpdate) {
+    const scrollContainer = document.querySelector('.app-content');
+    const scrollTop = scrollContainer?.scrollTop ?? null;
+
+    runUpdate();
+
+    if (scrollContainer && scrollTop !== null) {
+      window.requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    }
+  }
+
+  function openExecutionComposer() {
+    setExecutionExpanded(true);
+    window.requestAnimationFrame(() => {
+      const trigger = document.querySelector('.execution-list .inline-task-trigger');
+      if (trigger) {
+        trigger.click();
+        return;
+      }
+
+      document.querySelector('.execution-list .inline-task-input')?.focus();
+    });
+  }
 
   function updateTask(taskId, updates) {
     setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
@@ -688,8 +778,18 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     )));
   }
 
-  function addInlineTask() {
-    setTasks(current => [createTask({ status: 'active', shouldFocusTitle: true }), ...current]);
+  function addInlineTask(title) {
+    const taskTitle = title.trim();
+    if (!taskTitle) return;
+
+    setTasks(current => [
+      createTask({
+        status: 'active',
+        title: taskTitle,
+        priority: priorityOnly,
+      }),
+      ...current,
+    ]);
   }
 
   function convertInboxToTask(notificationId) {
@@ -708,19 +808,113 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   }
 
   function moveTask(taskId, direction) {
-    setTasks(current => {
-      const index = current.findIndex(task => task.id === taskId);
-      const nextIndex = index + direction;
+    preserveExecutionScrollPosition(() => {
+      setTasks(current => {
+        const index = current.findIndex(task => task.id === taskId);
+        const nextIndex = index + direction;
 
-      if (index < 0 || nextIndex < 0 || nextIndex >= current.length) {
-        return current;
-      }
+        if (index < 0 || nextIndex < 0 || nextIndex >= current.length) {
+          return current;
+        }
 
-      const next = [...current];
-      const [item] = next.splice(index, 1);
-      next.splice(nextIndex, 0, item);
-      return next;
+        const next = [...current];
+        const [item] = next.splice(index, 1);
+        next.splice(nextIndex, 0, item);
+        return next;
+      });
     });
+  }
+
+  function reorderTask(taskId, targetId, placement = 'before') {
+    preserveExecutionScrollPosition(() => {
+      setTasks(current => {
+        const fromIndex = current.findIndex(task => task.id === taskId);
+        const targetIndex = current.findIndex(task => task.id === targetId);
+
+        if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) {
+          return current;
+        }
+
+        const next = [...current];
+        const [item] = next.splice(fromIndex, 1);
+        let insertAt = next.findIndex(task => task.id === targetId);
+        if (insertAt < 0) insertAt = next.length;
+        if (placement === 'after') insertAt += 1;
+        next.splice(insertAt, 0, item);
+        return next;
+      });
+    });
+  }
+
+  function startTaskDrag(taskId, event) {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    if (dragStateRef.current.timer) {
+      window.clearTimeout(dragStateRef.current.timer);
+    }
+
+    const handle = event.currentTarget;
+    const pointerId = event.pointerId;
+
+    dragStateRef.current = {
+      taskId,
+      pointerId,
+      timer: window.setTimeout(() => {
+        setDraggingTaskId(taskId);
+        dragStateRef.current.active = true;
+        handle.setPointerCapture?.(pointerId);
+      }, 180),
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+    };
+  }
+
+  function moveTaskDrag(taskId, event) {
+    const dragState = dragStateRef.current;
+    if (dragState.taskId !== taskId) return;
+
+    const deltaX = Math.abs(event.clientX - dragState.startX);
+    const deltaY = Math.abs(event.clientY - dragState.startY);
+
+    if (!dragState.active) {
+      if (deltaX > 8 || deltaY > 8) {
+        if (dragState.timer) {
+          window.clearTimeout(dragState.timer);
+          dragState.timer = null;
+        }
+      }
+      return;
+    }
+
+    event.preventDefault();
+    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-task-id]');
+    const targetId = target?.getAttribute('data-task-id');
+
+    if (!targetId || targetId === taskId) return;
+
+    const targetRect = target.getBoundingClientRect();
+    const placement = event.clientY > targetRect.top + (targetRect.height / 2) ? 'after' : 'before';
+    reorderTask(taskId, targetId, placement);
+  }
+
+  function endTaskDrag(taskId) {
+    const dragState = dragStateRef.current;
+    if (dragState.taskId !== taskId) return;
+
+    if (dragState.timer) {
+      window.clearTimeout(dragState.timer);
+    }
+
+    dragStateRef.current = {
+      taskId: null,
+      pointerId: null,
+      timer: null,
+      startX: 0,
+      startY: 0,
+      active: false,
+    };
+    setDraggingTaskId(current => (current === taskId ? null : current));
   }
 
   return (
@@ -778,19 +972,59 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             </button>
           </div>
         </div>
-        <div className="subtle-feed">
-          {todaysAgendaItems.length === 0 ? (
+        <div
+          className="subtle-feed agenda-groups"
+          role="button"
+          tabIndex={0}
+          onClick={() => setAgendaExpanded(current => !current)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setAgendaExpanded(current => !current);
+            }
+          }}
+        >
+          {agendaGroups.every(group => group.items.length === 0) ? (
             <div className="empty-panel">
               <strong>No items for today</strong>
               <p>Capture something with the plus button.</p>
             </div>
           ) : (
-            todaysAgendaItems.map(item => (
-              <article key={item.id} className="feed-card">
-                <strong>{item.title}</strong>
-                <p>{item.subtitle}</p>
-              </article>
-            ))
+            agendaGroups.map(group => {
+              const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
+              const overflowCount = Math.max(0, group.items.length - visibleItems.length);
+
+              if (group.items.length === 0) return null;
+
+              return (
+                <article key={group.key} className="feed-card agenda-group">
+                  <div className="agenda-group-header">
+                    <strong>{group.label}</strong>
+                    <span>{group.items.length}</span>
+                  </div>
+                  <div className="agenda-group-list">
+                    {visibleItems.map(item => (
+                      <div key={item.id} className="agenda-item">
+                        <strong>{item.title}</strong>
+                        <span>{item.subtitle}</span>
+                      </div>
+                    ))}
+                    {!agendaExpanded && overflowCount > 0 && (
+                      <button
+                        type="button"
+                        className="agenda-overflow"
+                        onClick={event => {
+                          event.stopPropagation();
+                          setAgendaExpanded(true);
+                        }}
+                      >
+                        + {overflowCount} more
+                      </button>
+                    )}
+                  </div>
+                </article>
+              );
+            })
           )}
         </div>
       </section>
@@ -814,9 +1048,14 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             <p className="eyebrow">Daily execution</p>
             <h2>Run the day from here</h2>
           </div>
-          <button type="button" className="primary-button" onClick={addInlineTask}>
-            + Add task
-          </button>
+          <div className="header-stack">
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
+              {executionExpanded ? 'Collapse' : 'Expand'}
+            </button>
+            <button type="button" className="primary-button" onClick={openExecutionComposer}>
+              + Add task
+            </button>
+          </div>
         </div>
 
         <div className="summary-row">
@@ -838,19 +1077,21 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
           <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
             {priorityOnly ? 'Priority focus' : 'All tasks'}
           </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={addInlineTask}>
+          <button type="button" className="ghost-button compact-ghost" onClick={openExecutionComposer}>
             Quick add task
           </button>
         </div>
 
         <div className="execution-list">
+          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+
           {orderedTasks.length === 0 ? (
             <div className="empty-panel">
               <strong>No tasks yet</strong>
               <p>Capture one inline and keep moving.</p>
             </div>
           ) : (
-            orderedTasks.map(task => (
+            visibleExecutionTasks.map(task => (
               <ExecutionTaskItem
                 key={task.id}
                 task={task}
@@ -862,9 +1103,22 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
                 onSetStatus={setTaskStatus}
                 onMoveUp={() => moveTask(task.id, -1)}
                 onMoveDown={() => moveTask(task.id, 1)}
+                onMoveTask={reorderTask}
+                onStartDrag={startTaskDrag}
+                onMoveDrag={moveTaskDrag}
+                onEndDrag={endTaskDrag}
+                isDragging={draggingTaskId === task.id}
               />
             ))
           )}
+
+          {!executionExpanded && executionOverflowCount > 0 && (
+            <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
+              + {executionOverflowCount} more
+            </button>
+          )}
+
+          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
         </div>
       </section>
 
