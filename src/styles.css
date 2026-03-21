@@ -223,6 +223,10 @@ p {
   gap: 10px;
 }
 
+.nutrition-stack {
+  gap: 12px;
+}
+
 .fitness-stack {
   gap: 12px;
 }
@@ -365,7 +369,9 @@ p {
 .weekly-list,
 .notification-list,
 .subtle-feed,
-.subtask-tree {
+.subtask-tree,
+.nutrition-slot-grid,
+.nutrition-plan-grid {
   display: grid;
   gap: 10px;
 }
@@ -670,6 +676,62 @@ p {
   gap: 6px;
 }
 
+.nutrition-slot-card {
+  border: 1px solid rgba(47, 64, 90, 0.08);
+  background: var(--surface);
+  border-radius: 18px;
+  padding: 11px;
+  display: grid;
+  gap: 8px;
+}
+
+.nutrition-slot-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.nutrition-slot-head p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: capitalize;
+}
+
+.nutrition-slot-lines {
+  display: grid;
+  gap: 8px;
+}
+
+.nutrition-slot-line {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.nutrition-slot-line .status-pill {
+  margin-right: 6px;
+}
+
+.nutrition-meter {
+  display: grid;
+  gap: 8px;
+}
+
+.nutrition-plan-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nutrition-plan-grid .field-stack {
+  gap: 5px;
+}
+
+.nutrition-plan-grid .field-stack span {
+  font-size: 0.72rem;
+}
+
 .feed-card strong,
 .notification-item strong,
 .weekly-item strong,
@@ -971,6 +1033,10 @@ p {
 
   .summary-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nutrition-plan-grid {
+    grid-template-columns: 1fr;
   }
 
   .energy-strip {

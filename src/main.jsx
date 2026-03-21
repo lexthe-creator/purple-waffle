@@ -11,6 +11,28 @@ import { AppProvider, useAppContext } from './context/AppContext.jsx';
 import './styles.css';
 
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
+const NUTRITION_SLOTS = [
+  {
+    id: 'breakfast',
+    label: 'Breakfast',
+    keywords: ['breakfast', 'brunch', 'oat', 'oats', 'egg', 'eggs', 'yogurt', 'smoothie', 'coffee'],
+  },
+  {
+    id: 'lunch',
+    label: 'Lunch',
+    keywords: ['lunch', 'sandwich', 'salad', 'wrap', 'bowl', 'rice', 'chicken'],
+  },
+  {
+    id: 'dinner',
+    label: 'Dinner',
+    keywords: ['dinner', 'supper', 'pasta', 'salmon', 'steak', 'curry', 'taco'],
+  },
+  {
+    id: 'snacks',
+    label: 'Snacks',
+    keywords: ['snack', 'snacks', 'bar', 'fruit', 'protein', 'bite', 'nuts'],
+  },
+];
 const ROOT_TABS = [
   {
     id: 'dashboard',
@@ -293,6 +315,13 @@ function formatShortMonthDay(value) {
   }).format(new Date(value));
 }
 
+function formatShortTime(value) {
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
 function startOfDay(value) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
@@ -311,6 +340,47 @@ function addDays(value, amount) {
 
 function sameDay(left, right) {
   return toDateKey(left) === toDateKey(right);
+}
+
+function normalizeMealTags(tags = []) {
+  return Array.from(new Set(tags.filter(tag => typeof tag === 'string' && tag.trim())));
+}
+
+function getMealSlotFromTags(meal) {
+  const slotTag = meal?.tags?.find(tag => typeof tag === 'string' && tag.startsWith('slot:'));
+  if (slotTag) {
+    const slot = slotTag.slice(5);
+    if (NUTRITION_SLOTS.some(item => item.id === slot)) return slot;
+  }
+
+  return null;
+}
+
+function inferMealSlot(meal) {
+  const explicitSlot = getMealSlotFromTags(meal);
+  if (explicitSlot) return explicitSlot;
+
+  const haystack = `${meal?.name || ''} ${Array.isArray(meal?.tags) ? meal.tags.join(' ') : ''}`.toLowerCase();
+  const matchedSlot = NUTRITION_SLOTS.find(slot => slot.keywords.some(keyword => haystack.includes(keyword)));
+  if (matchedSlot) return matchedSlot.id;
+
+  const hour = new Date(meal?.loggedAt || Date.now()).getHours();
+  if (hour >= 5 && hour < 11) return 'breakfast';
+  if (hour >= 11 && hour < 15) return 'lunch';
+  if (hour >= 15 && hour < 21) return 'dinner';
+  return 'snacks';
+}
+
+function isPlannedMeal(meal) {
+  return Array.isArray(meal?.tags) && meal.tags.includes('planned');
+}
+
+function isHydrationMeal(meal) {
+  return Array.isArray(meal?.tags) && meal.tags.includes('water');
+}
+
+function getMealTimeLabel(meal) {
+  return formatShortTime(meal.loggedAt);
 }
 
 function getGreeting(now = new Date()) {
@@ -1205,33 +1275,175 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
   );
 }
 
-function NutritionScreen() {
+function NutritionScreen({ now }) {
   const { meals, setMeals, createMeal, setNotifications, createNotification } = useTaskContext();
   const [mealName, setMealName] = useState('');
   const [mealTags, setMealTags] = useState([]);
-  const latestMeal = meals[0] ?? null;
+  const [mealSlot, setMealSlot] = useState('auto');
+  const [planDrafts, setPlanDrafts] = useState(() => Object.fromEntries(NUTRITION_SLOTS.map(slot => [slot.id, ''])));
+  const [pantryDraft, setPantryDraft] = useState('');
+  const [pantryItems, setPantryItems] = useState(['Eggs', 'Oats', 'Rice', 'Greek yogurt']);
+  const [prepNote, setPrepNote] = useState('');
+  const todayKey = toDateKey(now);
+
+  const todaysMeals = useMemo(
+    () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
+    [meals, todayKey],
+  );
+
+  const todaysFuelMeals = useMemo(
+    () => todaysMeals.filter(meal => !isHydrationMeal(meal)),
+    [todaysMeals],
+  );
+
+  const hydrationCount = useMemo(
+    () => todaysMeals.filter(isHydrationMeal).length,
+    [todaysMeals],
+  );
+
+  const mealSlots = useMemo(() => {
+    return NUTRITION_SLOTS.map(slot => {
+      const slotMeals = todaysFuelMeals.filter(meal => inferMealSlot(meal) === slot.id);
+      return {
+        ...slot,
+        planned: slotMeals.filter(isPlannedMeal),
+        logged: slotMeals.filter(meal => !isPlannedMeal(meal)),
+      };
+    });
+  }, [todaysFuelMeals]);
+
+  const slotCoverage = useMemo(
+    () => mealSlots.reduce(
+      (accumulator, slot) => {
+        accumulator.planned += slot.planned.length;
+        accumulator.logged += slot.logged.length;
+        return accumulator;
+      },
+      { planned: 0, logged: 0 },
+    ),
+    [mealSlots],
+  );
+
+  const macroSummary = useMemo(() => {
+    const counts = { protein: 0, carbs: 0, veg: 0, quick: 0 };
+    todaysFuelMeals.forEach(meal => {
+      counts.protein += meal.tags.includes('protein') ? 1 : 0;
+      counts.carbs += meal.tags.includes('carbs') ? 1 : 0;
+      counts.veg += meal.tags.includes('veg') ? 1 : 0;
+      counts.quick += meal.tags.includes('quick') ? 1 : 0;
+    });
+    return counts;
+  }, [todaysFuelMeals]);
+
+  const plannedEntries = useMemo(
+    () => todaysFuelMeals.filter(isPlannedMeal),
+    [todaysFuelMeals],
+  );
+
+  useEffect(() => {
+    setPlanDrafts(current => {
+      const next = { ...current };
+      NUTRITION_SLOTS.forEach(slot => {
+        const plannedMeal = plannedEntries.find(meal => inferMealSlot(meal) === slot.id);
+        if (plannedMeal) {
+          next[slot.id] = plannedMeal.name;
+        } else if (!current[slot.id]) {
+          next[slot.id] = '';
+        }
+      });
+      return next;
+    });
+  }, [plannedEntries, todayKey]);
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
   }
 
-  function submitMeal() {
+  function submitMeal(slotOverride = mealSlot) {
     const trimmed = mealName.trim();
     if (!trimmed) return;
 
-    setMeals(current => [createMeal({ name: trimmed, tags: mealTags }), ...current]);
+    const resolvedSlot = slotOverride === 'auto' ? inferMealSlot({ name: trimmed, tags: mealTags, loggedAt: Date.now() }) : slotOverride;
+    const tags = normalizeMealTags([...mealTags, `slot:${resolvedSlot}`]);
+
+    setMeals(current => [createMeal({ name: trimmed, tags }), ...current]);
     setMealName('');
     setMealTags([]);
-    upsertNotification('Meal logged', trimmed);
+    setMealSlot('auto');
+    upsertNotification('Meal logged', `${trimmed} · ${NUTRITION_SLOTS.find(slot => slot.id === resolvedSlot)?.label || 'Auto'}`);
+  }
+
+  function logWater(amount = 1) {
+    setMeals(current => [
+      ...Array.from({ length: amount }, () => createMeal({ name: 'Water', tags: ['water'] })),
+      ...current,
+    ]);
+    upsertNotification('Hydration updated', `${amount} glass${amount > 1 ? 'es' : ''} added`);
+  }
+
+  function savePlan() {
+    const plannedMeals = NUTRITION_SLOTS.flatMap(slot => {
+      const trimmed = planDrafts[slot.id]?.trim();
+      if (!trimmed) return [];
+      return [
+        createMeal({
+          name: trimmed,
+          tags: ['planned', `slot:${slot.id}`],
+        }),
+      ];
+    });
+
+    setMeals(current => {
+      const currentDayMeals = current.filter(meal => {
+        if (toDateKey(meal.loggedAt) !== todayKey) return true;
+        if (!isPlannedMeal(meal)) return true;
+        return !NUTRITION_SLOTS.some(slot => inferMealSlot(meal) === slot.id);
+      });
+
+      return [...plannedMeals, ...currentDayMeals];
+    });
+
+    upsertNotification('Meal plan saved', 'Today\'s planned meals updated');
+  }
+
+  function savePantryItem() {
+    const trimmed = pantryDraft.trim();
+    if (!trimmed) return;
+
+    setPantryItems(current => [trimmed, ...current]);
+    setPantryDraft('');
+  }
+
+  function addPrepNote() {
+    const trimmed = prepNote.trim();
+    if (!trimmed) return;
+
+    upsertNotification('Prep note saved', trimmed.slice(0, 42));
+    setPrepNote('');
   }
 
   return (
-    <div className="tab-stack">
+    <div className="tab-stack nutrition-stack">
       <section className="task-card">
         <div className="task-card-header">
           <div>
-            <p className="eyebrow">Quick meal</p>
-            <h2>Add a meal in one step</h2>
+            <p className="eyebrow">Nutrition</p>
+            <h2>Today&apos;s fuel</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Planned</span>
+            <strong>{slotCoverage.planned}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Logged</span>
+            <strong>{slotCoverage.logged}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Water</span>
+            <strong>{hydrationCount}</strong>
           </div>
         </div>
 
@@ -1240,11 +1452,36 @@ function NutritionScreen() {
             className="task-title-input"
             value={mealName}
             onChange={event => setMealName(event.target.value)}
-            placeholder="Meal name"
+            placeholder="Meal or snack"
           />
-          <button type="button" className="primary-button" onClick={submitMeal}>
-            Save
+          <button type="button" className="primary-button" onClick={() => submitMeal()}>
+            Log
           </button>
+        </div>
+
+        <div className="tag-row">
+          <button
+            type="button"
+            className={`status-chip ${mealSlot === 'auto' ? 'is-active' : ''}`}
+            onClick={() => setMealSlot('auto')}
+          >
+            Auto
+          </button>
+          {NUTRITION_SLOTS.map(slot => (
+            <button
+              key={slot.id}
+              type="button"
+              className={`status-chip ${mealSlot === slot.id ? 'is-active' : ''}`}
+              onClick={() => {
+                setMealSlot(slot.id);
+                if (mealName.trim()) {
+                  submitMeal(slot.id);
+                }
+              }}
+            >
+              {slot.label}
+            </button>
+          ))}
         </div>
 
         <div className="tag-row">
@@ -1261,16 +1498,172 @@ function NutritionScreen() {
             </button>
           ))}
         </div>
+      </section>
 
-        <div className="subtle-feed">
-          {latestMeal ? (
-            <div className="feed-card">
-              <strong>{latestMeal.name}</strong>
-              <p>{latestMeal.tags.length ? latestMeal.tags.join(' · ') : 'No tags yet'}</p>
-            </div>
-          ) : (
-            <p className="empty-message">No meals logged yet.</p>
-          )}
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Today&apos;s meals</p>
+            <h2>Planned vs logged by slot</h2>
+          </div>
+        </div>
+
+        <div className="nutrition-slot-grid">
+          {mealSlots.map(slot => (
+            <article key={slot.id} className="nutrition-slot-card">
+              <div className="nutrition-slot-head">
+                <div>
+                  <strong>{slot.label}</strong>
+                  <p>{slot.keywords[0] || slot.label.toLowerCase()}</p>
+                </div>
+                <button
+                  type="button"
+                  className="ghost-button compact-ghost"
+                  onClick={() => {
+                    setMealSlot(slot.id);
+                    setMealName(slot.planned[0]?.name || '');
+                  }}
+                >
+                  Log here
+                </button>
+              </div>
+
+              <div className="nutrition-slot-lines">
+                <p className="nutrition-slot-line">
+                  <span className="status-pill status-planned">Planned</span>{' '}
+                  {slot.planned.length ? slot.planned.map(meal => meal.name).join(' · ') : 'No plan yet'}
+                </p>
+                <p className="nutrition-slot-line">
+                  <span className="status-pill status-active">Logged</span>{' '}
+                  {slot.logged.length
+                    ? slot.logged.map(meal => `${meal.name} · ${getMealTimeLabel(meal)}`).join(' · ')
+                    : 'Nothing logged'}
+                </p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Hydration</p>
+            <h2>Keep water visible</h2>
+          </div>
+          <strong>{hydrationCount} cups</strong>
+        </div>
+
+        <div className="nutrition-meter">
+          <div className="progress-bar">
+            <span style={{ width: `${Math.min(100, Math.round((hydrationCount / 8) * 100))}%` }} />
+          </div>
+          <p className="empty-message">Simple tap tracking. Goal: 8 cups.</p>
+        </div>
+
+        <div className="inline-actions">
+          <button type="button" className="secondary-button" onClick={() => logWater(1)}>
+            +1 cup
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={() => logWater(2)}>
+            +2 cups
+          </button>
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Meal planning</p>
+            <h2>Edit today&apos;s plan</h2>
+          </div>
+          <button type="button" className="primary-button" onClick={savePlan}>
+            Save plan
+          </button>
+        </div>
+
+        <div className="nutrition-plan-grid">
+          {NUTRITION_SLOTS.map(slot => (
+            <label key={slot.id} className="field-stack">
+              <span>{slot.label}</span>
+              <input
+                className="task-title-input"
+                value={planDrafts[slot.id]}
+                onChange={event => setPlanDrafts(current => ({ ...current, [slot.id]: event.target.value }))}
+                placeholder={`Plan ${slot.label.toLowerCase()}`}
+              />
+            </label>
+          ))}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Pantry</p>
+            <h2>Lightweight visibility</h2>
+          </div>
+        </div>
+
+        <div className="quick-entry-row">
+          <input
+            className="task-title-input"
+            value={pantryDraft}
+            onChange={event => setPantryDraft(event.target.value)}
+            placeholder="Add pantry item"
+          />
+          <button type="button" className="ghost-button compact-ghost" onClick={savePantryItem}>
+            Add
+          </button>
+        </div>
+
+        <div className="tag-row">
+          {pantryItems.map(item => (
+            <span key={item} className="status-pill">
+              {item}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Macros / prep</p>
+            <h2>Keep it simple</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Protein</span>
+            <strong>{macroSummary.protein}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Carbs</span>
+            <strong>{macroSummary.carbs}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Veg</span>
+            <strong>{macroSummary.veg}</strong>
+          </div>
+        </div>
+
+        <label className="field-stack">
+          <span>Prep note</span>
+          <textarea
+            className="notes-textarea"
+            value={prepNote}
+            onChange={event => setPrepNote(event.target.value)}
+            placeholder="Prep work, grocery gaps, reminders"
+          />
+        </label>
+
+        <div className="inline-actions">
+          <button type="button" className="secondary-button" onClick={addPrepNote}>
+            Save note
+          </button>
+          <p className="empty-message">Planned meals and hydration stay the focus; macros remain a light scaffold.</p>
         </div>
       </section>
     </div>
@@ -2191,7 +2584,7 @@ function AppShell() {
           </RootTabPanel>
 
           <RootTabPanel id="nutrition" activeTab={activeTab}>
-            <NutritionScreen />
+            <NutritionScreen now={now} />
           </RootTabPanel>
 
           <RootTabPanel id="fitness" activeTab={activeTab}>
