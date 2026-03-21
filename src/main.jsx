@@ -328,6 +328,18 @@ function startOfDay(value) {
   return date;
 }
 
+function startOfMonth(value) {
+  const date = new Date(value);
+  date.setDate(1);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function isWithinRange(value, start, end) {
+  const date = new Date(value);
+  return date >= start && date < end;
+}
+
 function toDateKey(value) {
   return startOfDay(value).toISOString().slice(0, 10);
 }
@@ -2286,184 +2298,315 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 }
 
-function MoreScreen() {
+function MoreScreen({ now }) {
   const { tasks, meals, notes, workouts, notifications } = useTaskContext();
-  const { energyState, setEnergyState } = useAppContext();
-  const [energyDraft, setEnergyDraft] = useState({
-    value: energyState.value ?? 3,
-    sleepHours: energyState.sleepHours ?? 7,
-    sleepSource: energyState.sleepSource === 'integrated' ? 'integrated' : 'manual',
-  });
-
-  useEffect(() => {
-    setEnergyDraft({
-      value: energyState.value ?? 3,
-      sleepHours: energyState.sleepHours ?? 7,
-      sleepSource: energyState.sleepSource === 'integrated' ? 'integrated' : 'manual',
-    });
-  }, [energyState.value, energyState.sleepHours, energyState.sleepSource]);
-
-  const latestNote = notes[0] ?? null;
-  const activeTasks = tasks.filter(task => task.status !== 'done');
+  const { energyState } = useAppContext();
+  const weekStart = useMemo(() => alignDateToAnchor(now, 'Monday'), [now]);
+  const nextWeekStart = useMemo(() => addDays(weekStart, 7), [weekStart]);
+  const previousWeekStart = useMemo(() => addDays(weekStart, -7), [weekStart]);
+  const monthStart = useMemo(() => startOfMonth(now), [now]);
+  const nextMonthStart = useMemo(() => startOfMonth(new Date(now.getFullYear(), now.getMonth() + 1, 1)), [now]);
   const unreadCount = notifications.filter(notification => !notification.read).length;
+  const activeWorkout = workouts.find(workout => workout.status === 'active') ?? null;
+  const latestWorkout = workouts[0] ?? null;
+  const activeProgramId = activeWorkout ? getWorkoutProgramKey(activeWorkout) : getWorkoutProgramKey(latestWorkout);
+  const activeProgram = FITNESS_PROGRAMS[activeProgramId] || FITNESS_PROGRAMS.strength;
 
-  function saveEnergyCheckIn() {
-    setEnergyState({
-      value: Number.isFinite(energyDraft.value) ? energyDraft.value : 3,
-      sleepHours: Number.isFinite(energyDraft.sleepHours) ? energyDraft.sleepHours : 7,
-      sleepSource: energyDraft.sleepSource,
-      lastCheckIn: new Date().toISOString(),
-    });
-  }
+  const weeklyInsights = useMemo(() => {
+    const weekTasks = tasks.filter(task => isWithinRange(task.createdAt, weekStart, nextWeekStart));
+    const previousWeekTasks = tasks.filter(task => isWithinRange(task.createdAt, previousWeekStart, weekStart));
+    const weekWorkouts = workouts.filter(workout => isWithinRange(workout.createdAt, weekStart, nextWeekStart));
+    const previousWeekWorkouts = workouts.filter(workout => isWithinRange(workout.createdAt, previousWeekStart, weekStart));
+    const weekMeals = meals.filter(meal => isWithinRange(meal.loggedAt, weekStart, nextWeekStart));
+    const previousWeekMeals = meals.filter(meal => isWithinRange(meal.loggedAt, previousWeekStart, weekStart));
 
-  function skipEnergyCheckIn() {
-    setEnergyState(current => {
-      const fallbackValue = current.value ?? 3;
-      const fallbackSleep = current.sleepHours ?? 7;
-      const fallbackSource =
-        current.sleepSource === 'integrated'
-          ? 'integrated'
-          : current.lastCheckIn
-            ? 'last known'
-            : 'baseline';
+    const completedTasks = weekTasks.filter(task => task.status === 'done').length;
+    const completedWorkouts = weekWorkouts.filter(workout => workout.status === 'completed').length;
+    const mealsLogged = weekMeals.length;
+    const hydrationCount = weekMeals.filter(isHydrationMeal).length;
+    const hydrationTrend = hydrationCount - previousWeekMeals.filter(isHydrationMeal).length;
+    const taskTrend = completedTasks - previousWeekTasks.filter(task => task.status === 'done').length;
+    const workoutTrend = completedWorkouts - previousWeekWorkouts.filter(workout => workout.status === 'completed').length;
 
-      return {
-        value: fallbackValue,
-        sleepHours: fallbackSleep,
-        sleepSource: fallbackSource,
-        lastCheckIn: new Date().toISOString(),
-      };
-    });
-  }
+    return {
+      completedTasks,
+      completedWorkouts,
+      mealsLogged,
+      hydrationCount,
+      hydrationTrend,
+      taskTrend,
+      workoutTrend,
+    };
+  }, [meals, nextWeekStart, previousWeekStart, tasks, weekStart, workouts]);
 
-  function getEnergyLabel() {
-    if (energyState.sleepSource === 'integrated') return 'Integrated';
-    if (energyState.sleepSource === 'manual') return 'Manual';
-    if (energyState.sleepSource === 'last known') return 'Last known';
-    return 'Baseline';
-  }
+  const fitnessSummary = useMemo(() => getWorkoutStats(workouts, now, activeProgramId), [activeProgramId, now, workouts]);
+  const dailyTaskSummary = useMemo(() => {
+    const active = tasks.filter(task => task.status === 'active');
+    const planned = tasks.filter(task => task.status === 'planned');
+    const completedToday = tasks.filter(task => task.status === 'done' && sameDay(task.createdAt, now));
+
+    return {
+      active,
+      planned,
+      completedToday,
+    };
+  }, [now, tasks]);
+
+  const monthlyTaskSummary = useMemo(() => {
+    const monthTasks = tasks.filter(task => isWithinRange(task.createdAt, monthStart, nextMonthStart));
+    return {
+      total: monthTasks.length,
+      active: monthTasks.filter(task => task.status === 'active').length,
+      planned: monthTasks.filter(task => task.status === 'planned').length,
+      done: monthTasks.filter(task => task.status === 'done').length,
+      preview: monthTasks.slice(0, 2),
+    };
+  }, [monthStart, nextMonthStart, tasks]);
+
+  const noteSummary = useMemo(() => {
+    const monthNotes = notes.filter(note => isWithinRange(note.createdAt, monthStart, nextMonthStart));
+    return {
+      latest: notes[0] ?? null,
+      monthCount: monthNotes.length,
+      preview: notes.slice(0, 2),
+    };
+  }, [monthStart, nextMonthStart, notes]);
+
+  const systemSummary = useMemo(() => {
+    const source =
+      energyState.sleepSource === 'integrated'
+        ? 'Integrated'
+        : energyState.sleepSource === 'manual'
+          ? 'Manual'
+          : energyState.sleepSource === 'last known'
+            ? 'Last known'
+            : 'Baseline';
+
+    return {
+      energy: Number.isFinite(energyState.value) ? energyState.value : 3,
+      sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
+      source,
+      lastCheckIn: energyState.lastCheckIn ? formatShortMonthDay(energyState.lastCheckIn) : 'No check-in yet',
+    };
+  }, [energyState.lastCheckIn, energyState.sleepHours, energyState.sleepSource, energyState.value]);
 
   return (
     <div className="tab-stack">
       <section className="task-card">
         <div className="task-card-header">
           <div>
-            <p className="eyebrow">Summary</p>
-            <h2>Lightweight rollups</h2>
+            <p className="eyebrow">More</p>
+            <h2>Summary and insights</h2>
           </div>
         </div>
 
         <div className="summary-row">
           <div className="summary-tile">
-            <span>Tasks</span>
-            <strong>{activeTasks.length}</strong>
+            <span>Tasks done</span>
+            <strong>{weeklyInsights.completedTasks}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Workouts</span>
+            <strong>{weeklyInsights.completedWorkouts}</strong>
           </div>
           <div className="summary-tile">
             <span>Meals</span>
-            <strong>{meals.length}</strong>
+            <strong>{weeklyInsights.mealsLogged}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Hydration</span>
+            <strong>{weeklyInsights.hydrationCount}</strong>
+          </div>
+        </div>
+
+        <p className="empty-message">
+          Trend: {weeklyInsights.taskTrend >= 0 ? '+' : ''}{weeklyInsights.taskTrend} tasks, {weeklyInsights.workoutTrend >= 0 ? '+' : ''}{weeklyInsights.workoutTrend} workouts, hydration {weeklyInsights.hydrationTrend >= 0 ? '+' : ''}{weeklyInsights.hydrationTrend} versus last week.
+        </p>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Fitness summary</p>
+            <h2>Current program rollup</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Program</span>
+            <strong>{activeProgram.name}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Workouts</span>
+            <strong>{fitnessSummary.workoutsCompleted}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Miles</span>
+            <strong>{fitnessSummary.milesCompleted.toFixed(1)}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Recovery</span>
+            <strong>{fitnessSummary.recoverySessions}</strong>
+          </div>
+        </div>
+
+        <p className="empty-message">
+          Program focus: {activeProgram.description}
+        </p>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Daily tasks</p>
+            <h2>Current task state</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Active</span>
+            <strong>{dailyTaskSummary.active.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Planned</span>
+            <strong>{dailyTaskSummary.planned.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Done today</span>
+            <strong>{dailyTaskSummary.completedToday.length}</strong>
+          </div>
+        </div>
+
+        <div className="subtle-feed">
+          {dailyTaskSummary.active.length === 0 && dailyTaskSummary.planned.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No tasks in motion</strong>
+              <p>Capture one from the top bar or keep this as a clean slate.</p>
+            </div>
+          ) : (
+            [...dailyTaskSummary.active, ...dailyTaskSummary.planned].slice(0, 2).map(task => (
+              <article key={task.id} className="feed-card">
+                <strong>{task.title || 'Untitled task'}</strong>
+                <p>{task.status} · {task.subtasks.filter(subtask => subtask.done === false).length} open subtasks</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Monthly tasks</p>
+            <h2>Lightweight month rollup</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>This month</span>
+            <strong>{monthlyTaskSummary.total}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Active</span>
+            <strong>{monthlyTaskSummary.active}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Done</span>
+            <strong>{monthlyTaskSummary.done}</strong>
+          </div>
+        </div>
+
+        <div className="subtle-feed">
+          {monthlyTaskSummary.preview.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No month-level task data yet</strong>
+              <p>New tasks will start filling this rollup automatically.</p>
+            </div>
+          ) : (
+            monthlyTaskSummary.preview.map(task => (
+              <article key={task.id} className="feed-card">
+                <strong>{task.title || 'Untitled task'}</strong>
+                <p>{task.status} · created {formatShortMonthDay(task.createdAt)}</p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Notes rollup</p>
+            <h2>Preview only</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Notes</span>
+            <strong>{notes.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>This month</span>
+            <strong>{noteSummary.monthCount}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Unread</span>
+            <strong>{unreadCount}</strong>
+          </div>
+        </div>
+
+        <div className="subtle-feed">
+          {noteSummary.preview.length > 0 ? (
+            noteSummary.preview.map(note => (
+              <article key={note.id} className="feed-card">
+                <strong>{note.content}</strong>
+                <p>{formatShortMonthDay(note.createdAt)}</p>
+              </article>
+            ))
+          ) : (
+            <div className="empty-panel">
+              <strong>No notes captured yet</strong>
+              <p>Notes roll up here once they exist; nothing else is managed here.</p>
+            </div>
+          )}
+          {noteSummary.latest && (
+            <p className="empty-message">
+              Latest note: {noteSummary.latest.content.slice(0, 60)}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">System summary</p>
+            <h2>Quick state check</h2>
+          </div>
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Energy</span>
+            <strong>{systemSummary.energy}/5</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Sleep</span>
+            <strong>{systemSummary.sleepHours}h</strong>
           </div>
           <div className="summary-tile">
             <span>Inbox</span>
             <strong>{unreadCount}</strong>
           </div>
         </div>
-      </section>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Energy</p>
-            <h2>Check in without breaking flow</h2>
-          </div>
-        </div>
-
-        <div className="energy-strip">
-          <div className="metric-card">
-            <span>Energy</span>
-            <strong>{energyState.value}/5</strong>
-          </div>
-          <div className="metric-card">
-            <span>Sleep</span>
-            <strong>{energyState.sleepHours}h</strong>
-          </div>
-          <div className="metric-card">
-            <span>Source</span>
-            <strong>{getEnergyLabel()}</strong>
-          </div>
-          <div className="metric-actions">
-            <div className="status-chip-group" role="group" aria-label="Energy rating">
-              {[1, 2, 3, 4, 5].map(value => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`status-chip ${energyDraft.value === value ? 'is-active' : ''}`}
-                  onClick={() => setEnergyDraft(current => ({ ...current, value }))}
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-            <label className="field-stack compact-field">
-              <span>Sleep hours</span>
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                className="task-title-input"
-                value={energyDraft.sleepHours}
-                onChange={event => setEnergyDraft(current => ({
-                  ...current,
-                  sleepHours: Number.parseFloat(event.target.value),
-                }))}
-              />
-            </label>
-            <div className="status-chip-group" role="group" aria-label="Sleep source">
-              <button
-                type="button"
-                className={`status-chip ${energyDraft.sleepSource === 'manual' ? 'is-active' : ''}`}
-                onClick={() => setEnergyDraft(current => ({ ...current, sleepSource: 'manual' }))}
-              >
-                Manual
-              </button>
-              <button
-                type="button"
-                className={`status-chip ${energyDraft.sleepSource === 'integrated' ? 'is-active' : ''}`}
-                onClick={() => setEnergyDraft(current => ({ ...current, sleepSource: 'integrated' }))}
-              >
-                Integrated
-              </button>
-            </div>
-            <button type="button" className="secondary-button" onClick={saveEnergyCheckIn}>
-              Save check-in
-            </button>
-            <button type="button" className="ghost-button compact-ghost" onClick={skipEnergyCheckIn}>
-              Skip check-in
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Recent captures</p>
-            <h2>Notes and rollup state</h2>
-          </div>
-        </div>
-
-        <div className="subtle-feed">
-          {latestNote ? (
-            <article className="feed-card">
-              <strong>{latestNote.content}</strong>
-            </article>
-          ) : (
-            <p className="empty-message">No notes captured yet.</p>
-          )}
-          <div className="feed-card">
-            <strong>{workouts.length} workouts</strong>
-            <p>Keep this tab ready for summary expansion later.</p>
-          </div>
-        </div>
+        <p className="empty-message">
+          Source: {systemSummary.source} · last check-in {systemSummary.lastCheckIn}
+        </p>
       </section>
     </div>
   );
@@ -2592,7 +2735,7 @@ function AppShell() {
           </RootTabPanel>
 
           <RootTabPanel id="more" activeTab={activeTab}>
-            <MoreScreen />
+            <MoreScreen now={now} />
           </RootTabPanel>
         </div>
       </main>
