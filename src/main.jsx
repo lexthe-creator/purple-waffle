@@ -914,6 +914,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
 
   return (
     <div className="tab-stack">
+      {/* 1. CONTEXT — greeting + summary tiles */}
       <section className="task-card">
         <div className="task-card-header">
           <div>
@@ -923,15 +924,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
           <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
             {priorityOnly ? 'Priority only' : 'Show all'}
           </button>
-        </div>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Today card</p>
-            <h2>Open-day context</h2>
-          </div>
         </div>
         <div className="summary-row">
           <div className="summary-tile">
@@ -949,6 +941,117 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
         </div>
       </section>
 
+      {/* 2. WORKOUT */}
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Today&apos;s workout</p>
+            <h2>Workout card</h2>
+          </div>
+        </div>
+        {nextWorkout ? (
+          <article className="feed-card">
+            <strong>{nextWorkout.name}</strong>
+            <p>{nextWorkout.type || 'Workout'} · {nextWorkout.duration} min · {nextWorkout.status}</p>
+            <button type="button" className="secondary-button" onClick={() => onStartWorkout(nextWorkout.id)}>
+              {activeWorkout ? 'Continue' : 'Start'}
+            </button>
+          </article>
+        ) : (
+          <div className="empty-panel">
+            <strong>No workout exists yet</strong>
+            <p>Add one with quick capture.</p>
+          </div>
+        )}
+      </section>
+
+      {/* 3. EXECUTION — progress bar + task list */}
+      <section className="task-card execution-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Daily execution</p>
+            <h2>Run the day from here</h2>
+          </div>
+          <div className="header-stack">
+            <strong>{dailyProgress}%</strong>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
+              {executionExpanded ? 'Collapse' : 'Expand'}
+            </button>
+            <button type="button" className="primary-button" onClick={openExecutionComposer}>
+              + Add task
+            </button>
+          </div>
+        </div>
+
+        <div className="progress-bar">
+          <span style={{ width: `${dailyProgress}%` }} />
+        </div>
+
+        <div className="summary-row">
+          <div className="summary-tile">
+            <span>Active</span>
+            <strong>{activeTasks.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Done</span>
+            <strong>{completedTasks.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Inbox</span>
+            <strong>{inboxCount}</strong>
+          </div>
+        </div>
+
+        <div className="quick-entry-row">
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
+            {priorityOnly ? 'Priority focus' : 'All tasks'}
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={openExecutionComposer}>
+            Quick add task
+          </button>
+        </div>
+
+        <div className="execution-list">
+          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+
+          {orderedTasks.length === 0 ? (
+            <div className="empty-panel">
+              <strong>No tasks yet</strong>
+              <p>Capture one inline and keep moving.</p>
+            </div>
+          ) : (
+            visibleExecutionTasks.map(task => (
+              <ExecutionTaskItem
+                key={task.id}
+                task={task}
+                onUpdateTask={updateTask}
+                onDeleteTask={deleteTask}
+                onToggleDone={toggleTaskDone}
+                onToggleSubtask={toggleSubtask}
+                onAddSubtask={addSubtask}
+                onSetStatus={setTaskStatus}
+                onMoveUp={() => moveTask(task.id, -1)}
+                onMoveDown={() => moveTask(task.id, 1)}
+
+                onStartDrag={startTaskDrag}
+                onMoveDrag={moveTaskDrag}
+                onEndDrag={endTaskDrag}
+                isDragging={draggingTaskId === task.id}
+              />
+            ))
+          )}
+
+          {!executionExpanded && executionOverflowCount > 0 && (
+            <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
+              + {executionOverflowCount} more
+            </button>
+          )}
+
+          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+        </div>
+      </section>
+
+      {/* 4. AGENDA */}
       <section className="task-card">
         <div className="task-card-header">
           <div>
@@ -1024,149 +1127,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
         </div>
       </section>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Daily progress</p>
-            <h2>Execution momentum</h2>
-          </div>
-          <strong>{dailyProgress}%</strong>
-        </div>
-        <div className="progress-bar">
-          <span style={{ width: `${dailyProgress}%` }} />
-        </div>
-      </section>
-
-      <section className="task-card execution-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Daily execution</p>
-            <h2>Run the day from here</h2>
-          </div>
-          <div className="header-stack">
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
-              {executionExpanded ? 'Collapse' : 'Expand'}
-            </button>
-            <button type="button" className="primary-button" onClick={openExecutionComposer}>
-              + Add task
-            </button>
-          </div>
-        </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Active</span>
-            <strong>{activeTasks.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Done</span>
-            <strong>{completedTasks.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Inbox</span>
-            <strong>{inboxCount}</strong>
-          </div>
-        </div>
-
-        <div className="quick-entry-row">
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
-            {priorityOnly ? 'Priority focus' : 'All tasks'}
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={openExecutionComposer}>
-            Quick add task
-          </button>
-        </div>
-
-        <div className="execution-list">
-          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
-
-          {orderedTasks.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No tasks yet</strong>
-              <p>Capture one inline and keep moving.</p>
-            </div>
-          ) : (
-            visibleExecutionTasks.map(task => (
-              <ExecutionTaskItem
-                key={task.id}
-                task={task}
-                onUpdateTask={updateTask}
-                onDeleteTask={deleteTask}
-                onToggleDone={toggleTaskDone}
-                onToggleSubtask={toggleSubtask}
-                onAddSubtask={addSubtask}
-                onSetStatus={setTaskStatus}
-                onMoveUp={() => moveTask(task.id, -1)}
-                onMoveDown={() => moveTask(task.id, 1)}
-
-                onStartDrag={startTaskDrag}
-                onMoveDrag={moveTaskDrag}
-                onEndDrag={endTaskDrag}
-                isDragging={draggingTaskId === task.id}
-              />
-            ))
-          )}
-
-          {!executionExpanded && executionOverflowCount > 0 && (
-            <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
-              + {executionOverflowCount} more
-            </button>
-          )}
-
-          <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
-        </div>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Inbox to task</p>
-            <h2>Promote an item</h2>
-          </div>
-        </div>
-        <div className="subtle-feed">
-          {notifications.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No inbox items</strong>
-              <p>Inbox items can be converted directly into tasks.</p>
-            </div>
-          ) : (
-            notifications.slice(0, 3).map(notification => (
-              <article key={notification.id} className="feed-card">
-                <strong>{notification.title}</strong>
-                <p>{notification.detail || 'Inbox item'}</p>
-                <button type="button" className="ghost-button compact-ghost" onClick={() => convertInboxToTask(notification.id)}>
-                  Convert to task
-                </button>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Today&apos;s workout</p>
-            <h2>Workout card</h2>
-          </div>
-        </div>
-        {nextWorkout ? (
-          <article className="feed-card">
-            <strong>{nextWorkout.name}</strong>
-            <p>{nextWorkout.type || 'Workout'} · {nextWorkout.duration} min · {nextWorkout.status}</p>
-            <button type="button" className="secondary-button" onClick={() => onStartWorkout(nextWorkout.id)}>
-              {activeWorkout ? 'Continue' : 'Start'}
-            </button>
-          </article>
-        ) : (
-          <div className="empty-panel">
-            <strong>No workout exists yet</strong>
-            <p>Add one with quick capture.</p>
-          </div>
-        )}
-      </section>
-
+      {/* 5. MEALS */}
       <section className="task-card">
         <div className="task-card-header">
           <div>
@@ -1197,71 +1158,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
             <p>Nutrition stays lightweight here.</p>
           </div>
         )}
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Task priorities</p>
-            <h2>What matters now</h2>
-          </div>
-          {priorityItems.length > 2 && (
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setPrioritiesExpanded(current => !current)}>
-              {prioritiesExpanded ? 'Less' : 'More'}
-            </button>
-          )}
-        </div>
-        <div className="subtle-feed">
-          {visiblePriorityItems.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No active priorities</strong>
-              <p>Promote a task to active to surface it here.</p>
-            </div>
-          ) : (
-            visiblePriorityItems.map(task => (
-              <article key={task.id} className="feed-card">
-                <strong>{task.title}</strong>
-                <p>{task.status} · {task.subtasks.filter(subtask => subtask.done === false).length} open subtasks</p>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">7-day strip</p>
-            <h2>Flagged items only</h2>
-          </div>
-          {sevenDayStrip.length > 3 && (
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setStripExpanded(current => !current)}>
-              {stripExpanded ? 'Less' : 'More'}
-            </button>
-          )}
-        </div>
-        <div className="week-strip">
-          {visibleSevenDayStrip.length === 0 ? (
-            <p className="empty-message">No flagged items in the next seven days.</p>
-          ) : (
-            visibleSevenDayStrip.map(item => (
-              <article key={item.id} className="week-strip-item">
-                <strong>{item.label}</strong>
-                <p>Flagged</p>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Quick capture</p>
-            <h2>Access always stays close</h2>
-          </div>
-        </div>
-        <p className="empty-message">Use the floating plus button or the top brain dump action.</p>
       </section>
     </div>
   );
