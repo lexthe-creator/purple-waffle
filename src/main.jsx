@@ -1305,10 +1305,6 @@ function MoreScreen() {
 
 function AppShell() {
   const {
-    quickAddOpen,
-    setQuickAddOpen,
-    notificationCenterOpen,
-    setNotificationCenterOpen,
     setNotifications,
     createNotification,
     setTasks,
@@ -1321,6 +1317,12 @@ function AppShell() {
     createWorkout,
     notifications,
   } = useTaskContext();
+  const {
+    quickAddOpen,
+    setQuickAddOpen,
+    notificationCenterOpen,
+    setNotificationCenterOpen,
+  } = useAppContext();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
