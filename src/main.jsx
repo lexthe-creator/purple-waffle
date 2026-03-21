@@ -596,12 +596,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
 
   const orderedTasks = useMemo(() => {
     const rank = { active: 0, planned: 1, done: 2 };
-
-    return [...tasks].sort((a, b) => {
-      const statusDelta = rank[a.status] - rank[b.status];
-      if (statusDelta !== 0) return statusDelta;
-      return (b.createdAt || 0) - (a.createdAt || 0);
-    });
+    return [...tasks].sort((a, b) => rank[a.status] - rank[b.status]);
   }, [tasks]);
 
   const activeTasks = useMemo(() => orderedTasks.filter(task => task.status !== 'done'), [orderedTasks]);
@@ -1103,7 +1098,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
                 onSetStatus={setTaskStatus}
                 onMoveUp={() => moveTask(task.id, -1)}
                 onMoveDown={() => moveTask(task.id, 1)}
-                onMoveTask={reorderTask}
+
                 onStartDrag={startTaskDrag}
                 onMoveDrag={moveTaskDrag}
                 onEndDrag={endTaskDrag}
