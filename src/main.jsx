@@ -12,11 +12,31 @@ import './styles.css';
 
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
 const ROOT_TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'calendar', label: 'Calendar' },
-  { id: 'nutrition', label: 'Nutrition' },
-  { id: 'fitness', label: 'Fitness' },
-  { id: 'more', label: 'More' },
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    iconPath: '<path d="M3 12L12 3l9 9v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9Z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  },
+  {
+    id: 'calendar',
+    label: 'Calendar',
+    iconPath: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  },
+  {
+    id: 'nutrition',
+    label: 'Nutrition',
+    iconPath: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>',
+  },
+  {
+    id: 'fitness',
+    label: 'Fitness',
+    iconPath: '<circle cx="18.5" cy="5.5" r="2.5"/><circle cx="5.5" cy="18.5" r="2.5"/><line x1="9" y1="15" x2="15" y2="9"/><line x1="7" y1="7" x2="7" y2="12"/><line x1="7" y1="7" x2="12" y2="7"/><line x1="17" y1="17" x2="17" y2="12"/><line x1="17" y1="17" x2="12" y2="17"/>',
+  },
+  {
+    id: 'more',
+    label: 'More',
+    iconPath: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  },
 ];
 
 function formatDateLabel(value) {
@@ -137,7 +157,13 @@ function BottomNav({ activeTab, onChange }) {
           aria-current={activeTab === tab.id ? 'page' : undefined}
           onClick={() => onChange(tab.id)}
         >
-          <span>{tab.label}</span>
+          <svg
+            className="nav-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            dangerouslySetInnerHTML={{ __html: tab.iconPath }}
+          />
+          <span className="nav-label">{tab.label}</span>
         </button>
       ))}
     </nav>
@@ -390,7 +416,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
         <div className="task-card-header">
           <div>
             <p className="eyebrow">{formatFullDate(now)}</p>
-            <h2>{getGreeting(now)}, focus on today</h2>
+            <h2>{getGreeting(now)}</h2>
           </div>
           <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityOnly(current => !current)}>
             {priorityOnly ? 'Priority only' : 'Show all'}
