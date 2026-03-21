@@ -29,6 +29,7 @@ body,
 
 body {
   margin: 0;
+  font-size: 15px;
   color: var(--text);
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 38%),
@@ -1114,6 +1115,8 @@ p {
 }
 
 .bottom-nav {
+  position: sticky;
+  bottom: 0;
   z-index: 50;
   flex-shrink: 0;
   display: grid;
