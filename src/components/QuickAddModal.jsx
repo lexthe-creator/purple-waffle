@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const TYPES = ['task', 'meal', 'workout', 'note'];
 
@@ -97,6 +98,7 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
   }, [type]);
 
   if (!isOpen) return null;
+  if (typeof document === 'undefined') return null;
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -118,7 +120,7 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
     onClose();
   }
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
@@ -216,6 +218,7 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
