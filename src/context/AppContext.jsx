@@ -22,6 +22,7 @@ const DEFAULT_FITNESS_SETTINGS = {
   selectedProgramId: 'strength',
   selectedFrequency: '4-day',
   programAnchor: 'Monday',
+  programStartDate: new Date().toISOString().slice(0, 10),
 };
 
 function getTodayDateKey() {

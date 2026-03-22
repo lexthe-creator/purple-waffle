@@ -292,6 +292,44 @@ function getWorkoutStats(workouts, now, selectedProgramId) {
   };
 }
 
+// Returns the program template session for a given date, or null if it's a rest day.
+function getSessionForDate(program, frequency, anchorDay, date) {
+  const schedule = buildWeeklySchedule(program, frequency, anchorDay, date);
+  const dateKey = toDateKey(date);
+  return schedule.find(session => toDateKey(session.date) === dateKey) ?? null;
+}
+
+// Returns sessions from this week that are before today and have no matching completed workout.
+function getMissedSessions(program, frequency, anchorDay, workouts, now) {
+  const schedule = buildWeeklySchedule(program, frequency, anchorDay, now);
+  const todayKey = toDateKey(now);
+
+  return schedule.filter(session => {
+    const sessionKey = toDateKey(session.date);
+    if (sessionKey >= todayKey) return false;
+
+    const hasCompleted = workouts.some(
+      w =>
+        w.scheduledDate === sessionKey &&
+        w.status === 'completed' &&
+        (w.programId === program.id || w.sessionOffset === session.offset),
+    );
+    return !hasCompleted;
+  });
+}
+
+// Returns the next training day date string (YYYY-MM-DD) after a given date.
+function getNextTrainingDate(program, frequency, anchorDay, afterDate) {
+  const afterKey = toDateKey(afterDate);
+  const currentWeekSchedule = buildWeeklySchedule(program, frequency, anchorDay, afterDate);
+  const laterThisWeek = currentWeekSchedule.find(s => toDateKey(s.date) > afterKey);
+  if (laterThisWeek) return toDateKey(laterThisWeek.date);
+
+  const nextWeekStart = addDays(afterDate, 7);
+  const nextWeekSchedule = buildWeeklySchedule(program, frequency, anchorDay, nextWeekStart);
+  return nextWeekSchedule.length > 0 ? toDateKey(nextWeekSchedule[0].date) : null;
+}
+
 function formatDateLabel(value) {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
@@ -1525,14 +1563,15 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
 }
 
 function NutritionScreen({ now }) {
-  const { meals, setMeals, createMeal, setNotifications, createNotification } = useTaskContext();
+  const { meals, setMeals, createMeal, setNotifications, createNotification, pantryItems, setPantryItems } = useTaskContext();
   const [mealName, setMealName] = useState('');
   const [mealTags, setMealTags] = useState([]);
   const [mealSlot, setMealSlot] = useState('auto');
   const [planDrafts, setPlanDrafts] = useState(() => Object.fromEntries(NUTRITION_SLOTS.map(slot => [slot.id, ''])));
   const [pantryDraft, setPantryDraft] = useState('');
-  const [pantryItems, setPantryItems] = useState(['Eggs', 'Oats', 'Rice', 'Greek yogurt']);
   const [prepNote, setPrepNote] = useState('');
+  // selectedPlanDay controls which day the meal planning section edits (weekly planning)
+  const [selectedPlanDay, setSelectedPlanDay] = useState(() => toDateKey(now));
   const todayKey = toDateKey(now);
 
   const todaysMeals = useMemo(
@@ -1589,20 +1628,35 @@ function NutritionScreen({ now }) {
     [todaysFuelMeals],
   );
 
+  // Planned meals for the selected plan day (supports any day of the week)
+  const planDayPlannedMeals = useMemo(
+    () => meals.filter(meal => isPlannedMeal(meal) && !isHydrationMeal(meal) && toDateKey(meal.loggedAt) === selectedPlanDay),
+    [meals, selectedPlanDay],
+  );
+
   useEffect(() => {
-    setPlanDrafts(current => {
-      const next = { ...current };
+    setPlanDrafts(() => {
+      const next = Object.fromEntries(NUTRITION_SLOTS.map(slot => [slot.id, '']));
       NUTRITION_SLOTS.forEach(slot => {
-        const plannedMeal = plannedEntries.find(meal => inferMealSlot(meal) === slot.id);
-        if (plannedMeal) {
-          next[slot.id] = plannedMeal.name;
-        } else if (!current[slot.id]) {
-          next[slot.id] = '';
-        }
+        const plannedMeal = planDayPlannedMeals.find(meal => inferMealSlot(meal) === slot.id);
+        if (plannedMeal) next[slot.id] = plannedMeal.name;
       });
       return next;
     });
-  }, [plannedEntries, todayKey]);
+  }, [planDayPlannedMeals, selectedPlanDay]);
+
+  // Build a simple 7-day week strip anchored to Monday of this week
+  const planWeekDays = useMemo(() => {
+    const weekStart = alignDateToAnchor(now, 'Monday');
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = addDays(weekStart, i);
+      return {
+        key: toDateKey(d),
+        label: d.toLocaleDateString('en-US', { weekday: 'short' }),
+        dayNum: d.getDate(),
+      };
+    });
+  }, [now]);
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
@@ -1631,6 +1685,8 @@ function NutritionScreen({ now }) {
   }
 
   function savePlan() {
+    // Use start-of-day timestamp for the selected plan day so meals are date-keyed correctly
+    const planDayTimestamp = startOfDay(new Date(selectedPlanDay)).getTime();
     const plannedMeals = NUTRITION_SLOTS.flatMap(slot => {
       const trimmed = planDrafts[slot.id]?.trim();
       if (!trimmed) return [];
@@ -1638,21 +1694,23 @@ function NutritionScreen({ now }) {
         createMeal({
           name: trimmed,
           tags: ['planned', `slot:${slot.id}`],
+          loggedAt: planDayTimestamp,
         }),
       ];
     });
 
     setMeals(current => {
-      const currentDayMeals = current.filter(meal => {
-        if (toDateKey(meal.loggedAt) !== todayKey) return true;
+      // Remove existing planned meals for the selected day's slots, keep everything else
+      const withoutOldPlan = current.filter(meal => {
+        if (toDateKey(meal.loggedAt) !== selectedPlanDay) return true;
         if (!isPlannedMeal(meal)) return true;
         return !NUTRITION_SLOTS.some(slot => inferMealSlot(meal) === slot.id);
       });
-
-      return [...plannedMeals, ...currentDayMeals];
+      return [...plannedMeals, ...withoutOldPlan];
     });
 
-    upsertNotification('Meal plan saved', 'Today\'s planned meals updated');
+    const dayLabel = selectedPlanDay === todayKey ? 'Today' : new Date(`${selectedPlanDay}T00:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    upsertNotification('Meal plan saved', `${dayLabel} plan updated`);
   }
 
   function savePantryItem() {
@@ -1661,6 +1719,10 @@ function NutritionScreen({ now }) {
 
     setPantryItems(current => [trimmed, ...current]);
     setPantryDraft('');
+  }
+
+  function removePantryItem(item) {
+    setPantryItems(current => current.filter(i => i !== item));
   }
 
   function addPrepNote() {
@@ -1824,11 +1886,25 @@ function NutritionScreen({ now }) {
         <div className="task-card-header">
           <div>
             <p className="eyebrow">Meal planning</p>
-            <h2>Edit today&apos;s plan</h2>
+            <h2>{selectedPlanDay === todayKey ? 'Today' : new Date(`${selectedPlanDay}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h2>
           </div>
           <button type="button" className="primary-button" onClick={savePlan}>
             Save plan
           </button>
+        </div>
+
+        <div className="week-strip calendar-week-strip" role="group" aria-label="Select plan day">
+          {planWeekDays.map(day => (
+            <button
+              key={day.key}
+              type="button"
+              className={`week-strip-item ${day.key === selectedPlanDay ? 'is-active' : ''} ${day.key === todayKey ? 'is-today' : ''}`}
+              onClick={() => setSelectedPlanDay(day.key)}
+            >
+              <strong>{day.label}</strong>
+              <p>{day.dayNum}</p>
+            </button>
+          ))}
         </div>
 
         <div className="nutrition-plan-grid">
@@ -1868,8 +1944,16 @@ function NutritionScreen({ now }) {
 
         <div className="tag-row">
           {pantryItems.map(item => (
-            <span key={item} className="status-pill">
+            <span key={item} className="status-pill pantry-item">
               {item}
+              <button
+                type="button"
+                className="pantry-remove"
+                aria-label={`Remove ${item}`}
+                onClick={() => removePantryItem(item)}
+              >
+                ×
+              </button>
             </span>
           ))}
         </div>
@@ -1920,27 +2004,38 @@ function NutritionScreen({ now }) {
 }
 
 function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
-  const { workouts, notes, setWorkouts, setNotifications, createNotification } = useTaskContext();
+  const { workouts, notes, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
   const { energyState, setEnergyState, fitnessSettings, setFitnessSettings } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState('today');
   const [selectedProgramId, setSelectedProgramId] = useState(() => fitnessSettings.selectedProgramId || 'strength');
   const [selectedFrequency, setSelectedFrequency] = useState(() => fitnessSettings.selectedFrequency || '4-day');
   const [programAnchor, setProgramAnchor] = useState(() => fitnessSettings.programAnchor || 'Monday');
-  const [programStartDate, setProgramStartDate] = useState(() => alignDateToAnchor(now, fitnessSettings.programAnchor || 'Monday'));
   const [checkInDraft, setCheckInDraft] = useState(() => ({
     mood: energyState.mood || 'steady',
     energy: Number.isFinite(energyState.value) ? energyState.value : 3,
     sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
   }));
   const [acceptedRecovery, setAcceptedRecovery] = useState(false);
+  const [acknowledgedMisses, setAcknowledgedMisses] = useState(() => new Set());
 
-  useEffect(() => {
-    setProgramStartDate(alignDateToAnchor(now, programAnchor));
-  }, [programAnchor]);
+  // programStartDate: persisted in fitnessSettings, falls back to current anchor week start
+  const programStartDate = useMemo(() => {
+    const saved = fitnessSettings.programStartDate;
+    if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved)) return new Date(`${saved}T00:00:00`);
+    return alignDateToAnchor(now, programAnchor);
+  }, [fitnessSettings.programStartDate, programAnchor, now]);
 
   // Persist fitness settings back to AppContext whenever they change
+  // Spread current to preserve programStartDate and any future fields
   useEffect(() => {
-    setFitnessSettings({ selectedProgramId, selectedFrequency, programAnchor });
+    setFitnessSettings(current => ({
+      ...current,
+      selectedProgramId,
+      selectedFrequency,
+      programAnchor,
+      // Re-anchor the start date to the current anchor week when anchor changes
+      programStartDate: toDateKey(alignDateToAnchor(now, programAnchor)),
+    }));
   }, [selectedProgramId, selectedFrequency, programAnchor]);
 
   useEffect(() => {
@@ -1956,6 +2051,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     [workouts, activeWorkoutId],
   );
 
+  const todayKey = toDateKey(now);
   const activeProgramId = activeWorkout ? getWorkoutProgramKey(activeWorkout) : selectedProgramId;
   const activeProgram = FITNESS_PROGRAMS[activeProgramId] || FITNESS_PROGRAMS.strength;
   const weeklyStats = useMemo(() => getWorkoutStats(workouts, now, selectedProgramId), [workouts, now, selectedProgramId]);
@@ -1996,13 +2092,41 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
               detail: 'Low energy, short sleep, or a flat mood should move today toward recovery only if you accept it.',
             }
           : null);
+
+  // Today's scheduled session from the program template
+  const todaySession = useMemo(
+    () => getSessionForDate(activeProgram, selectedFrequency, programAnchor, now),
+    [activeProgram, selectedFrequency, programAnchor, now],
+  );
+
+  // Current workout: prefer one explicitly scheduled for today, then fall back
   const currentWorkout = useMemo(() => {
     if (activeWorkout) return activeWorkout;
-    return workouts.find(workout => getWorkoutProgramKey(workout) === selectedProgramId && workout.status !== 'completed')
-      ?? workouts.find(workout => workout.status !== 'completed')
+    const scheduledToday = workouts.find(
+      w => w.scheduledDate === todayKey && w.programId === selectedProgramId && w.status !== 'completed',
+    );
+    if (scheduledToday) return scheduledToday;
+    return workouts.find(w => getWorkoutProgramKey(w) === selectedProgramId && w.status !== 'completed')
+      ?? workouts.find(w => w.status !== 'completed')
       ?? workouts[0]
       ?? null;
-  }, [activeWorkout, workouts, selectedProgramId]);
+  }, [activeWorkout, workouts, selectedProgramId, todayKey]);
+
+  // Sessions from this week that are overdue with no completed workout
+  const missedSessions = useMemo(
+    () => getMissedSessions(activeProgram, selectedFrequency, programAnchor, workouts, now),
+    [activeProgram, selectedFrequency, programAnchor, workouts, now],
+  );
+  const unacknowledgedMisses = useMemo(
+    () => missedSessions.filter(s => !acknowledgedMisses.has(`${selectedProgramId}-${toDateKey(s.date)}`)),
+    [missedSessions, acknowledgedMisses, selectedProgramId],
+  );
+
+  // Set of scheduledDate strings with a completed workout (for marking the plan view)
+  const completedScheduledDates = useMemo(
+    () => new Set(workouts.filter(w => w.status === 'completed' && w.scheduledDate).map(w => w.scheduledDate)),
+    [workouts],
+  );
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
@@ -2085,6 +2209,61 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     const currentIndex = FITNESS_PROGRAM_ORDER.indexOf(selectedProgramId);
     const nextIndex = (currentIndex + direction + FITNESS_PROGRAM_ORDER.length) % FITNESS_PROGRAM_ORDER.length;
     setSelectedProgramId(FITNESS_PROGRAM_ORDER[nextIndex]);
+  }
+
+  // Creates a workout instance from today's scheduled session and starts it
+  function startTodaysWorkout() {
+    if (!todaySession) return;
+    const newWorkout = createWorkout({
+      name: todaySession.title,
+      programId: selectedProgramId,
+      programName: activeProgram.name,
+      type: selectedProgramId,
+      scheduledDate: todayKey,
+      sessionOffset: todaySession.offset,
+      frequency: selectedFrequency,
+      anchorDay: programAnchor,
+      exercises: [
+        createExercise({ name: 'Warm-up', detail: '5–10 min' }),
+        createExercise({ name: todaySession.title, detail: todaySession.detail, sets: 3 }),
+        createExercise({ name: 'Cooldown', detail: '5 min mobility' }),
+      ],
+    });
+    setWorkouts(current => [newWorkout, ...current]);
+    startWorkout(newWorkout.id);
+  }
+
+  // Reschedules a missed session to the next valid training day (user-approved)
+  function moveMissedSession(session) {
+    const nextDate = getNextTrainingDate(activeProgram, selectedFrequency, programAnchor, session.date);
+    if (!nextDate) {
+      upsertNotification('Reschedule failed', 'No upcoming training day found in schedule.');
+      return;
+    }
+    const newWorkout = createWorkout({
+      name: session.title,
+      programId: selectedProgramId,
+      programName: activeProgram.name,
+      type: selectedProgramId,
+      scheduledDate: nextDate,
+      sessionOffset: session.offset,
+      frequency: selectedFrequency,
+      anchorDay: programAnchor,
+      exercises: [
+        createExercise({ name: 'Warm-up', detail: '5–10 min' }),
+        createExercise({ name: session.title, detail: session.detail, sets: 3 }),
+        createExercise({ name: 'Cooldown', detail: '5 min mobility' }),
+      ],
+    });
+    setWorkouts(current => [newWorkout, ...current]);
+    setAcknowledgedMisses(prev => new Set([...prev, `${selectedProgramId}-${toDateKey(session.date)}`]));
+    upsertNotification('Session rescheduled', `${session.title} moved to ${nextDate}`);
+  }
+
+  // Dismisses a missed session without rescheduling
+  function skipMissedSession(session) {
+    setAcknowledgedMisses(prev => new Set([...prev, `${selectedProgramId}-${toDateKey(session.date)}`]));
+    upsertNotification('Session skipped', session.title);
   }
 
   return (
@@ -2201,14 +2380,47 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             </section>
           )}
 
+          {unacknowledgedMisses.length > 0 && (
+            <section className="task-card">
+              <div className="task-card-header">
+                <div>
+                  <p className="eyebrow">Missed session</p>
+                  <h2>{unacknowledgedMisses[0].title}</h2>
+                </div>
+              </div>
+              <article className="feed-card">
+                <strong>{unacknowledgedMisses[0].title}</strong>
+                <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail}</p>
+                <p className="empty-message">This session was missed. Move it to the next training day, or skip it to keep your sequence clean.</p>
+                <div className="quick-entry-row">
+                  <button type="button" className="secondary-button" onClick={() => moveMissedSession(unacknowledgedMisses[0])}>
+                    Move to next training day
+                  </button>
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => skipMissedSession(unacknowledgedMisses[0])}>
+                    Skip
+                  </button>
+                </div>
+              </article>
+            </section>
+          )}
+
           <section className="task-card">
             <div className="task-card-header">
               <div>
                 <p className="eyebrow">Today&apos;s workout</p>
-                <h2>{currentWorkout?.name || 'No workout yet'}</h2>
+                <h2>{todaySession ? todaySession.title : currentWorkout?.name || 'Rest day'}</h2>
               </div>
             </div>
-            {currentWorkout ? (
+            {todaySession && !currentWorkout?.scheduledDate ? (
+              <article className="feed-card">
+                <strong>{todaySession.title}</strong>
+                <p>{activeProgram.name} · {todaySession.detail}</p>
+                <p>Week {programWeek} · {programPhase} · {selectedFrequency}</p>
+                <button type="button" className="secondary-button" onClick={startTodaysWorkout}>
+                  Start Today&apos;s Workout
+                </button>
+              </article>
+            ) : currentWorkout ? (
               <article className="feed-card">
                 <strong>{currentWorkout.name}</strong>
                 <p>{FITNESS_PROGRAMS[getWorkoutProgramKey(currentWorkout)]?.name || currentWorkout.programName || 'Workout'} · {currentWorkout.duration} min · {currentWorkout.status}</p>
@@ -2219,8 +2431,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
               </article>
             ) : (
               <div className="empty-panel">
-                <strong>No workout exists yet</strong>
-                <p>Add one with quick capture or from the library.</p>
+                <strong>Rest day</strong>
+                <p>No session scheduled today. Recovery is part of the program.</p>
               </div>
             )}
           </section>
@@ -2372,12 +2584,19 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
               </div>
             </div>
             <div className="subtle-feed">
-              {weeklySchedule.map(session => (
-                <article key={`${session.title}-${session.offset}`} className="feed-card">
-                  <strong>{session.dayLabel} · {session.title}</strong>
-                  <p>{session.dateLabel} · {session.detail}</p>
-                </article>
-              ))}
+              {weeklySchedule.map(session => {
+                const sessionKey = toDateKey(session.date);
+                const isDone = completedScheduledDates.has(sessionKey);
+                const isToday = sessionKey === todayKey;
+                return (
+                  <article key={`${session.title}-${session.offset}`} className="feed-card">
+                    <strong>
+                      {isDone ? '✓ ' : isToday ? '→ ' : ''}{session.dayLabel} · {session.title}
+                    </strong>
+                    <p>{session.dateLabel} · {session.detail}</p>
+                  </article>
+                );
+              })}
             </div>
           </section>
         </>

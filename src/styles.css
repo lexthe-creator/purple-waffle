@@ -454,6 +454,26 @@ p {
   min-width: 100px;
 }
 
+.pantry-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pantry-remove {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.pantry-remove:hover {
+  color: var(--text);
+}
+
 .header-stack {
   display: grid;
   gap: 6px;
