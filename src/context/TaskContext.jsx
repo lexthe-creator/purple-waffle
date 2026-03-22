@@ -111,6 +111,21 @@ function createHabit(overrides = {}) {
   };
 }
 
+function createCalendarItem(overrides = {}) {
+  return {
+    id: generateId('calendar'),
+    type: 'event',
+    title: '',
+    date: new Date().toISOString().slice(0, 10),
+    startTime: '09:00',
+    endTime: '10:00',
+    notes: '',
+    repeatWeekly: false,
+    priority: false,
+    ...overrides,
+  };
+}
+
 function normalizeTask(task, index) {
   return {
     id: task?.id || generateId('task'),
@@ -201,6 +216,20 @@ function normalizeHabit(habit) {
   };
 }
 
+function normalizeCalendarItem(item) {
+  return {
+    id: item?.id || generateId('calendar'),
+    type: ['busy', 'event', 'task'].includes(item?.type) ? item.type : 'event',
+    title: typeof item?.title === 'string' ? item.title : '',
+    date: typeof item?.date === 'string' ? item.date : new Date().toISOString().slice(0, 10),
+    startTime: typeof item?.startTime === 'string' ? item.startTime : '09:00',
+    endTime: typeof item?.endTime === 'string' ? item.endTime : '10:00',
+    notes: typeof item?.notes === 'string' ? item.notes : '',
+    repeatWeekly: item?.repeatWeekly === true,
+    priority: item?.priority === true,
+  };
+}
+
 function loadInitialState() {
   if (typeof window === 'undefined') {
     return null;
@@ -216,6 +245,13 @@ function loadInitialState() {
 }
 
 function buildDefaultState() {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const tomorrowKey = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
+
   return {
     tasks: [
       createTask({ title: 'Ship quick wins', status: 'active', priority: true, notes: 'Stay in one flow.', subtasks: [createSubtask('Tighten header'), createSubtask('Clean execution mode')] }),
@@ -229,24 +265,31 @@ function buildDefaultState() {
       createNotification({ title: 'Weekly review', detail: 'Two items need rescheduling this week.' }),
     ],
     habits: [],
+    calendarItems: [
+      createCalendarItem({ id: 'calendar-seed-1', type: 'busy', title: 'Deep work block', date: todayKey, startTime: '09:00', endTime: '11:00', repeatWeekly: true, priority: true }),
+      createCalendarItem({ id: 'calendar-seed-2', type: 'event', title: 'Lunch check-in', date: todayKey, startTime: '12:30', endTime: '13:00' }),
+      createCalendarItem({ id: 'calendar-seed-3', type: 'task', title: 'Clear follow-ups', date: tomorrowKey, startTime: '16:00', endTime: '16:30', priority: true }),
+    ],
   };
 }
 
 export function TaskProvider({ children }) {
   const initialState = loadInitialState();
-  const [tasks, setTasks] = useState(() => (initialState?.tasks || buildDefaultState().tasks).map(normalizeTask));
-  const [meals, setMeals] = useState(() => (initialState?.meals || buildDefaultState().meals).map(normalizeMeal));
-  const [notes, setNotes] = useState(() => (initialState?.notes || buildDefaultState().notes).map(normalizeNote));
-  const [workouts, setWorkouts] = useState(() => (initialState?.workouts || buildDefaultState().workouts).map(normalizeWorkout));
-  const [notifications, setNotifications] = useState(() => (initialState?.notifications || buildDefaultState().notifications).map(normalizeNotification));
-  const [habits, setHabits] = useState(() => (initialState?.habits || buildDefaultState().habits).map(normalizeHabit));
+  const defaults = buildDefaultState();
+  const [tasks, setTasks] = useState(() => (initialState?.tasks || defaults.tasks).map(normalizeTask));
+  const [meals, setMeals] = useState(() => (initialState?.meals || defaults.meals).map(normalizeMeal));
+  const [notes, setNotes] = useState(() => (initialState?.notes || defaults.notes).map(normalizeNote));
+  const [workouts, setWorkouts] = useState(() => (initialState?.workouts || defaults.workouts).map(normalizeWorkout));
+  const [notifications, setNotifications] = useState(() => (initialState?.notifications || defaults.notifications).map(normalizeNotification));
+  const [habits, setHabits] = useState(() => (initialState?.habits || defaults.habits).map(normalizeHabit));
+  const [calendarItems, setCalendarItems] = useState(() => (initialState?.calendarItems || defaults.calendarItems).map(normalizeCalendarItem));
 
   useEffect(() => {
     window.localStorage.setItem(
       TASKS_STORAGE_KEY,
-      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits }),
+      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, calendarItems }),
     );
-  }, [tasks, meals, notes, workouts, notifications, habits]);
+  }, [tasks, meals, notes, workouts, notifications, habits, calendarItems]);
 
   const value = useMemo(
     () => ({
@@ -270,8 +313,10 @@ export function TaskProvider({ children }) {
       habits,
       setHabits,
       createHabit,
+      calendarItems,
+      setCalendarItems,
     }),
-    [tasks, meals, notes, workouts, notifications, habits],
+    [tasks, meals, notes, workouts, notifications, habits, calendarItems],
   );
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;
