@@ -481,58 +481,40 @@ function createCalendarSeed() {
 }
 
 function InlineTaskComposer({ defaultPriority, onSubmit }) {
-  const [expanded, setExpanded] = useState(false);
   const [title, setTitle] = useState('');
   const inputRef = useRef(null);
 
-  useEffect(() => {
-    if (expanded) {
-      inputRef.current?.focus();
-    }
-  }, [expanded]);
-
   function handleSubmit(event) {
     event.preventDefault();
-
     const trimmed = title.trim();
     if (!trimmed) return;
-
     onSubmit(trimmed);
     setTitle('');
-    setExpanded(false);
   }
 
-  function collapse() {
-    setTitle('');
-    setExpanded(false);
-  }
-
-  if (!expanded) {
-    return (
-      <button type="button" className="ghost-button compact-ghost inline-task-trigger" onClick={() => setExpanded(true)}>
-        {defaultPriority ? '+ Add priority task' : '+ Add task'}
-      </button>
-    );
+  function handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      setTitle('');
+      inputRef.current?.blur();
+    }
   }
 
   return (
-    <form className="inline-task-composer" onSubmit={handleSubmit}>
+    <form className="inline-task-form" onSubmit={handleSubmit}>
       <input
         ref={inputRef}
-        className="task-title-input inline-task-input"
+        className="task-title-input"
         value={title}
         onChange={event => setTitle(event.target.value)}
-        placeholder="Task for today"
-        aria-label="Task for today"
+        onKeyDown={handleKeyDown}
+        placeholder={defaultPriority ? 'Add a priority task…' : 'Add a task…'}
+        aria-label="Add a task"
       />
-      <div className="inline-task-actions">
+      {title.trim() && (
         <button type="submit" className="primary-button compact-primary">
           Add
         </button>
-        <button type="button" className="ghost-button compact-ghost" onClick={collapse}>
-          Cancel
-        </button>
-      </div>
+      )}
     </form>
   );
 }
@@ -1194,8 +1176,10 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                   onToggleSubtask={toggleSubtask}
                   onAddSubtask={addSubtask}
                   onSetStatus={setTaskStatus}
-                  onMoveUp={() => moveTask(task.id, -1)}
-                  onMoveDown={() => moveTask(task.id, 1)}
+                  onStartDrag={startTaskDrag}
+                  onMoveDrag={moveTaskDrag}
+                  onEndDrag={endTaskDrag}
+                  isDragging={draggingTaskId === task.id}
                 />
               ))
             )}
@@ -1205,28 +1189,54 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                 + {executionOverflowCount} more
               </button>
             )}
-
-            <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
           </div>
         </div>
 
-        {/* 5. Supporting metrics — recovery signals, not action items */}
-        <div className="today-zone">
-          <p className="eyebrow" style={{ margin: '0 0 8px' }}>Recovery &amp; signals</p>
-          <div className="ui-metrics-row">
-            <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
-            <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
-            <MetricBlock value={inboxCount > 0 ? inboxCount : '—'} label="Inbox" />
+        {/* 5. Habits — tap to check off */}
+        {todayHabits.length > 0 && (
+          <div className="today-zone">
+            <p className="eyebrow" style={{ margin: '0 0 8px' }}>Habits</p>
+            <div className="habit-tap-row">
+              {todayHabits.map(habit => {
+                const doneToday = habit.completedDates.includes(todayStr);
+                return (
+                  <button
+                    key={habit.id}
+                    type="button"
+                    className={`habit-tap${doneToday ? ' is-done' : ''}`}
+                    onClick={() => toggleHabit(habit.id)}
+                  >
+                    {doneToday && (
+                      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true" style={{ marginRight: 4 }}>
+                        <polyline points="1,6 4,10 11,2" />
+                      </svg>
+                    )}
+                    {habit.title}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+        )}
+
+        {/* 6. Supporting metrics — recovery signals, collapsed by default */}
+        <div className="today-zone">
+          <ExpandablePanel
+            defaultOpen={false}
+            header={<p className="eyebrow" style={{ margin: 0 }}>Recovery &amp; signals</p>}
+          >
+            <div className="ui-metrics-row" style={{ paddingTop: 8 }}>
+              <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
+              <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
+              <MetricBlock value={inboxCount > 0 ? inboxCount : '—'} label="Inbox" />
+            </div>
+          </ExpandablePanel>
         </div>
 
       </section>
 
       {/* Execution toolbar */}
       <div className="dashboard-toolbar">
-        <button type="button" className="ghost-button compact-ghost" onClick={openExecutionComposer}>
-          Add Task
-        </button>
         {showCompleteAllConfirm ? (
           <button type="button" className="ghost-button compact-ghost dashboard-toolbar-danger" onClick={completeAllTasks}>
             Confirm complete all
@@ -1237,7 +1247,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
           </button>
         )}
         <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
-          Brain Dump
+          Capture
         </button>
         <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(true)}>
           Back to Planning
