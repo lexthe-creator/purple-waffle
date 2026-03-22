@@ -37,7 +37,7 @@ const ROOT_TABS = [
   {
     id: 'dashboard',
     label: 'Dashboard',
-    iconPath: '<path d="M3 12L12 3l9 9v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9Z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    iconPath: '<path d="M11.03 2.59a1.5 1.5 0 0 1 1.94 0l7.5 6.36A1.5 1.5 0 0 1 21 10.1V20.5a.5.5 0 0 1-.5.5H15v-5.5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0-.5.5V21H3.5a.5.5 0 0 1-.5-.5V10.1A1.5 1.5 0 0 1 4.47 8.95l7.5-6.36z"/>',
   },
   {
     id: 'calendar',
@@ -52,7 +52,7 @@ const ROOT_TABS = [
   {
     id: 'fitness',
     label: 'Fitness',
-    iconPath: '<rect x="6" y="9" width="12" height="6" rx="3"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="M7.5 9V7.5"/><path d="M16.5 9V7.5"/><path d="M7.5 15v1.5"/><path d="M16.5 15v1.5"/>',
+    iconPath: '<line x1="6.5" y1="12" x2="17.5" y2="12"/><line x1="3" y1="9.5" x2="3" y2="14.5" stroke-width="3.5" stroke-linecap="round"/><line x1="21" y1="9.5" x2="21" y2="14.5" stroke-width="3.5" stroke-linecap="round"/><line x1="6.5" y1="8.5" x2="6.5" y2="15.5" stroke-width="2.5" stroke-linecap="round"/><line x1="17.5" y1="8.5" x2="17.5" y2="15.5" stroke-width="2.5" stroke-linecap="round"/>',
   },
   {
     id: 'more',

@@ -1159,6 +1159,11 @@ p {
   font-weight: 700;
 }
 
+.bottom-nav-button.is-active .nav-icon {
+  fill: currentColor;
+  stroke: none;
+}
+
 .nav-icon {
   width: 24px;
   height: 24px;
