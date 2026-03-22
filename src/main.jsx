@@ -8,6 +8,7 @@ import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
+import { ProfileProvider } from './context/ProfileContext.jsx';
 import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, FloatingActionButton, ExpandablePanel } from './components/ui/index.js';
 import './styles.css';
 
@@ -2929,11 +2930,13 @@ function AppShell() {
 
 function App() {
   return (
-    <TaskProvider>
-      <AppProvider>
-        <AppShell />
-      </AppProvider>
-    </TaskProvider>
+    <ProfileProvider>
+      <TaskProvider>
+        <AppProvider>
+          <AppShell />
+        </AppProvider>
+      </TaskProvider>
+    </ProfileProvider>
   );
 }
 
