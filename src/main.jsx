@@ -575,11 +575,13 @@ function SettingsSheet({ isOpen, onClose }) {
   );
 }
 
-function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToCalendar, onSwitchToFitness }) {
-  const { tasks, setTasks, meals, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
+function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToCalendar, onSwitchToFitness, weeklyItems }) {
+  const { tasks, setTasks, meals, notes, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
   const { planningMode, setPlanningMode, morningChecklist, setMorningChecklist, energyState, setQuickAddOpen } = useAppContext();
   const [executionExpanded, setExecutionExpanded] = useState(true);
   const [priorityExpanded, setPriorityExpanded] = useState(false);
+  const [agendaExpanded, setAgendaExpanded] = useState(false);
+  const [priorityMode, setPriorityMode] = useState(true);
   const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
   const [checklistHidden, setChecklistHidden] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
@@ -629,6 +631,43 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
 
   const visibleExecutionTasks = executionExpanded ? orderedTasks : orderedTasks.slice(0, 3);
   const executionOverflowCount = Math.max(0, orderedTasks.length - visibleExecutionTasks.length);
+  const todayAgendaGroups = useMemo(() => {
+    const busyBlocks = weeklyItems
+      .filter(item => item.date === todayKey && item.type === 'busy')
+      .map(item => ({
+        id: item.id,
+        title: item.title,
+        subtitle: `${item.startTime} - ${item.endTime}`,
+      }));
+
+    const workoutItems = workouts.map(workout => ({
+      id: workout.id,
+      title: workout.name,
+      subtitle: `${workout.duration} min · ${workout.status}`,
+    }));
+
+    const taskItems = orderedTasks
+      .filter(task => task.status !== 'done')
+      .filter(task => (priorityMode ? task.priority : true))
+      .map(task => ({
+        id: task.id,
+        title: task.title || 'Untitled task',
+        subtitle: `${task.status}${task.priority ? ' · priority' : ''}`,
+      }));
+
+    const noteItems = notes.slice(0, 4).map(note => ({
+      id: note.id,
+      title: note.content || 'Note',
+      subtitle: note.createdAt ? formatShortMonthDay(note.createdAt) : 'Saved note',
+    }));
+
+    return [
+      { key: 'busy', label: 'Busy blocks', items: busyBlocks },
+      { key: 'workouts', label: 'Workouts', items: workoutItems },
+      { key: 'tasks', label: 'Tasks', items: taskItems },
+      { key: 'notes', label: 'Notes', items: noteItems },
+    ];
+  }, [notes, orderedTasks, priorityMode, todayKey, weeklyItems, workouts]);
 
   useEffect(() => {
     return () => {
@@ -692,7 +731,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
   function addInlineTask(title) {
     const taskTitle = title.trim();
     if (!taskTitle) return;
-    setTasks(current => [createTask({ status: 'active', title: taskTitle }), ...current]);
+    setTasks(current => [createTask({ status: 'active', title: taskTitle, priority: priorityMode }), ...current]);
   }
 
   function completeAllTasks() {
@@ -908,7 +947,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                 )}
               </ul>
             )}
-            <InlineTaskComposer defaultPriority={false} onSubmit={addInlineTask} />
+            <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
           </div>
 
           {/* Next meal card */}
@@ -1089,17 +1128,65 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
           </button>
         )}
 
-        {/* Execution list */}
-        <div className="today-zone today-zone-execution">
+          {/* Agenda preview */}
+          <div className="today-zone">
+            <div className="task-card-header">
+              <p className="eyebrow">Agenda</p>
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setAgendaExpanded(current => !current)}>
+                {agendaExpanded ? 'Less' : 'More'}
+              </button>
+            </div>
+
+            <div className="subtle-feed agenda-groups">
+              {todayAgendaGroups.map(group => {
+                const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
+                const overflowCount = Math.max(0, group.items.length - visibleItems.length);
+
+                return (
+                  <article key={group.key} className="feed-card agenda-group">
+                    <div className="agenda-group-header">
+                      <strong>{group.label}</strong>
+                      <span>{group.items.length}</span>
+                    </div>
+                    <div className="agenda-group-list">
+                      {visibleItems.length === 0 ? (
+                        <p className="empty-message">None</p>
+                      ) : (
+                        visibleItems.map(item => (
+                          <div key={item.id} className="agenda-item">
+                            <strong>{item.title}</strong>
+                            <span>{item.subtitle}</span>
+                          </div>
+                        ))
+                      )}
+                      {!agendaExpanded && overflowCount > 0 && (
+                        <button type="button" className="agenda-overflow" onClick={() => setAgendaExpanded(true)}>
+                          + {overflowCount} more
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Execution list */}
+          <div className="today-zone today-zone-execution">
           <div className="task-card-header">
             <p className="eyebrow">Execution</p>
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
-              {executionExpanded ? 'Collapse' : 'Expand'}
-            </button>
+            <div className="header-stack">
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityMode(current => !current)}>
+                {priorityMode ? 'Priority mode' : 'All tasks'}
+              </button>
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
+                {executionExpanded ? 'Collapse' : 'Expand'}
+              </button>
+            </div>
           </div>
 
           <div className="execution-list">
-            <InlineTaskComposer defaultPriority={false} onSubmit={addInlineTask} />
+            <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
 
             {orderedTasks.length === 0 ? (
               <div className="empty-panel">
@@ -1132,6 +1219,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                 + {executionOverflowCount} more
               </button>
             )}
+
+            <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
           </div>
         </div>
 
@@ -2864,6 +2953,7 @@ function AppShell() {
               onStartWorkout={setActiveWorkoutId}
               onSwitchToCalendar={() => setActiveTab('calendar')}
               onSwitchToFitness={() => setActiveTab('fitness')}
+              weeklyItems={weeklyItems}
             />
           </RootTabPanel>
 
