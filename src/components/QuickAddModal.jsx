@@ -64,8 +64,6 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
   const config = useMemo(() => {
     if (type === 'task') {
       return {
-        title: 'Quick capture',
-        label: 'Task name',
         placeholder: 'What needs attention?',
         submitLabel: 'Save task',
       };
@@ -73,8 +71,6 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
 
     if (type === 'meal') {
       return {
-        title: 'Quick capture',
-        label: 'Meal name',
         placeholder: 'What did you eat?',
         submitLabel: 'Save meal',
       };
@@ -82,17 +78,13 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
 
     if (type === 'workout') {
       return {
-        title: 'Quick capture',
-        label: 'Workout name',
         placeholder: 'Workout name',
         submitLabel: 'Save workout',
       };
     }
 
     return {
-      title: 'Quick capture',
-      label: 'Note',
-      placeholder: 'Capture the thought',
+      placeholder: 'Capture the thought…',
       submitLabel: 'Save note',
     };
   }, [type]);
@@ -120,55 +112,41 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
     onClose();
   }
 
+  function handleMainKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey && type !== 'note') {
+      event.preventDefault();
+      handleSubmit(event);
+    }
+  }
+
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={event => event.stopPropagation()}>
+      <div className="modal-card quick-capture-card" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
-          <div>
-            <p className="eyebrow">{config.title}</p>
-            <h2>Capture without leaving the screen</h2>
-          </div>
+          <h2 style={{ margin: 0, fontSize: 'var(--fs-md)' }}>Capture</h2>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close quick add">
             ×
           </button>
         </div>
 
-        <div className="segmented-control" role="tablist" aria-label="Capture type">
-          {TYPES.map(item => (
-            <button
-              key={item}
-              type="button"
-              className={`segment-button ${item === type ? 'is-active' : ''}`}
-              onClick={() => setType(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-
         <form className="quick-add-form" onSubmit={handleSubmit}>
           {type === 'note' ? (
-            <label className="field-stack">
-              <span>{config.label}</span>
-              <textarea
-                ref={contentRef}
-                className="brain-dump-input quick-add-textarea"
-                value={content}
-                onChange={event => setContent(event.target.value)}
-                placeholder={config.placeholder}
-              />
-            </label>
+            <textarea
+              ref={contentRef}
+              className="brain-dump-input quick-add-textarea quick-capture-input"
+              value={content}
+              onChange={event => setContent(event.target.value)}
+              placeholder={config.placeholder}
+            />
           ) : (
-            <label className="field-stack">
-              <span>{config.label}</span>
-              <input
-                ref={titleRef}
-                className="brain-dump-input"
-                value={title}
-                onChange={event => setTitle(event.target.value)}
-                placeholder={config.placeholder}
-              />
-            </label>
+            <input
+              ref={titleRef}
+              className="brain-dump-input quick-capture-input"
+              value={title}
+              onChange={event => setTitle(event.target.value)}
+              onKeyDown={handleMainKeyDown}
+              placeholder={config.placeholder}
+            />
           )}
 
           {type === 'task' && (
@@ -188,35 +166,43 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
           )}
 
           {type === 'meal' && (
-            <label className="field-stack">
-              <span>Quick tags</span>
-              <input
-                className="brain-dump-input"
-                value={tags}
-                onChange={event => setTags(event.target.value)}
-                placeholder="protein, carbs, quick"
-              />
-            </label>
+            <input
+              className="brain-dump-input"
+              value={tags}
+              onChange={event => setTags(event.target.value)}
+              placeholder="Tags: protein, carbs, quick…"
+            />
           )}
 
           {type === 'workout' && (
-            <label className="field-stack">
-              <span>Minutes</span>
-              <input
-                className="brain-dump-input"
-                type="number"
-                min="1"
-                value={duration}
-                onChange={event => setDuration(event.target.value)}
-                placeholder="30"
-              />
-            </label>
+            <input
+              className="brain-dump-input"
+              type="number"
+              min="1"
+              value={duration}
+              onChange={event => setDuration(event.target.value)}
+              placeholder="Duration in minutes"
+            />
           )}
 
           <button type="submit" className="primary-button full-width">
             {config.submitLabel}
           </button>
         </form>
+
+        {/* Type switcher — secondary, below the form */}
+        <div className="segmented-control capture-type-switcher" role="tablist" aria-label="Capture type">
+          {TYPES.map(item => (
+            <button
+              key={item}
+              type="button"
+              className={`segment-button ${item === type ? 'is-active' : ''}`}
+              onClick={() => setType(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
       </div>
     </div>,
     document.body,

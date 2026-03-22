@@ -696,31 +696,132 @@ p {
   flex-wrap: wrap;
 }
 
-.inline-task-composer {
-  display: grid;
-  gap: 8px;
-  border-radius: 18px;
-  padding: 10px;
-  border: 1px dashed rgba(47, 64, 90, 0.12);
-  background: rgba(255, 255, 255, 0.68);
-}
-
-.inline-task-input {
-  min-height: 42px;
-}
-
-.inline-task-actions {
+.inline-task-form {
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.inline-task-form input {
+  flex: 1;
+  min-width: 0;
 }
 
 .compact-primary {
   padding-inline: 14px;
+  white-space: nowrap;
 }
 
-.inline-task-trigger {
-  justify-self: start;
+/* Swipe hint backgrounds */
+.execution-task-wrapper {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.swipe-hint {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  pointer-events: none;
+}
+
+.swipe-hint-right {
+  left: 0;
+  background: var(--success-soft);
+  color: var(--success);
+  right: auto;
+  min-width: 56px;
+}
+
+.swipe-hint-left {
+  right: 0;
+  background: #fce8e6;
+  color: var(--danger);
+  left: auto;
+  min-width: 56px;
+}
+
+/* Task more toggle & secondary actions */
+.task-more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: background 0.1s;
+  flex-shrink: 0;
+}
+
+.task-more-toggle:hover {
+  background: rgba(47, 64, 90, 0.07);
+  color: var(--text);
+}
+
+.task-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+/* Habit tap row */
+.habit-tap-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.habit-tap {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--r-full);
+  border: 1.5px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s, color 0.14s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.habit-tap:active {
+  opacity: 0.75;
+}
+
+.habit-tap.is-done {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+/* Quick capture modal */
+.quick-capture-card {
+  max-width: 420px;
+}
+
+.quick-capture-input {
+  font-size: var(--fs-md);
+  width: 100%;
+}
+
+.capture-type-switcher {
+  margin-top: 12px;
+  opacity: 0.72;
+  font-size: var(--fs-sm);
 }
 
 .execution-overflow {
