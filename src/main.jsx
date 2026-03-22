@@ -8,6 +8,7 @@ import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
+import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, FloatingActionButton, ExpandablePanel } from './components/ui/index.js';
 import './styles.css';
 
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
@@ -907,27 +908,18 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
             <p className="planning-subtext" style={{ marginTop: 0 }}>Editable priorities with reorder and cleanup.</p>
 
             {/* Metric strip — lives below the heading */}
-            <div className="metric-strip" style={{ marginBottom: 12 }}>
-              <div className="metric-tile">
-                <span className="metric-eyebrow">Energy</span>
-                <span className="metric-value">{energyState.value != null ? `${energyState.value}/5` : '—'}</span>
-              </div>
-              <div className="metric-tile">
-                <span className="metric-eyebrow">Sleep</span>
-                <span className="metric-value">{energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'}</span>
-              </div>
-              <div className="metric-tile">
-                <span className="metric-eyebrow">Inbox</span>
-                <span className="metric-value">{inboxCount}</span>
-              </div>
+            <div className="ui-metrics-row" style={{ marginBottom: 12 }}>
+              <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
+              <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
+              <MetricBlock value={inboxCount} label="Inbox" />
             </div>
 
             {/* Priority list */}
             {activeTasks.length === 0 ? (
-              <div className="empty-panel">
-                <strong>No priorities yet</strong>
-                <p>Add the tasks that define the day.</p>
-              </div>
+              <EmptyState
+                title="No priorities yet"
+                description="Add the tasks that define the day."
+              />
             ) : (
               <>
                 {visiblePriorities.map(task => (
@@ -1082,11 +1074,12 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
   }
 
   // ── Execution Mode ────────────────────────────────────────────────────────
+  // Hierarchy: date orientation → today agenda → fitness state → top tasks → supporting metrics
   return (
     <div className="tab-stack">
       <section className="task-card today-surface">
 
-        {/* Header */}
+        {/* 1. Date + quick orientation */}
         <div className="today-zone">
           <div className="planning-header">
             <div>
@@ -1102,50 +1095,20 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
           </div>
         </div>
 
-        {/* Metric strip */}
+        {/* 2. Today agenda — what's scheduled right now */}
         <div className="today-zone">
-          <div className="metric-strip">
-            <div className="metric-tile">
-              <span className="metric-eyebrow">Energy</span>
-              <span className="metric-value">{energyState.value != null ? `${energyState.value}/5` : '—'}</span>
-            </div>
-            <div className="metric-tile">
-              <span className="metric-eyebrow">Sleep</span>
-              <span className="metric-value">{energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'}</span>
-            </div>
-            <div className="metric-tile">
-              <span className="metric-eyebrow">Inbox</span>
-              <span className="metric-value">{inboxCount > 0 ? inboxCount : '—'}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Active workout banner */}
-        {activeWorkout && (
-          <button
-            type="button"
-            className="active-workout-banner"
-            onClick={onSwitchToFitness}
+          <ExpandablePanel
+            defaultOpen
+            header={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <p className="eyebrow" style={{ margin: 0 }}>Today&apos;s agenda</p>
+              </div>
+            }
           >
-            <span>{activeWorkout.name} in progress</span>
-            <span className="active-workout-banner-cta">Tap to return →</span>
-          </button>
-        )}
-
-          {/* Agenda preview */}
-          <div className="today-zone">
-            <div className="task-card-header">
-              <p className="eyebrow">Agenda</p>
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setAgendaExpanded(current => !current)}>
-                {agendaExpanded ? 'Less' : 'More'}
-              </button>
-            </div>
-
-            <div className="subtle-feed agenda-groups">
+            <div className="subtle-feed agenda-groups" style={{ paddingTop: 8 }}>
               {todayAgendaGroups.map(group => {
                 const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
                 const overflowCount = Math.max(0, group.items.length - visibleItems.length);
-
                 return (
                   <article key={group.key} className="feed-card agenda-group">
                     <div className="agenda-group-header">
@@ -1173,12 +1136,38 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                 );
               })}
             </div>
-          </div>
+          </ExpandablePanel>
+        </div>
 
-          {/* Execution list */}
-          <div className="today-zone today-zone-execution">
+        {/* 3. Fitness state — active workout or next session */}
+        <div className="today-zone">
+          {activeWorkout ? (
+            <button type="button" className="active-workout-banner" onClick={onSwitchToFitness}>
+              <span>{activeWorkout.name} in progress</span>
+              <span className="active-workout-banner-cta">Tap to return →</span>
+            </button>
+          ) : nextWorkout ? (
+            <article className="contextual-card">
+              <div className="contextual-card-header">
+                <p className="contextual-card-eyebrow">Fitness</p>
+                <button
+                  type="button"
+                  className="ghost-button compact-ghost"
+                  onClick={() => { onStartWorkout(nextWorkout.id); }}
+                >
+                  Start
+                </button>
+              </div>
+              <strong className="contextual-card-title">{nextWorkout.name}</strong>
+              <p className="contextual-card-subtitle">{nextWorkout.duration} min</p>
+            </article>
+          ) : null}
+        </div>
+
+        {/* 4. Top tasks — the execution list */}
+        <div className="today-zone today-zone-execution">
           <div className="task-card-header">
-            <p className="eyebrow">Execution</p>
+            <p className="eyebrow">Top tasks</p>
             <div className="header-stack">
               <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityMode(current => !current)}>
                 {priorityMode ? 'Priority mode' : 'All tasks'}
@@ -1193,10 +1182,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
             <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
 
             {orderedTasks.length === 0 ? (
-              <div className="empty-panel">
-                <strong>No tasks yet</strong>
-                <p>Capture one inline and keep moving.</p>
-              </div>
+              <EmptyState title="No tasks yet" description="Capture one inline and keep moving." />
             ) : (
               visibleExecutionTasks.map(task => (
                 <ExecutionTaskItem
@@ -1221,6 +1207,16 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
             )}
 
             <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
+          </div>
+        </div>
+
+        {/* 5. Supporting metrics — recovery signals, not action items */}
+        <div className="today-zone">
+          <p className="eyebrow" style={{ margin: '0 0 8px' }}>Recovery &amp; signals</p>
+          <div className="ui-metrics-row">
+            <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
+            <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
+            <MetricBlock value={inboxCount > 0 ? inboxCount : '—'} label="Inbox" />
           </div>
         </div>
 
@@ -1408,12 +1404,7 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
       </section>
 
       <section className="task-card calendar-detail-panel">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Selected day</p>
-            <h2>{selectedDateLabel}</h2>
-          </div>
-        </div>
+        <SectionHeader eyebrow="Selected day" title={selectedDateLabel} />
         <div className="action-row">
           <button type="button" className="secondary-button">Open daily</button>
           <button type="button" className="secondary-button" onClick={() => createScheduledItem('busy')}>Add busy</button>
@@ -1421,28 +1412,17 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
         </div>
         <div className="subtle-feed">
           {selectedItems.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No items scheduled</strong>
-              <p>Add a busy block or event below.</p>
-            </div>
+            <EmptyState title="No items scheduled" description="Add a busy block or event below." />
           ) : (
             selectedItems.map(item => (
-              <article key={item.id} className="feed-card">
-                <strong>{item.title}</strong>
-                <p>{item.subtitle || item.type}</p>
-              </article>
+              <ListRow key={item.id} variant="card" label={item.title} sub={item.subtitle || item.type} />
             ))
           )}
         </div>
       </section>
 
       <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Add busy</p>
-            <h2>Work time not tied to integrations</h2>
-          </div>
-        </div>
+        <SectionHeader eyebrow="Add busy" title="Work time not tied to integrations" />
         <div className="calendar-form">
           <input
             className="task-title-input"
@@ -1459,12 +1439,7 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
       </section>
 
       <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Add event</p>
-            <h2>Manual event entry</h2>
-          </div>
-        </div>
+        <SectionHeader eyebrow="Add event" title="Manual event entry" />
         <div className="calendar-form">
           <input
             className="task-title-input"
@@ -1481,24 +1456,13 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
       </section>
 
       <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Schedule pattern</p>
-            <h2>Save this schedule as a pattern</h2>
-          </div>
-        </div>
+        <SectionHeader eyebrow="Schedule pattern" title="Save this schedule as a pattern" />
         <div className="subtle-feed">
           {visiblePatternItems.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No visible pattern items</strong>
-              <p>Selected-day items appear here before saving as a pattern.</p>
-            </div>
+            <EmptyState title="No visible pattern items" description="Selected-day items appear here before saving as a pattern." />
           ) : (
             visiblePatternItems.map(item => (
-              <article key={item.id} className="feed-card">
-                <strong>{item.title}</strong>
-                <p>{item.type} · weekly pattern ready</p>
-              </article>
+              <ListRow key={item.id} variant="card" label={item.title} sub={`${item.type} · weekly pattern ready`} />
             ))
           )}
         </div>
@@ -1507,12 +1471,7 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
       </section>
 
       <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Integration</p>
-            <h2>Connect Google</h2>
-          </div>
-        </div>
+        <SectionHeader eyebrow="Integration" title="Connect Google" />
         <p className="empty-message">Optional prompt only. Settings remains the place for integration setup.</p>
         <button type="button" className="ghost-button compact-ghost">Connect Google</button>
       </section>
@@ -1693,27 +1652,12 @@ function NutritionScreen({ now }) {
 
   return (
     <div className="tab-stack nutrition-stack">
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Nutrition</p>
-            <h2>Today&apos;s fuel</h2>
-          </div>
-        </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Planned</span>
-            <strong>{slotCoverage.planned}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Logged</span>
-            <strong>{slotCoverage.logged}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Water</span>
-            <strong>{hydrationCount}</strong>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="Nutrition" title="Today's fuel" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={slotCoverage.planned} label="Planned" />
+          <MetricBlock value={slotCoverage.logged} label="Logged" />
+          <MetricBlock value={hydrationCount} label="Water" />
         </div>
 
         <div className="quick-entry-row">
@@ -1767,16 +1711,10 @@ function NutritionScreen({ now }) {
             </button>
           ))}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Today&apos;s meals</p>
-            <h2>Planned vs logged by slot</h2>
-          </div>
-        </div>
-
+      <Card>
+        <SectionHeader eyebrow="Today's meals" title="Planned vs logged by slot" />
         <div className="nutrition-slot-grid">
           {mealSlots.map(slot => (
             <article key={slot.id} className="nutrition-slot-card">
@@ -1812,16 +1750,10 @@ function NutritionScreen({ now }) {
             </article>
           ))}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Hydration</p>
-            <h2>Keep water visible</h2>
-          </div>
-          <strong>{hydrationCount} cups</strong>
-        </div>
+      <Card>
+        <SectionHeader eyebrow="Hydration" title="Keep water visible" action={<strong>{hydrationCount} cups</strong>} />
 
         <div className="nutrition-meter">
           <div className="progress-bar">
@@ -1838,18 +1770,14 @@ function NutritionScreen({ now }) {
             +2 cups
           </button>
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Meal planning</p>
-            <h2>{selectedPlanDay === todayKey ? 'Today' : new Date(`${selectedPlanDay}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</h2>
-          </div>
-          <button type="button" className="primary-button" onClick={savePlan}>
-            Save plan
-          </button>
-        </div>
+      <Card>
+        <SectionHeader
+          eyebrow="Meal planning"
+          title={selectedPlanDay === todayKey ? 'Today' : new Date(`${selectedPlanDay}T00:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+          action={<button type="button" className="primary-button" onClick={savePlan}>Save plan</button>}
+        />
 
         <div className="week-strip calendar-week-strip" role="group" aria-label="Select plan day">
           {planWeekDays.map(day => (
@@ -1878,15 +1806,10 @@ function NutritionScreen({ now }) {
             </label>
           ))}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Pantry</p>
-            <h2>Lightweight visibility</h2>
-          </div>
-        </div>
+      <Card>
+        <SectionHeader eyebrow="Pantry" title="Lightweight visibility" />
 
         <div className="quick-entry-row">
           <input
@@ -1915,29 +1838,14 @@ function NutritionScreen({ now }) {
             </span>
           ))}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Macros / prep</p>
-            <h2>Keep it simple</h2>
-          </div>
-        </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Protein</span>
-            <strong>{macroSummary.protein}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Carbs</span>
-            <strong>{macroSummary.carbs}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Veg</span>
-            <strong>{macroSummary.veg}</strong>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="Macros / prep" title="Keep it simple" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={macroSummary.protein} label="Protein" />
+          <MetricBlock value={macroSummary.carbs} label="Carbs" />
+          <MetricBlock value={macroSummary.veg} label="Veg" />
         </div>
 
         <label className="field-stack">
@@ -1956,7 +1864,7 @@ function NutritionScreen({ now }) {
           </button>
           <p className="empty-message">Planned meals and hydration stay the focus; macros remain a light scaffold.</p>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -2396,29 +2304,12 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Weekly stats</p>
-                <h2>Training progress and trend</h2>
-              </div>
-            </div>
-            <div className="summary-row fitness-stats-row">
-              <div className="summary-tile">
-                <span>Workouts completed</span>
-                <strong>{weeklyStats.workoutsCompleted}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Miles completed</span>
-                <strong>{weeklyStats.milesCompleted.toFixed(1)}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Strength sessions</span>
-                <strong>{weeklyStats.strengthSessions}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Recovery sessions</span>
-                <strong>{weeklyStats.recoverySessions}</strong>
-              </div>
+            <SectionHeader eyebrow="Weekly stats" title="Training progress and trend" />
+            <div className="ui-metrics-row">
+              <MetricBlock value={weeklyStats.workoutsCompleted} label="Workouts" />
+              <MetricBlock value={weeklyStats.milesCompleted.toFixed(1)} label="Miles" />
+              <MetricBlock value={weeklyStats.strengthSessions} label="Strength" />
+              <MetricBlock value={weeklyStats.recoverySessions} label="Recovery" />
             </div>
             <p className="empty-message">
               Trend: {weeklyStats.workoutTrend >= 0 ? '+' : ''}{weeklyStats.workoutTrend} workouts versus the previous 7 days.
@@ -2430,34 +2321,21 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'plan' && (
         <>
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Active program</p>
-                <h2>{activeProgram.name}</h2>
-              </div>
-              <button type="button" className="ghost-button compact-ghost" onClick={() => cycleProgram(1)}>
-                Change
-              </button>
-            </div>
+            <SectionHeader
+              eyebrow="Active program"
+              title={activeProgram.name}
+              action={<button type="button" className="ghost-button compact-ghost" onClick={() => cycleProgram(1)}>Change</button>}
+            />
             <p className="empty-message">{activeProgram.description}</p>
             <div className="tag-row">
               {activeProgram.tags.map(tag => (
                 <span key={tag} className="status-chip is-active">{tag}</span>
               ))}
             </div>
-            <div className="summary-row">
-              <div className="summary-tile">
-                <span>Current week</span>
-                <strong>{programWeek}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Current phase</span>
-                <strong>{programPhase}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Frequency</span>
-                <strong>{selectedFrequency}</strong>
-              </div>
+            <div className="ui-metrics-row">
+              <MetricBlock value={programWeek} label="Current week" />
+              <MetricBlock value={programPhase} label="Current phase" />
+              <MetricBlock value={selectedFrequency} label="Frequency" />
             </div>
           </section>
 
@@ -2535,24 +2413,19 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Weekly schedule</p>
-                <h2>Program week layout</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Weekly schedule" title="Program week layout" />
             <div className="subtle-feed">
               {weeklySchedule.map(session => {
                 const sessionKey = toDateKey(session.date);
                 const isDone = completedScheduledDates.has(sessionKey);
                 const isToday = sessionKey === todayKey;
                 return (
-                  <article key={`${session.title}-${session.offset}`} className="feed-card">
-                    <strong>
-                      {isDone ? '✓ ' : isToday ? '→ ' : ''}{session.dayLabel} · {session.title}
-                    </strong>
-                    <p>{session.dateLabel} · {session.detail}</p>
-                  </article>
+                  <ListRow
+                    key={`${session.title}-${session.offset}`}
+                    variant="card"
+                    label={`${isDone ? '✓ ' : isToday ? '→ ' : ''}${session.dayLabel} · ${session.title}`}
+                    sub={`${session.dateLabel} · ${session.detail}`}
+                  />
                 );
               })}
             </div>
@@ -2563,48 +2436,43 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'library' && (
         <>
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Workout library</p>
-                <h2>Program-first templates</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Workout library" title="Program-first templates" />
             <div className="subtle-feed">
               {programLibrary.map(({ program, workouts: programWorkouts }) => (
-                <article key={program.id} className="feed-card">
-                  <strong>{program.name}</strong>
-                  <p>{program.description}</p>
-                  <p>{programWorkouts.length} saved workouts</p>
-                </article>
+                <ListRow
+                  key={program.id}
+                  variant="card"
+                  label={program.name}
+                  sub={`${program.description} · ${programWorkouts.length} saved`}
+                />
               ))}
             </div>
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Saved workouts</p>
-                <h2>Templates and finishes</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Saved workouts" title="Templates and finishes" />
             <div className="subtle-feed">
               {programLibrary.some(entry => entry.workouts.length > 0) ? (
                 programLibrary.map(({ program, workouts: programWorkouts }) => (
                   programWorkouts.length === 0 ? null : (
-                    <article key={`${program.id}-saved`} className="feed-card">
-                      <strong>{program.name}</strong>
-                      <p>{programWorkouts.map(workout => workout.name).join(' · ')}</p>
-                      <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedProgramId(program.id)}>
-                        View program
-                      </button>
-                    </article>
+                    <ListRow
+                      key={`${program.id}-saved`}
+                      variant="card"
+                      label={program.name}
+                      sub={programWorkouts.map(w => w.name).join(' · ')}
+                      trailing={
+                        <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedProgramId(program.id)}>
+                          View
+                        </button>
+                      }
+                    />
                   )
                 ))
               ) : (
-                <div className="empty-panel">
-                  <strong>No saved workouts yet</strong>
-                  <p>Program templates will show up here as workouts are captured.</p>
-                </div>
+                <EmptyState
+                  title="No saved workouts yet"
+                  description="Program templates will show up here as workouts are captured."
+                />
               )}
             </div>
           </section>
@@ -2614,100 +2482,61 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'logging' && (
         <>
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Logging</p>
-                <h2>Lightweight and expandable</h2>
-              </div>
-            </div>
-            <div className="summary-row">
-              <div className="summary-tile"><span>Workouts</span><strong>{workoutLogs.length}</strong></div>
-              <div className="summary-tile"><span>Runs</span><strong>{runLogs.length}</strong></div>
-              <div className="summary-tile"><span>Strength</span><strong>{strengthLogs.length}</strong></div>
-              <div className="summary-tile"><span>Recovery</span><strong>{recoveryLogs.length}</strong></div>
+            <SectionHeader eyebrow="Logging" title="Lightweight and expandable" />
+            <div className="ui-metrics-row">
+              <MetricBlock value={workoutLogs.length} label="Workouts" />
+              <MetricBlock value={runLogs.length} label="Runs" />
+              <MetricBlock value={strengthLogs.length} label="Strength" />
+              <MetricBlock value={recoveryLogs.length} label="Recovery" />
             </div>
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Workouts</p>
-                <h2>Session history</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Workouts" title="Session history" />
             <div className="subtle-feed">
               {workoutLogs.slice(0, 3).map(workout => (
-                <article key={workout.id} className="feed-card">
-                  <strong>{workout.name}</strong>
-                  <p>{workout.duration} min · {workout.status}</p>
-                </article>
+                <ListRow key={workout.id} variant="card" label={workout.name} sub={`${workout.duration} min · ${workout.status}`} />
               ))}
             </div>
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Runs</p>
-                <h2>Distance or speed notes</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Runs" title="Distance or speed notes" />
             <div className="subtle-feed">
               {runLogs.slice(0, 3).map(workout => (
-                <article key={workout.id} className="feed-card">
-                  <strong>{workout.name}</strong>
-                  <p>{workout.distanceMiles ? `${workout.distanceMiles.toFixed(1)} miles` : `${workout.duration} min`} · {workout.status}</p>
-                </article>
+                <ListRow
+                  key={workout.id}
+                  variant="card"
+                  label={workout.name}
+                  sub={`${workout.distanceMiles ? `${workout.distanceMiles.toFixed(1)} miles` : `${workout.duration} min`} · ${workout.status}`}
+                />
               ))}
             </div>
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Strength</p>
-                <h2>Load and volume placeholders</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Strength" title="Load and volume placeholders" />
             <div className="subtle-feed">
               {strengthLogs.slice(0, 3).map(workout => (
-                <article key={workout.id} className="feed-card">
-                  <strong>{workout.name}</strong>
-                  <p>{workout.programName || 'Strength'} · {workout.status}</p>
-                </article>
+                <ListRow key={workout.id} variant="card" label={workout.name} sub={`${workout.programName || 'Strength'} · ${workout.status}`} />
               ))}
             </div>
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Recovery</p>
-                <h2>Downshift sessions</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Recovery" title="Downshift sessions" />
             <div className="subtle-feed">
               {recoveryLogs.slice(0, 3).map(workout => (
-                <article key={workout.id} className="feed-card">
-                  <strong>{workout.name}</strong>
-                  <p>{workout.programName || 'Recovery'} · {workout.status}</p>
-                </article>
+                <ListRow key={workout.id} variant="card" label={workout.name} sub={`${workout.programName || 'Recovery'} · ${workout.status}`} />
               ))}
             </div>
           </section>
 
           <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Notes</p>
-                <h2>Quick log entry</h2>
-              </div>
-            </div>
+            <SectionHeader eyebrow="Notes" title="Quick log entry" />
             <div className="subtle-feed">
               {notes.slice(0, 3).map(note => (
-                <article key={note.id} className="feed-card">
-                  <strong>{note.content}</strong>
-                </article>
+                <ListRow key={note.id} variant="card" label={note.content} />
               ))}
             </div>
           </section>
@@ -2811,222 +2640,136 @@ function MoreScreen({ now }) {
 
   return (
     <div className="tab-stack">
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">More</p>
-            <h2>Summary and insights</h2>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="More" title="Summary and insights" />
+        <div className="ui-metrics-row">
+          <MetricBlock
+            value={weeklyInsights.completedTasks}
+            label="Tasks done"
+            trend={weeklyInsights.taskTrend !== 0 ? `${weeklyInsights.taskTrend >= 0 ? '+' : ''}${weeklyInsights.taskTrend} vs last wk` : undefined}
+            trendDir={weeklyInsights.taskTrend < 0 ? 'down' : 'up'}
+          />
+          <MetricBlock
+            value={weeklyInsights.completedWorkouts}
+            label="Workouts"
+            trend={weeklyInsights.workoutTrend !== 0 ? `${weeklyInsights.workoutTrend >= 0 ? '+' : ''}${weeklyInsights.workoutTrend}` : undefined}
+            trendDir={weeklyInsights.workoutTrend < 0 ? 'down' : 'up'}
+          />
+          <MetricBlock value={weeklyInsights.mealsLogged} label="Meals" />
+          <MetricBlock
+            value={weeklyInsights.hydrationCount}
+            label="Hydration"
+            trend={weeklyInsights.hydrationTrend !== 0 ? `${weeklyInsights.hydrationTrend >= 0 ? '+' : ''}${weeklyInsights.hydrationTrend}` : undefined}
+            trendDir={weeklyInsights.hydrationTrend < 0 ? 'down' : 'up'}
+          />
         </div>
+      </Card>
 
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Tasks done</span>
-            <strong>{weeklyInsights.completedTasks}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Workouts</span>
-            <strong>{weeklyInsights.completedWorkouts}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Meals</span>
-            <strong>{weeklyInsights.mealsLogged}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Hydration</span>
-            <strong>{weeklyInsights.hydrationCount}</strong>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="Fitness summary" title="Current program rollup" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={activeProgram.name} label="Program" />
+          <MetricBlock value={fitnessSummary.workoutsCompleted} label="Workouts" />
+          <MetricBlock value={fitnessSummary.milesCompleted.toFixed(1)} label="Miles" />
+          <MetricBlock value={fitnessSummary.recoverySessions} label="Recovery" />
         </div>
+        <p className="empty-message">Program focus: {activeProgram.description}</p>
+      </Card>
 
-        <p className="empty-message">
-          Trend: {weeklyInsights.taskTrend >= 0 ? '+' : ''}{weeklyInsights.taskTrend} tasks, {weeklyInsights.workoutTrend >= 0 ? '+' : ''}{weeklyInsights.workoutTrend} workouts, hydration {weeklyInsights.hydrationTrend >= 0 ? '+' : ''}{weeklyInsights.hydrationTrend} versus last week.
-        </p>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Fitness summary</p>
-            <h2>Current program rollup</h2>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="Daily tasks" title="Current task state" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={dailyTaskSummary.active.length} label="Active" />
+          <MetricBlock value={dailyTaskSummary.planned.length} label="Planned" />
+          <MetricBlock value={dailyTaskSummary.completedToday.length} label="Done today" />
         </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Program</span>
-            <strong>{activeProgram.name}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Workouts</span>
-            <strong>{fitnessSummary.workoutsCompleted}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Miles</span>
-            <strong>{fitnessSummary.milesCompleted.toFixed(1)}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Recovery</span>
-            <strong>{fitnessSummary.recoverySessions}</strong>
-          </div>
-        </div>
-
-        <p className="empty-message">
-          Program focus: {activeProgram.description}
-        </p>
-      </section>
-
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Daily tasks</p>
-            <h2>Current task state</h2>
-          </div>
-        </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Active</span>
-            <strong>{dailyTaskSummary.active.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Planned</span>
-            <strong>{dailyTaskSummary.planned.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Done today</span>
-            <strong>{dailyTaskSummary.completedToday.length}</strong>
-          </div>
-        </div>
-
         <div className="subtle-feed">
           {dailyTaskSummary.active.length === 0 && dailyTaskSummary.planned.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No tasks in motion</strong>
-              <p>Capture one from the top bar or keep this as a clean slate.</p>
-            </div>
+            <EmptyState
+              title="No tasks in motion"
+              description="Capture one from the top bar or keep this as a clean slate."
+            />
           ) : (
             [...dailyTaskSummary.active, ...dailyTaskSummary.planned].slice(0, 2).map(task => (
-              <article key={task.id} className="feed-card">
-                <strong>{task.title || 'Untitled task'}</strong>
-                <p>{task.status} · {task.subtasks.filter(subtask => subtask.done === false).length} open subtasks</p>
-              </article>
+              <ListRow
+                key={task.id}
+                variant="card"
+                label={task.title || 'Untitled task'}
+                sub={`${task.status} · ${task.subtasks.filter(st => st.done === false).length} open subtasks`}
+              />
             ))
           )}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Monthly tasks</p>
-            <h2>Lightweight month rollup</h2>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="Monthly tasks" title="Lightweight month rollup" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={monthlyTaskSummary.total} label="This month" />
+          <MetricBlock value={monthlyTaskSummary.active} label="Active" />
+          <MetricBlock value={monthlyTaskSummary.done} label="Done" />
         </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>This month</span>
-            <strong>{monthlyTaskSummary.total}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Active</span>
-            <strong>{monthlyTaskSummary.active}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Done</span>
-            <strong>{monthlyTaskSummary.done}</strong>
-          </div>
-        </div>
-
         <div className="subtle-feed">
           {monthlyTaskSummary.preview.length === 0 ? (
-            <div className="empty-panel">
-              <strong>No month-level task data yet</strong>
-              <p>New tasks will start filling this rollup automatically.</p>
-            </div>
+            <EmptyState
+              title="No month-level task data yet"
+              description="New tasks will start filling this rollup automatically."
+            />
           ) : (
             monthlyTaskSummary.preview.map(task => (
-              <article key={task.id} className="feed-card">
-                <strong>{task.title || 'Untitled task'}</strong>
-                <p>{task.status} · created {formatShortMonthDay(task.createdAt)}</p>
-              </article>
+              <ListRow
+                key={task.id}
+                variant="card"
+                label={task.title || 'Untitled task'}
+                sub={`${task.status} · created ${formatShortMonthDay(task.createdAt)}`}
+              />
             ))
           )}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Notes rollup</p>
-            <h2>Preview only</h2>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="Notes rollup" title="Preview only" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={notes.length} label="Notes" />
+          <MetricBlock value={noteSummary.monthCount} label="This month" />
+          <MetricBlock value={unreadCount} label="Unread" />
         </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Notes</span>
-            <strong>{notes.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>This month</span>
-            <strong>{noteSummary.monthCount}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Unread</span>
-            <strong>{unreadCount}</strong>
-          </div>
-        </div>
-
         <div className="subtle-feed">
           {noteSummary.preview.length > 0 ? (
             noteSummary.preview.map(note => (
-              <article key={note.id} className="feed-card">
-                <strong>{note.content}</strong>
-                <p>{formatShortMonthDay(note.createdAt)}</p>
-              </article>
+              <ListRow
+                key={note.id}
+                variant="card"
+                label={note.content}
+                sub={formatShortMonthDay(note.createdAt)}
+              />
             ))
           ) : (
-            <div className="empty-panel">
-              <strong>No notes captured yet</strong>
-              <p>Notes roll up here once they exist; nothing else is managed here.</p>
-            </div>
+            <EmptyState
+              title="No notes captured yet"
+              description="Notes roll up here once they exist; nothing else is managed here."
+            />
           )}
           {noteSummary.latest && (
             <p className="empty-message">
-              Latest note: {noteSummary.latest.content.slice(0, 60)}
+              Latest: {noteSummary.latest.content.slice(0, 60)}
             </p>
           )}
         </div>
-      </section>
+      </Card>
 
-      <section className="task-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">System summary</p>
-            <h2>Quick state check</h2>
-          </div>
+      <Card>
+        <SectionHeader eyebrow="System summary" title="Quick state check" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={`${systemSummary.energy}/5`} label="Energy" />
+          <MetricBlock value={`${systemSummary.sleepHours}h`} label="Sleep" />
+          <MetricBlock value={unreadCount} label="Inbox" />
         </div>
-
-        <div className="summary-row">
-          <div className="summary-tile">
-            <span>Energy</span>
-            <strong>{systemSummary.energy}/5</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Sleep</span>
-            <strong>{systemSummary.sleepHours}h</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Inbox</span>
-            <strong>{unreadCount}</strong>
-          </div>
-        </div>
-
         <p className="empty-message">
           Source: {systemSummary.source} · last check-in {systemSummary.lastCheckIn}
         </p>
-      </section>
+      </Card>
     </div>
   );
 }
