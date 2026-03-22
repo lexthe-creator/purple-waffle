@@ -581,6 +581,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
   const [executionExpanded, setExecutionExpanded] = useState(true);
   const [priorityExpanded, setPriorityExpanded] = useState(false);
   const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
+  const [checklistHidden, setChecklistHidden] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
   const checklistRef = useRef(null);
   const dragStateRef = useRef({
@@ -805,50 +806,73 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
       <div className="tab-stack">
         <section className="task-card today-surface">
 
-          {/* Header */}
+          {/* Header — clean, just greeting + date */}
           <div className="today-zone" ref={checklistRef}>
-            <div className="planning-header">
-              <div>
-                <p className="eyebrow">{formatFullDate(now)}</p>
-                <h2>{getGreeting(now)}</h2>
-              </div>
-              <div className="planning-header-actions">
-                <span className="mode-pill mode-pill--planning">Planning</span>
-                <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
-                  + Capture
+            <p className="eyebrow">{formatFullDate(now)}</p>
+            <h2 style={{ margin: '2px 0 0' }}>{getGreeting(now)}</h2>
+          </div>
+
+          {/* GET TO FIRST VALUE card */}
+          <div className="today-zone">
+            <div className="gtfv-card">
+              <div className="gtfv-header">
+                <p className="eyebrow" style={{ margin: 0 }}>Get to first value</p>
+                <button
+                  type="button"
+                  className="ghost-button compact-ghost"
+                  onClick={() => setChecklistHidden(h => !h)}
+                >
+                  {checklistHidden ? 'Show' : 'Hide'}
                 </button>
               </div>
+              {!checklistHidden && (
+                <>
+                  <p className="gtfv-subtitle">Finish the setup loop once, then let the day run itself.</p>
+                  <ul className="gtfv-list">
+                    {morningChecklist.map(item => (
+                      <li
+                        key={item.id}
+                        className={`gtfv-item${item.done ? ' is-done' : ''}`}
+                        onClick={() => toggleChecklistItem(item.id)}
+                      >
+                        <span className={`gtfv-indicator${item.done ? ' is-checked' : ''}`}>
+                          {item.done ? (
+                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                              <polyline points="1,6 4,10 11,2" />
+                            </svg>
+                          ) : '•'}
+                        </span>
+                        <span className="checklist-label">{item.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Morning checklist */}
+          {/* DAILY EXECUTION — heading + pill + metric strip + priority list all in one zone */}
           <div className="today-zone">
-            <p className="eyebrow">Morning checklist</p>
-            <ul className="morning-checklist">
-              {morningChecklist.map(item => (
-                <li key={item.id} className={`checklist-item${item.done ? ' is-done' : ''}`}>
-                  <button
-                    type="button"
-                    className={`task-checkbox${item.done ? ' is-checked' : ''}`}
-                    onClick={() => toggleChecklistItem(item.id)}
-                    aria-pressed={item.done}
-                    aria-label={`${item.done ? 'Uncheck' : 'Check'} ${item.label}`}
-                  >
-                    {item.done && (
-                      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <polyline points="1,6 4,10 11,2" />
-                      </svg>
-                    )}
-                  </button>
-                  <span className="checklist-label">{item.label}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+            {/* Row 1: eyebrow + Planning pill */}
+            <div className="daily-exec-header">
+              <p className="eyebrow" style={{ margin: 0 }}>Daily Execution</p>
+              <span className="mode-pill mode-pill--planning">Planning</span>
+            </div>
 
-          {/* Metric strip */}
-          <div className="today-zone">
-            <div className="metric-strip">
+            {/* Row 2: big heading + Quick Capture button */}
+            <div className="daily-exec-title-row">
+              <h2 className="daily-exec-heading">Plan first, execute once the list is real</h2>
+              <button type="button" className="ghost-button compact-ghost" style={{ flexShrink: 0 }} onClick={() => setQuickAddOpen(true)}>
+                Quick Capture
+              </button>
+            </div>
+
+            {/* Subtext */}
+            <p className="planning-subtext">{formatFullDate(now)} · selected date</p>
+            <p className="planning-subtext" style={{ marginTop: 0 }}>Editable priorities with reorder and cleanup.</p>
+
+            {/* Metric strip — lives below the heading */}
+            <div className="metric-strip" style={{ marginBottom: 12 }}>
               <div className="metric-tile">
                 <span className="metric-eyebrow">Energy</span>
                 <span className="metric-value">{energyState.value != null ? `${energyState.value}/5` : '—'}</span>
@@ -859,18 +883,13 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
               </div>
               <div className="metric-tile">
                 <span className="metric-eyebrow">Inbox</span>
-                <span className="metric-value">{inboxCount > 0 ? inboxCount : '—'}</span>
+                <span className="metric-value">{inboxCount}</span>
               </div>
             </div>
-          </div>
 
-          {/* Priority list */}
-          <div className="today-zone">
-            <p className="eyebrow">Daily Execution</p>
-            <h3 className="planning-heading">Plan first, execute once the list is real</h3>
-            <p className="planning-subtext">{formatFullDate(now)} · selected date</p>
+            {/* Priority list */}
             {activeTasks.length === 0 ? (
-              <div className="empty-panel" style={{ marginTop: 8 }}>
+              <div className="empty-panel">
                 <strong>No priorities yet</strong>
                 <p>Add the tasks that define the day.</p>
               </div>
@@ -894,13 +913,19 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
 
           {/* Next meal card */}
           <div className="today-zone">
-            <p className="eyebrow">Next meal</p>
             <article className="contextual-card">
+              <div className="contextual-card-header">
+                <p className="contextual-card-eyebrow">Next meal</p>
+                {todaysMeals.length === 0 ? (
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Plan meal</button>
+                ) : (
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Add another</button>
+                )}
+              </div>
               {todaysMeals.length === 0 ? (
                 <>
                   <strong className="contextual-card-title">Breakfast still open</strong>
                   <p className="contextual-card-subtitle">Use templates or quick logging</p>
-                  <button type="button" className="secondary-button" onClick={() => setQuickAddOpen(true)}>Plan meal</button>
                 </>
               ) : (
                 <>
@@ -908,7 +933,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                   {todaysMeals[0].tags.length > 0 && (
                     <p className="contextual-card-subtitle">{todaysMeals[0].tags.join(' · ')}</p>
                   )}
-                  <button type="button" className="secondary-button" onClick={() => setQuickAddOpen(true)}>Add another</button>
                 </>
               )}
             </article>
@@ -916,33 +940,38 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
 
           {/* Today's workout card */}
           <div className="today-zone">
-            <p className="eyebrow">Today&apos;s workout</p>
             <article className="contextual-card">
-              {nextWorkout ? (
-                <>
-                  <strong className="contextual-card-title">{nextWorkout.name}</strong>
-                  <p className="contextual-card-subtitle">{nextWorkout.duration} min · Planning only. No recovery prompt for future dates.</p>
+              <div className="contextual-card-header">
+                <p className="contextual-card-eyebrow">Today&apos;s workout</p>
+                {nextWorkout ? (
                   <button
                     type="button"
-                    className="secondary-button"
+                    className="ghost-button compact-ghost"
                     onClick={() => { setPlanningMode(false); onStartWorkout(nextWorkout.id); }}
                   >
                     Start
                   </button>
+                ) : (
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Add workout</button>
+                )}
+              </div>
+              {nextWorkout ? (
+                <>
+                  <strong className="contextual-card-title">{nextWorkout.name}</strong>
+                  <p className="contextual-card-subtitle">{nextWorkout.duration} min · Planning only. No recovery prompt for future dates.</p>
                 </>
               ) : (
-                <>
-                  <strong className="contextual-card-title">No workout planned</strong>
-                  <button type="button" className="secondary-button" onClick={() => setQuickAddOpen(true)}>Add workout</button>
-                </>
+                <strong className="contextual-card-title">No workout planned</strong>
               )}
             </article>
           </div>
 
           {/* Task flow card */}
           <div className="today-zone">
-            <p className="eyebrow">Task flow</p>
             <article className="contextual-card">
+              <div className="contextual-card-header">
+                <p className="contextual-card-eyebrow">Task flow</p>
+              </div>
               {activeTasks.length > 0 ? (
                 <strong className="contextual-card-title">{activeTasks.length} queued</strong>
               ) : (
@@ -956,28 +985,29 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
 
           {/* Habits card */}
           <div className="today-zone">
-            <p className="eyebrow">Habits</p>
             <article className="contextual-card">
+              <div className="contextual-card-header">
+                <p className="contextual-card-eyebrow">Habits</p>
+              </div>
               {todayHabits.length === 0 ? (
                 <strong className="contextual-card-title">No habits set up yet</strong>
               ) : (
-                <ul className="morning-checklist">
+                <ul className="gtfv-list">
                   {todayHabits.map(habit => {
                     const doneToday = habit.completedDates.includes(todayStr);
                     return (
-                      <li key={habit.id} className={`checklist-item${doneToday ? ' is-done' : ''}`}>
-                        <button
-                          type="button"
-                          className={`task-checkbox${doneToday ? ' is-checked' : ''}`}
-                          onClick={() => toggleHabit(habit.id)}
-                          aria-pressed={doneToday}
-                        >
-                          {doneToday && (
-                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <li
+                        key={habit.id}
+                        className={`gtfv-item${doneToday ? ' is-done' : ''}`}
+                        onClick={() => toggleHabit(habit.id)}
+                      >
+                        <span className={`gtfv-indicator${doneToday ? ' is-checked' : ''}`}>
+                          {doneToday ? (
+                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                               <polyline points="1,6 4,10 11,2" />
                             </svg>
-                          )}
-                        </button>
+                          ) : '•'}
+                        </span>
                         <span className="checklist-label">{habit.title}</span>
                       </li>
                     );
