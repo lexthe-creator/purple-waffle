@@ -933,19 +933,26 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                 <p>Add the tasks that define the day.</p>
               </div>
             ) : (
-              <ul className="priority-list">
-                {visiblePriorities.map(task => (
-                  <li key={task.id} className="priority-item">
-                    <span className="priority-title">{task.title || 'Untitled task'}</span>
-                    <span className={`status-pill status-pill--${task.status}`}>{task.status}</span>
-                  </li>
-                ))}
-                {!priorityExpanded && priorityOverflow > 0 && (
-                  <button type="button" className="execution-overflow" onClick={() => setPriorityExpanded(true)}>
-                    + {priorityOverflow} more
-                  </button>
-                )}
-              </ul>
+                            {visiblePriorities.map(task => (
+                <ExecutionTaskItem
+                  key={task.id}
+                  task={task}
+                  onUpdateTask={updateTask}
+                  onDeleteTask={deleteTask}
+                  onToggleDone={toggleTaskDone}
+                  onToggleSubtask={toggleSubtask}
+                  onAddSubtask={addSubtask}
+                  onSetStatus={setTaskStatus}
+                  onMoveUp={() => moveTask(task.id, -1)}
+                  onMoveDown={() => moveTask(task.id, 1)}
+                  onStartDrag={startTaskDrag}
+                  onMoveDrag={moveTaskDrag}
+                  onEndDrag={endTaskDrag}
+                  isDragging={draggingTaskId === task.id}
+                  mode="planning"
+                />
+              ))}
+
             )}
             <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
           </div>
