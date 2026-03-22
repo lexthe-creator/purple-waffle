@@ -13,7 +13,7 @@ import './styles.css';
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
 const NUTRITION_SLOTS = [
   {
-    id: 'breakfast',
+    id: 'breakfast'
     label: 'Breakfast',
     keywords: ['breakfast', 'brunch', 'oat', 'oats', 'egg', 'eggs', 'yogurt', 'smoothie', 'coffee'],
   },
@@ -933,7 +933,8 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                 <p>Add the tasks that define the day.</p>
               </div>
             ) : (
-                            {visiblePriorities.map(task => (
+              <>
+                {visiblePriorities.map(task => (
                 <ExecutionTaskItem
                   key={task.id}
                   task={task}
@@ -952,7 +953,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                   mode="planning"
                 />
               ))}
-
+              </>
             )}
             <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
           </div>
