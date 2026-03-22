@@ -14,6 +14,7 @@ export default function ExecutionTaskItem({
   onMoveDrag,
   onEndDrag,
   isDragging,
+  mode,
 }) {
   const [notesOpen, setNotesOpen] = useState(Boolean(task.notes));
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -99,7 +100,7 @@ export default function ExecutionTaskItem({
 
   const statusLabel =
     task.status === 'done' ? 'Completed' :
-    task.status === 'active' ? 'In execution' :
+    task.status === 'active' ? (mode === 'planning' ? 'In planning' : 'In execution') :
     'Planned';
 
   const nextStatus = task.status === 'active' ? 'planned' : 'active';
