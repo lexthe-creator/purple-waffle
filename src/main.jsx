@@ -13,7 +13,7 @@ import './styles.css';
 const QUICK_MEAL_TAGS = ['protein', 'carbs', 'veg', 'quick'];
 const NUTRITION_SLOTS = [
   {
-    id: 'breakfast'
+    id: 'breakfast',
     label: 'Breakfast',
     keywords: ['breakfast', 'brunch', 'oat', 'oats', 'egg', 'eggs', 'yogurt', 'smoothie', 'coffee'],
   },
