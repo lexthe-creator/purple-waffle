@@ -110,11 +110,6 @@ export default function ExecutionTaskItem({
     <article
       className={`execution-task-item ${task.status === 'done' ? 'is-done' : ''} ${isDragging ? 'is-dragging' : ''}`}
       data-task-id={task.id}
-      style={{ '--swipe-offset': `${swipeOffset}px` }}
-      onPointerDown={startSwipe}
-      onPointerMove={moveSwipe}
-      onPointerUp={endSwipe}
-      onPointerCancel={resetSwipe}
     >
       <div className="task-row execution-row">
         <button

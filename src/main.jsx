@@ -1214,10 +1214,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                   onSetStatus={setTaskStatus}
                   onMoveUp={() => moveTask(task.id, -1)}
                   onMoveDown={() => moveTask(task.id, 1)}
-                  onStartDrag={startTaskDrag}
-                  onMoveDrag={moveTaskDrag}
-                  onEndDrag={endTaskDrag}
-                  isDragging={draggingTaskId === task.id}
                 />
               ))
             )}
@@ -1437,7 +1433,7 @@ function CalendarScreen({ weeklyItems, setWeeklyItems }) {
             selectedItems.map(item => (
               <article key={item.id} className="feed-card">
                 <strong>{item.title}</strong>
-                <p>{item.type} · {item.startTime} - {item.endTime}</p>
+                <p>{item.subtitle || item.type}</p>
               </article>
             ))
           )}
@@ -1925,12 +1921,12 @@ function NutritionScreen({ now }) {
 
 function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const { workouts, notes, setWorkouts, setNotifications, createNotification } = useTaskContext();
-  const { energyState, setEnergyState } = useAppContext();
+  const { energyState, setEnergyState, fitnessSettings, setFitnessSettings } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState('today');
-  const [selectedProgramId, setSelectedProgramId] = useState(() => getWorkoutProgramKey(workouts[0]) || 'strength');
-  const [selectedFrequency, setSelectedFrequency] = useState(() => (workouts[0]?.frequency === '5-day' ? '5-day' : '4-day'));
-  const [programAnchor, setProgramAnchor] = useState(() => (FITNESS_ANCHORS.includes(workouts[0]?.anchorDay) ? workouts[0].anchorDay : 'Monday'));
-  const [programStartDate, setProgramStartDate] = useState(() => alignDateToAnchor(now, programAnchor));
+  const [selectedProgramId, setSelectedProgramId] = useState(() => fitnessSettings.selectedProgramId || 'strength');
+  const [selectedFrequency, setSelectedFrequency] = useState(() => fitnessSettings.selectedFrequency || '4-day');
+  const [programAnchor, setProgramAnchor] = useState(() => fitnessSettings.programAnchor || 'Monday');
+  const [programStartDate, setProgramStartDate] = useState(() => alignDateToAnchor(now, fitnessSettings.programAnchor || 'Monday'));
   const [checkInDraft, setCheckInDraft] = useState(() => ({
     mood: energyState.mood || 'steady',
     energy: Number.isFinite(energyState.value) ? energyState.value : 3,
@@ -1941,6 +1937,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   useEffect(() => {
     setProgramStartDate(alignDateToAnchor(now, programAnchor));
   }, [programAnchor]);
+
+  // Persist fitness settings back to AppContext whenever they change
+  useEffect(() => {
+    setFitnessSettings({ selectedProgramId, selectedFrequency, programAnchor });
+  }, [selectedProgramId, selectedFrequency, programAnchor]);
 
   useEffect(() => {
     setCheckInDraft({
@@ -2866,6 +2867,8 @@ function AppShell() {
     createNote,
     createWorkout,
     notifications,
+    calendarItems: weeklyItems,
+    setCalendarItems: setWeeklyItems,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -2877,7 +2880,6 @@ function AppShell() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [now, setNow] = useState(() => new Date());
-  const [weeklyItems, setWeeklyItems] = useState(() => createCalendarSeed());
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
