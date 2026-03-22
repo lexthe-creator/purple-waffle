@@ -54,6 +54,19 @@ function createNote(overrides = {}) {
   };
 }
 
+function createExercise(overrides = {}) {
+  return {
+    id: generateId('exercise'),
+    name: '',
+    detail: '',
+    sets: null,
+    reps: null,
+    duration: null,
+    completed: false,
+    ...overrides,
+  };
+}
+
 function createWorkout(overrides = {}) {
   return {
     id: generateId('workout'),
@@ -62,6 +75,8 @@ function createWorkout(overrides = {}) {
     programName: 'Strength Base',
     type: 'strength',
     status: 'planned',
+    scheduledDate: null,
+    sessionOffset: null,
     duration: 30,
     distanceMiles: 0,
     phase: 'Base',
@@ -69,9 +84,9 @@ function createWorkout(overrides = {}) {
     frequency: '4-day',
     anchorDay: 'Monday',
     exercises: [
-      { id: generateId('exercise'), name: 'Warm-up', detail: '5 min mobility' },
-      { id: generateId('exercise'), name: 'Main set', detail: '3 rounds' },
-      { id: generateId('exercise'), name: 'Cooldown', detail: 'Stretch + breathe' },
+      createExercise({ name: 'Warm-up', detail: '5 min mobility' }),
+      createExercise({ name: 'Main set', detail: '3 rounds' }),
+      createExercise({ name: 'Cooldown', detail: 'Stretch + breathe' }),
     ],
     createdAt: Date.now(),
     ...overrides,
@@ -161,6 +176,18 @@ function normalizeNote(note, index) {
   };
 }
 
+function normalizeExercise(exercise, index) {
+  return {
+    id: exercise?.id || generateId(`exercise-${index}`),
+    name: typeof exercise?.name === 'string' ? exercise.name : `Exercise ${index + 1}`,
+    detail: typeof exercise?.detail === 'string' ? exercise.detail : '',
+    sets: Number.isFinite(exercise?.sets) ? exercise.sets : null,
+    reps: typeof exercise?.reps === 'string' ? exercise.reps : null,
+    duration: typeof exercise?.duration === 'string' ? exercise.duration : null,
+    completed: exercise?.completed === true,
+  };
+}
+
 function normalizeWorkout(workout, index) {
   const programId = inferWorkoutProgram(workout);
   const defaultProgramName = {
@@ -171,6 +198,12 @@ function normalizeWorkout(workout, index) {
     recovery: 'Recovery Reset',
   }[programId];
 
+  const rawScheduledDate = workout?.scheduledDate;
+  const scheduledDate =
+    typeof rawScheduledDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawScheduledDate)
+      ? rawScheduledDate
+      : null;
+
   return {
     id: workout?.id || generateId('workout'),
     name: typeof workout?.name === 'string' ? workout.name : 'Focus Session',
@@ -178,6 +211,8 @@ function normalizeWorkout(workout, index) {
     programName: typeof workout?.programName === 'string' && workout.programName ? workout.programName : defaultProgramName,
     type: programId,
     status: ['planned', 'active', 'completed'].includes(workout?.status) ? workout.status : 'planned',
+    scheduledDate,
+    sessionOffset: Number.isFinite(workout?.sessionOffset) ? workout.sessionOffset : null,
     duration: Number.isFinite(workout?.duration) ? workout.duration : 30,
     distanceMiles: Number.isFinite(workout?.distanceMiles) ? workout.distanceMiles : 0,
     phase: typeof workout?.phase === 'string' && workout.phase ? workout.phase : 'Base',
@@ -185,11 +220,7 @@ function normalizeWorkout(workout, index) {
     frequency: workout?.frequency === '5-day' ? '5-day' : '4-day',
     anchorDay: ['Sunday', 'Monday', 'Wednesday'].includes(workout?.anchorDay) ? workout.anchorDay : 'Monday',
     exercises: Array.isArray(workout?.exercises)
-      ? workout.exercises.map((exercise, exerciseIndex) => ({
-          id: exercise?.id || generateId(`exercise-${exerciseIndex}`),
-          name: typeof exercise?.name === 'string' ? exercise.name : `Exercise ${exerciseIndex + 1}`,
-          detail: typeof exercise?.detail === 'string' ? exercise.detail : '',
-        }))
+      ? workout.exercises.map(normalizeExercise)
       : [],
     createdAt: Number.isFinite(workout?.createdAt) ? workout.createdAt : Date.now() + index,
   };
@@ -244,6 +275,8 @@ function loadInitialState() {
   }
 }
 
+const DEFAULT_PANTRY_ITEMS = ['Eggs', 'Oats', 'Rice', 'Greek yogurt'];
+
 function buildDefaultState() {
   const todayKey = new Date().toISOString().slice(0, 10);
   const tomorrowKey = (() => {
@@ -265,6 +298,7 @@ function buildDefaultState() {
       createNotification({ title: 'Weekly review', detail: 'Two items need rescheduling this week.' }),
     ],
     habits: [],
+    pantryItems: DEFAULT_PANTRY_ITEMS,
     calendarItems: [
       createCalendarItem({ id: 'calendar-seed-1', type: 'busy', title: 'Deep work block', date: todayKey, startTime: '09:00', endTime: '11:00', repeatWeekly: true, priority: true }),
       createCalendarItem({ id: 'calendar-seed-2', type: 'event', title: 'Lunch check-in', date: todayKey, startTime: '12:30', endTime: '13:00' }),
@@ -283,13 +317,17 @@ export function TaskProvider({ children }) {
   const [notifications, setNotifications] = useState(() => (initialState?.notifications || defaults.notifications).map(normalizeNotification));
   const [habits, setHabits] = useState(() => (initialState?.habits || defaults.habits).map(normalizeHabit));
   const [calendarItems, setCalendarItems] = useState(() => (initialState?.calendarItems || defaults.calendarItems).map(normalizeCalendarItem));
+  const [pantryItems, setPantryItems] = useState(() => {
+    const saved = initialState?.pantryItems;
+    return Array.isArray(saved) ? saved.filter(item => typeof item === 'string' && item.trim()) : defaults.pantryItems;
+  });
 
   useEffect(() => {
     window.localStorage.setItem(
       TASKS_STORAGE_KEY,
-      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, calendarItems }),
+      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, calendarItems, pantryItems }),
     );
-  }, [tasks, meals, notes, workouts, notifications, habits, calendarItems]);
+  }, [tasks, meals, notes, workouts, notifications, habits, calendarItems, pantryItems]);
 
   const value = useMemo(
     () => ({
@@ -309,14 +347,17 @@ export function TaskProvider({ children }) {
       createWorkout,
       createNotification,
       createSubtask,
+      createExercise,
       generateId,
       habits,
       setHabits,
       createHabit,
       calendarItems,
       setCalendarItems,
+      pantryItems,
+      setPantryItems,
     }),
-    [tasks, meals, notes, workouts, notifications, habits, calendarItems],
+    [tasks, meals, notes, workouts, notifications, habits, calendarItems, pantryItems],
   );
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;
