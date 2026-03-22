@@ -614,14 +614,14 @@ p {
 .status-pill,
 .status-chip {
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 20px;
   white-space: nowrap;
 }
 
 .status-pill {
-  padding: 7px 10px;
-  font-size: 0.68rem;
-  font-weight: 700;
+  padding: 3px 9px;
+  font-size: 0.625rem;
+  font-weight: 500;
   background: #fff;
   color: var(--muted);
   border-color: var(--border);
@@ -651,11 +651,14 @@ p {
 
 .status-chip,
 .segment-button {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border: 1px solid rgba(47, 64, 90, 0.12);
   background: #fff;
   color: var(--muted);
   cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
 .status-chip.is-active,
@@ -663,7 +666,7 @@ p {
   border-color: var(--primary);
   background: var(--primary-soft);
   color: var(--primary);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .inline-actions {
@@ -1050,7 +1053,7 @@ p {
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgba(31, 39, 48, 0.55);
+  background: rgba(0, 0, 0, 0.5);
   display: grid;
   place-items: center;
   padding: 20px;
@@ -1060,10 +1063,11 @@ p {
   width: min(100%, var(--shell-width));
   max-height: calc(100dvh - 40px);
   overflow: auto;
-  border-radius: 22px;
-  padding: 16px;
+  border-radius: 20px;
+  padding: 14px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
+  box-shadow: 0 18px 36px rgba(31, 39, 48, 0.12);
 }
 
 .modal-header {
@@ -1074,7 +1078,7 @@ p {
 .segmented-control {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .quick-add-form {
@@ -1230,7 +1234,16 @@ p {
   }
 
   .modal-backdrop {
-    padding: 12px;
+    align-items: end;
+    padding: 0;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-width: 100%;
+    max-height: min(92dvh, 720px);
+    border-radius: 20px 20px 0 0;
+    padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
   }
 
   .fab-button {
@@ -1299,12 +1312,13 @@ p {
 }
 
 .mode-pill {
-  display: inline-block;
-  padding: 2px 10px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
   border-radius: 20px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
