@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import Header from './components/Header.jsx';
+import AppFrame from './components/AppFrame.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
@@ -477,48 +477,6 @@ function createCalendarSeed() {
       priority: true,
     },
   ];
-}
-
-function RootTabPanel({ id, activeTab, children }) {
-  const isActive = activeTab === id;
-
-  return (
-    <section className="root-tab-panel" data-tab={id} hidden={!isActive} aria-hidden={!isActive}>
-      {children}
-    </section>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="toolbar-icon">
-      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.2 3.5c0-.36-.03-.7-.09-1.04l2.06-1.61-1.95-3.38-2.5 1a8.02 8.02 0 0 0-1.8-1.04l-.38-2.65H9.46l-.38 2.65c-.64.25-1.24.6-1.8 1.04l-2.5-1-1.95 3.38 2.06 1.61c-.06.34-.09.68-.09 1.04s.03.7.09 1.04L2.83 14.65l1.95 3.38 2.5-1c.56.44 1.16.79 1.8 1.04l.38 2.65h5.88l.38-2.65c.64-.25 1.24-.6 1.8-1.04l2.5 1 1.95-3.38-2.06-1.61c.06-.34.09-.68.09-1.04Z" />
-    </svg>
-  );
-}
-
-function BottomNav({ activeTab, onChange }) {
-  return (
-    <nav className="bottom-nav" aria-label="Primary tabs">
-      {ROOT_TABS.map(tab => (
-        <button
-          key={tab.id}
-          type="button"
-          className={`bottom-nav-button ${activeTab === tab.id ? 'is-active' : ''}`}
-          aria-current={activeTab === tab.id ? 'page' : undefined}
-          onClick={() => onChange(tab.id)}
-        >
-          <svg
-            className="nav-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            dangerouslySetInnerHTML={{ __html: tab.iconPath }}
-          />
-          <span className="nav-label">{tab.label}</span>
-        </button>
-      ))}
-    </nav>
-  );
 }
 
 function InlineTaskComposer({ defaultPriority, onSubmit }) {
@@ -3153,58 +3111,50 @@ function AppShell() {
     setNotifications(current => current.map(notification => ({ ...notification, read: true })));
   }
 
+  const primaryScreen = useMemo(() => {
+    if (activeTab === 'calendar') {
+      return <CalendarScreen weeklyItems={weeklyItems} setWeeklyItems={setWeeklyItems} />;
+    }
+
+    if (activeTab === 'nutrition') {
+      return <NutritionScreen now={now} />;
+    }
+
+    if (activeTab === 'fitness') {
+      return <FitnessScreen now={now} activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />;
+    }
+
+    if (activeTab === 'more') {
+      return <MoreScreen now={now} />;
+    }
+
+    return (
+      <DashboardScreen
+        inboxCount={unreadNotifications.length}
+        now={now}
+        activeWorkoutId={activeWorkoutId}
+        onStartWorkout={setActiveWorkoutId}
+        onSwitchToCalendar={() => setActiveTab('calendar')}
+        onSwitchToFitness={() => setActiveTab('fitness')}
+        weeklyItems={weeklyItems}
+      />
+    );
+  }, [activeTab, activeWorkoutId, now, setWeeklyItems, unreadNotifications.length, weeklyItems]);
+
   return (
-    <div className="app-shell">
-      <Header
+    <>
+      <AppFrame
+        tabs={ROOT_TABS}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         userName="Alex"
         inboxCount={unreadNotifications.length}
         onOpenInbox={() => setNotificationCenterOpen(true)}
         onOpenQuickAdd={() => setQuickAddOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
-      />
-
-      <button
-        type="button"
-        className="fab-button"
-        onClick={() => setQuickAddOpen(true)}
-        aria-label="Open quick capture"
       >
-        +
-      </button>
-
-      <main className="app-content">
-        <div className="tab-stack">
-          <RootTabPanel id="dashboard" activeTab={activeTab}>
-            <DashboardScreen
-              inboxCount={unreadNotifications.length}
-              now={now}
-              activeWorkoutId={activeWorkoutId}
-              onStartWorkout={setActiveWorkoutId}
-              onSwitchToCalendar={() => setActiveTab('calendar')}
-              onSwitchToFitness={() => setActiveTab('fitness')}
-              weeklyItems={weeklyItems}
-            />
-          </RootTabPanel>
-
-          <RootTabPanel id="calendar" activeTab={activeTab}>
-            <CalendarScreen weeklyItems={weeklyItems} setWeeklyItems={setWeeklyItems} />
-          </RootTabPanel>
-
-          <RootTabPanel id="nutrition" activeTab={activeTab}>
-            <NutritionScreen now={now} />
-          </RootTabPanel>
-
-          <RootTabPanel id="fitness" activeTab={activeTab}>
-            <FitnessScreen now={now} activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />
-          </RootTabPanel>
-
-          <RootTabPanel id="more" activeTab={activeTab}>
-            <MoreScreen now={now} />
-          </RootTabPanel>
-        </div>
-      </main>
-
-      <BottomNav activeTab={activeTab} onChange={setActiveTab} />
+        {primaryScreen}
+      </AppFrame>
 
       <QuickAddModal
         isOpen={quickAddOpen}
@@ -3220,7 +3170,7 @@ function AppShell() {
       />
 
       <SettingsSheet isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
-    </div>
+    </>
   );
 }
 
