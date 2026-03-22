@@ -575,14 +575,14 @@ function SettingsSheet({ isOpen, onClose }) {
   );
 }
 
-function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, calendarItems }) {
-  const { tasks, setTasks, meals, notes, workouts, notifications, createTask, createSubtask } = useTaskContext();
-  const [dailySearch, setDailySearch] = useState('');
-  const [priorityOnly, setPriorityOnly] = useState(true);
-  const [agendaExpanded, setAgendaExpanded] = useState(false);
+function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToCalendar, onSwitchToFitness }) {
+  const { tasks, setTasks, meals, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
+  const { planningMode, setPlanningMode, morningChecklist, setMorningChecklist, energyState, setQuickAddOpen } = useAppContext();
   const [executionExpanded, setExecutionExpanded] = useState(true);
-  const [mealsExpanded, setMealsExpanded] = useState(false);
+  const [priorityExpanded, setPriorityExpanded] = useState(false);
+  const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
+  const checklistRef = useRef(null);
   const dragStateRef = useRef({
     taskId: null,
     pointerId: null,
@@ -592,85 +592,42 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     active: false,
   });
 
+  const todayKey = toDateKey(now);
+  const todayStr = now.toISOString().slice(0, 10);
+
   const orderedTasks = useMemo(() => {
     const rank = { active: 0, planned: 1, done: 2 };
     return [...tasks].sort((a, b) => rank[a.status] - rank[b.status]);
   }, [tasks]);
 
-  const activeTasks = useMemo(() => orderedTasks.filter(task => task.status !== 'done'), [orderedTasks]);
-  const completedTasks = useMemo(() => orderedTasks.filter(task => task.status === 'done'), [orderedTasks]);
-  const todayKey = toDateKey(now);
+  const activeTasks = useMemo(() => orderedTasks.filter(t => t.status !== 'done'), [orderedTasks]);
+
   const todaysMeals = useMemo(
     () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
     [meals, todayKey],
   );
-  const agendaGroups = useMemo(() => {
-    const busyBlocks = calendarItems
-      .filter(item => item.date === todayKey && item.type === 'busy')
-      .map(item => ({
-        id: item.id,
-        title: item.title,
-        subtitle: `${item.startTime} - ${item.endTime}`,
-      }));
-
-    const workoutItems = workouts
-      .filter(workout => workout.status !== 'completed' || sameDay(workout.createdAt, now))
-      .map(workout => ({
-        id: workout.id,
-        title: workout.name,
-        subtitle: `${workout.duration} min · ${workout.status}`,
-      }));
-
-    const taskItems = orderedTasks
-      .filter(task => {
-        if (task.status === 'done') return false;
-        if (priorityOnly && !task.priority) return false;
-        if (dailySearch && !task.title.toLowerCase().includes(dailySearch.toLowerCase())) return false;
-        return true;
-      })
-      .map(task => ({
-        id: task.id,
-        title: task.title || 'Untitled task',
-        subtitle: `${task.status} · ${task.priority ? 'priority' : 'normal'}`,
-      }));
-
-    const noteItems = notes.slice(0, 3).map(note => ({
-      id: note.id,
-      title: note.content || 'Note',
-      subtitle: note.createdAt ? formatShortMonthDay(note.createdAt) : 'Saved note',
-    }));
-
-    return [
-      { key: 'busy', label: 'Busy blocks', items: busyBlocks },
-      { key: 'workouts', label: 'Workouts', items: workoutItems },
-      { key: 'tasks', label: 'Tasks', items: taskItems },
-      { key: 'notes', label: 'Notes', items: noteItems },
-    ];
-  }, [calendarItems, dailySearch, notes, now, orderedTasks, priorityOnly, todayKey, workouts]);
-
-  const todayBusyBlocks = useMemo(() => {
-    return calendarItems.filter(item => item.date === todayKey && item.type === 'busy');
-  }, [calendarItems, todayKey]);
-
-  const dailyProgress = useMemo(() => {
-    const completed = tasks.filter(task => task.status === 'done').length;
-    const total = tasks.length || 1;
-    return Math.round((completed / total) * 100);
-  }, [tasks]);
 
   const activeWorkout = useMemo(() => {
     if (!activeWorkoutId) return null;
-    return workouts.find(workout => workout.id === activeWorkoutId) ?? null;
+    return workouts.find(w => w.id === activeWorkoutId) ?? null;
   }, [activeWorkoutId, workouts]);
 
   const nextWorkout = useMemo(() => {
     if (activeWorkout) return activeWorkout;
-    return workouts.find(workout => workout.status !== 'completed') ?? workouts[0] ?? null;
+    return workouts.find(w => w.status !== 'completed') ?? workouts[0] ?? null;
   }, [activeWorkout, workouts]);
+
+  const todayHabits = useMemo(
+    () => habits.filter(h => h.frequency === 'daily' || h.frequency === 'weekly'),
+    [habits],
+  );
+
+  const MAX_PRIORITIES = 5;
+  const visiblePriorities = priorityExpanded ? activeTasks : activeTasks.slice(0, MAX_PRIORITIES);
+  const priorityOverflow = Math.max(0, activeTasks.length - visiblePriorities.length);
 
   const visibleExecutionTasks = executionExpanded ? orderedTasks : orderedTasks.slice(0, 3);
   const executionOverflowCount = Math.max(0, orderedTasks.length - visibleExecutionTasks.length);
-  const visibleMeals = mealsExpanded ? todaysMeals : todaysMeals.slice(0, 1);
 
   useEffect(() => {
     return () => {
@@ -680,45 +637,36 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
     };
   }, []);
 
-  function preserveExecutionScrollPosition(runUpdate) {
-    const scrollContainer = document.querySelector('.app-content');
-    const scrollTop = scrollContainer?.scrollTop ?? null;
+  function toggleChecklistItem(id) {
+    setMorningChecklist(prev =>
+      prev.map(item => (item.id === id ? { ...item, done: !item.done } : item)),
+    );
+  }
 
+  function scrollToChecklist() {
+    checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function preserveScroll(runUpdate) {
+    const container = document.querySelector('.app-content');
+    const top = container?.scrollTop ?? null;
     runUpdate();
-
-    if (scrollContainer && scrollTop !== null) {
-      window.requestAnimationFrame(() => {
-        scrollContainer.scrollTop = scrollTop;
-      });
+    if (container && top !== null) {
+      window.requestAnimationFrame(() => { container.scrollTop = top; });
     }
   }
 
-  function openExecutionComposer() {
-    setExecutionExpanded(true);
-    window.requestAnimationFrame(() => {
-      const trigger = document.querySelector('.execution-list .inline-task-trigger');
-      if (trigger) {
-        trigger.click();
-        return;
-      }
-
-      document.querySelector('.execution-list .inline-task-input')?.focus();
-    });
-  }
-
   function updateTask(taskId, updates) {
-    setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...updates } : task)));
+    setTasks(current => current.map(t => (t.id === taskId ? { ...t, ...updates } : t)));
   }
 
   function deleteTask(taskId) {
-    setTasks(current => current.filter(task => task.id !== taskId));
+    setTasks(current => current.filter(t => t.id !== taskId));
   }
 
   function toggleTaskDone(taskId) {
-    setTasks(current => current.map(task => (
-      task.id === taskId
-        ? { ...task, status: task.status === 'done' ? 'active' : 'done' }
-        : task
+    setTasks(current => current.map(t => (
+      t.id === taskId ? { ...t, status: t.status === 'done' ? 'active' : 'done' } : t
     )));
   }
 
@@ -727,65 +675,49 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   }
 
   function toggleSubtask(taskId, subtaskId) {
-    setTasks(current => current.map(task => (
-      task.id === taskId
-        ? {
-            ...task,
-            subtasks: task.subtasks.map(subtask => (
-              subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask
-            )),
-          }
-        : task
+    setTasks(current => current.map(t => (
+      t.id === taskId
+        ? { ...t, subtasks: t.subtasks.map(st => (st.id === subtaskId ? { ...st, done: !st.done } : st)) }
+        : t
     )));
   }
 
   function addSubtask(taskId) {
-    setTasks(current => current.map(task => (
-      task.id === taskId
-        ? { ...task, subtasks: [...task.subtasks, createSubtask('')] }
-        : task
+    setTasks(current => current.map(t => (
+      t.id === taskId ? { ...t, subtasks: [...t.subtasks, createSubtask('')] } : t
     )));
   }
 
   function addInlineTask(title) {
     const taskTitle = title.trim();
     if (!taskTitle) return;
-
-    setTasks(current => [
-      createTask({
-        status: 'active',
-        title: taskTitle,
-        priority: priorityOnly,
-      }),
-      ...current,
-    ]);
+    setTasks(current => [createTask({ status: 'active', title: taskTitle }), ...current]);
   }
 
-  function convertInboxToTask(notificationId) {
-    const source = notifications.find(notification => notification.id === notificationId);
-    if (!source) return;
+  function completeAllTasks() {
+    setTasks(current => current.map(t => (t.status !== 'done' ? { ...t, status: 'done' } : t)));
+    setShowCompleteAllConfirm(false);
+  }
 
-    setTasks(current => [
-      createTask({
-        status: 'active',
-        title: source.title,
-        notes: source.detail,
-        shouldFocusTitle: true,
-      }),
-      ...current,
-    ]);
+  function toggleHabit(habitId) {
+    setHabits(prev => prev.map(h => {
+      if (h.id !== habitId) return h;
+      const hasToday = h.completedDates.includes(todayStr);
+      return {
+        ...h,
+        completedDates: hasToday
+          ? h.completedDates.filter(d => d !== todayStr)
+          : [...h.completedDates, todayStr],
+      };
+    }));
   }
 
   function moveTask(taskId, direction) {
-    preserveExecutionScrollPosition(() => {
+    preserveScroll(() => {
       setTasks(current => {
-        const index = current.findIndex(task => task.id === taskId);
+        const index = current.findIndex(t => t.id === taskId);
         const nextIndex = index + direction;
-
-        if (index < 0 || nextIndex < 0 || nextIndex >= current.length) {
-          return current;
-        }
-
+        if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
         const next = [...current];
         const [item] = next.splice(index, 1);
         next.splice(nextIndex, 0, item);
@@ -795,18 +727,14 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   }
 
   function reorderTask(taskId, targetId, placement = 'before') {
-    preserveExecutionScrollPosition(() => {
+    preserveScroll(() => {
       setTasks(current => {
-        const fromIndex = current.findIndex(task => task.id === taskId);
-        const targetIndex = current.findIndex(task => task.id === targetId);
-
-        if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) {
-          return current;
-        }
-
+        const fromIndex = current.findIndex(t => t.id === taskId);
+        const targetIndex = current.findIndex(t => t.id === targetId);
+        if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return current;
         const next = [...current];
         const [item] = next.splice(fromIndex, 1);
-        let insertAt = next.findIndex(task => task.id === targetId);
+        let insertAt = next.findIndex(t => t.id === targetId);
         if (insertAt < 0) insertAt = next.length;
         if (placement === 'after') insertAt += 1;
         next.splice(insertAt, 0, item);
@@ -817,14 +745,9 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
 
   function startTaskDrag(taskId, event) {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-    if (dragStateRef.current.timer) {
-      window.clearTimeout(dragStateRef.current.timer);
-    }
-
+    if (dragStateRef.current.timer) window.clearTimeout(dragStateRef.current.timer);
     const handle = event.currentTarget;
     const pointerId = event.pointerId;
-
     dragStateRef.current = {
       taskId,
       pointerId,
@@ -842,26 +765,18 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   function moveTaskDrag(taskId, event) {
     const dragState = dragStateRef.current;
     if (dragState.taskId !== taskId) return;
-
     const deltaX = Math.abs(event.clientX - dragState.startX);
     const deltaY = Math.abs(event.clientY - dragState.startY);
-
     if (!dragState.active) {
       if (deltaX > 8 || deltaY > 8) {
-        if (dragState.timer) {
-          window.clearTimeout(dragState.timer);
-          dragState.timer = null;
-        }
+        if (dragState.timer) { window.clearTimeout(dragState.timer); dragState.timer = null; }
       }
       return;
     }
-
     event.preventDefault();
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-task-id]');
     const targetId = target?.getAttribute('data-task-id');
-
     if (!targetId || targetId === taskId) return;
-
     const targetRect = target.getBoundingClientRect();
     const placement = event.clientY > targetRect.top + (targetRect.height / 2) ? 'after' : 'before';
     reorderTask(taskId, targetId, placement);
@@ -870,87 +785,291 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
   function endTaskDrag(taskId) {
     const dragState = dragStateRef.current;
     if (dragState.taskId !== taskId) return;
-
-    if (dragState.timer) {
-      window.clearTimeout(dragState.timer);
-    }
-
-    dragStateRef.current = {
-      taskId: null,
-      pointerId: null,
-      timer: null,
-      startX: 0,
-      startY: 0,
-      active: false,
-    };
+    if (dragState.timer) window.clearTimeout(dragState.timer);
+    dragStateRef.current = { taskId: null, pointerId: null, timer: null, startX: 0, startY: 0, active: false };
     setDraggingTaskId(current => (current === taskId ? null : current));
   }
 
+  function openExecutionComposer() {
+    setExecutionExpanded(true);
+    window.requestAnimationFrame(() => {
+      const trigger = document.querySelector('.execution-list .inline-task-trigger');
+      if (trigger) { trigger.click(); return; }
+      document.querySelector('.execution-list .inline-task-input')?.focus();
+    });
+  }
+
+  // ── Planning Mode ─────────────────────────────────────────────────────────
+  if (planningMode) {
+    return (
+      <div className="tab-stack">
+        <section className="task-card today-surface">
+
+          {/* Header */}
+          <div className="today-zone" ref={checklistRef}>
+            <div className="planning-header">
+              <div>
+                <p className="eyebrow">{formatFullDate(now)}</p>
+                <h2>{getGreeting(now)}</h2>
+              </div>
+              <div className="planning-header-actions">
+                <span className="mode-pill mode-pill--planning">Planning</span>
+                <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
+                  + Capture
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Morning checklist */}
+          <div className="today-zone">
+            <p className="eyebrow">Morning checklist</p>
+            <ul className="morning-checklist">
+              {morningChecklist.map(item => (
+                <li key={item.id} className={`checklist-item${item.done ? ' is-done' : ''}`}>
+                  <button
+                    type="button"
+                    className={`task-checkbox${item.done ? ' is-checked' : ''}`}
+                    onClick={() => toggleChecklistItem(item.id)}
+                    aria-pressed={item.done}
+                    aria-label={`${item.done ? 'Uncheck' : 'Check'} ${item.label}`}
+                  >
+                    {item.done && (
+                      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <polyline points="1,6 4,10 11,2" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className="checklist-label">{item.label}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Metric strip */}
+          <div className="today-zone">
+            <div className="metric-strip">
+              <div className="metric-tile">
+                <span className="metric-eyebrow">Energy</span>
+                <span className="metric-value">{energyState.value != null ? `${energyState.value}/5` : '—'}</span>
+              </div>
+              <div className="metric-tile">
+                <span className="metric-eyebrow">Sleep</span>
+                <span className="metric-value">{energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'}</span>
+              </div>
+              <div className="metric-tile">
+                <span className="metric-eyebrow">Inbox</span>
+                <span className="metric-value">{inboxCount > 0 ? inboxCount : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Priority list */}
+          <div className="today-zone">
+            <p className="eyebrow">Daily Execution</p>
+            <h3 className="planning-heading">Plan first, execute once the list is real</h3>
+            <p className="planning-subtext">{formatFullDate(now)} · selected date</p>
+            {activeTasks.length === 0 ? (
+              <div className="empty-panel" style={{ marginTop: 8 }}>
+                <strong>No priorities yet</strong>
+                <p>Add the tasks that define the day.</p>
+              </div>
+            ) : (
+              <ul className="priority-list">
+                {visiblePriorities.map(task => (
+                  <li key={task.id} className="priority-item">
+                    <span className="priority-title">{task.title || 'Untitled task'}</span>
+                    <span className={`status-pill status-pill--${task.status}`}>{task.status}</span>
+                  </li>
+                ))}
+                {!priorityExpanded && priorityOverflow > 0 && (
+                  <button type="button" className="execution-overflow" onClick={() => setPriorityExpanded(true)}>
+                    + {priorityOverflow} more
+                  </button>
+                )}
+              </ul>
+            )}
+            <InlineTaskComposer defaultPriority={false} onSubmit={addInlineTask} />
+          </div>
+
+          {/* Next meal card */}
+          <div className="today-zone">
+            <p className="eyebrow">Next meal</p>
+            <article className="contextual-card">
+              {todaysMeals.length === 0 ? (
+                <>
+                  <strong className="contextual-card-title">Breakfast still open</strong>
+                  <p className="contextual-card-subtitle">Use templates or quick logging</p>
+                  <button type="button" className="secondary-button" onClick={() => setQuickAddOpen(true)}>Plan meal</button>
+                </>
+              ) : (
+                <>
+                  <strong className="contextual-card-title">{todaysMeals[0].name}</strong>
+                  {todaysMeals[0].tags.length > 0 && (
+                    <p className="contextual-card-subtitle">{todaysMeals[0].tags.join(' · ')}</p>
+                  )}
+                  <button type="button" className="secondary-button" onClick={() => setQuickAddOpen(true)}>Add another</button>
+                </>
+              )}
+            </article>
+          </div>
+
+          {/* Today's workout card */}
+          <div className="today-zone">
+            <p className="eyebrow">Today&apos;s workout</p>
+            <article className="contextual-card">
+              {nextWorkout ? (
+                <>
+                  <strong className="contextual-card-title">{nextWorkout.name}</strong>
+                  <p className="contextual-card-subtitle">{nextWorkout.duration} min · Planning only. No recovery prompt for future dates.</p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => { setPlanningMode(false); onStartWorkout(nextWorkout.id); }}
+                  >
+                    Start
+                  </button>
+                </>
+              ) : (
+                <>
+                  <strong className="contextual-card-title">No workout planned</strong>
+                  <button type="button" className="secondary-button" onClick={() => setQuickAddOpen(true)}>Add workout</button>
+                </>
+              )}
+            </article>
+          </div>
+
+          {/* Task flow card */}
+          <div className="today-zone">
+            <p className="eyebrow">Task flow</p>
+            <article className="contextual-card">
+              {activeTasks.length > 0 ? (
+                <strong className="contextual-card-title">{activeTasks.length} queued</strong>
+              ) : (
+                <>
+                  <strong className="contextual-card-title">Nothing queued</strong>
+                  <p className="contextual-card-subtitle">Capture or schedule a task</p>
+                </>
+              )}
+            </article>
+          </div>
+
+          {/* Habits card */}
+          <div className="today-zone">
+            <p className="eyebrow">Habits</p>
+            <article className="contextual-card">
+              {todayHabits.length === 0 ? (
+                <strong className="contextual-card-title">No habits set up yet</strong>
+              ) : (
+                <ul className="morning-checklist">
+                  {todayHabits.map(habit => {
+                    const doneToday = habit.completedDates.includes(todayStr);
+                    return (
+                      <li key={habit.id} className={`checklist-item${doneToday ? ' is-done' : ''}`}>
+                        <button
+                          type="button"
+                          className={`task-checkbox${doneToday ? ' is-checked' : ''}`}
+                          onClick={() => toggleHabit(habit.id)}
+                          aria-pressed={doneToday}
+                        >
+                          {doneToday && (
+                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                              <polyline points="1,6 4,10 11,2" />
+                            </svg>
+                          )}
+                        </button>
+                        <span className="checklist-label">{habit.title}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </article>
+          </div>
+
+        </section>
+
+        {/* Planning toolbar */}
+        <div className="dashboard-toolbar">
+          <button type="button" className="ghost-button compact-ghost" onClick={scrollToChecklist}>
+            Morning check-in
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
+            Brain Dump
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(false)}>
+            Move to Execution
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToCalendar}>
+            Open Calendar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Execution Mode ────────────────────────────────────────────────────────
   return (
     <div className="tab-stack">
       <section className="task-card today-surface">
 
-        {/* A. Context */}
+        {/* Header */}
         <div className="today-zone">
-          <div className="task-card-header">
+          <div className="planning-header">
             <div>
               <p className="eyebrow">{formatFullDate(now)}</p>
               <h2>{getGreeting(now)}</h2>
             </div>
-            <button
-              type="button"
-              className={`icon-button priority-toggle${priorityOnly ? ' is-active' : ''}`}
-              onClick={() => setPriorityOnly(current => !current)}
-              aria-label={priorityOnly ? 'Showing priority only — tap to show all' : 'Showing all tasks — tap for priority only'}
-              title={priorityOnly ? 'Priority only' : 'Show all'}
-            >
-              <svg viewBox="0 0 20 20" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M3 4a1 1 0 0 1 1-1h12a1 1 0 0 1 .78 1.625L13 9.5V15a1 1 0 0 1-1.447.894l-3-1.5A1 1 0 0 1 8 13.5V9.5L3.22 4.625A1 1 0 0 1 3 4Z" />
-              </svg>
-            </button>
+            <div className="planning-header-actions">
+              <span className="mode-pill mode-pill--execution">Execution</span>
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(true)}>
+                Back to Planning
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* B. Workout */}
+        {/* Metric strip */}
         <div className="today-zone">
-          <p className="eyebrow">Workout</p>
-          {nextWorkout ? (
-            <article className="feed-card" style={{ marginTop: 8 }}>
-              <strong>{nextWorkout.name}</strong>
-              <p>{nextWorkout.type || 'Workout'} · {nextWorkout.duration} min · {nextWorkout.status}</p>
-              <button type="button" className="secondary-button" onClick={() => onStartWorkout(nextWorkout.id)}>
-                {activeWorkout ? 'Continue' : 'Start'}
-              </button>
-            </article>
-          ) : (
-            <div className="empty-panel" style={{ marginTop: 8 }}>
-              <strong>No workout yet</strong>
-              <p>Add one via quick capture.</p>
+          <div className="metric-strip">
+            <div className="metric-tile">
+              <span className="metric-eyebrow">Energy</span>
+              <span className="metric-value">{energyState.value != null ? `${energyState.value}/5` : '—'}</span>
             </div>
-          )}
+            <div className="metric-tile">
+              <span className="metric-eyebrow">Sleep</span>
+              <span className="metric-value">{energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'}</span>
+            </div>
+            <div className="metric-tile">
+              <span className="metric-eyebrow">Inbox</span>
+              <span className="metric-value">{inboxCount > 0 ? inboxCount : '—'}</span>
+            </div>
+          </div>
         </div>
 
-        {/* C. Execution */}
+        {/* Active workout banner */}
+        {activeWorkout && (
+          <button
+            type="button"
+            className="active-workout-banner"
+            onClick={onSwitchToFitness}
+          >
+            <span>{activeWorkout.name} in progress</span>
+            <span className="active-workout-banner-cta">Tap to return →</span>
+          </button>
+        )}
+
+        {/* Execution list */}
         <div className="today-zone today-zone-execution">
           <div className="task-card-header">
             <p className="eyebrow">Execution</p>
-            <div className="header-stack">
-              <strong>{dailyProgress}%</strong>
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
-                {executionExpanded ? 'Collapse' : 'Expand'}
-              </button>
-              <button type="button" className="primary-button" onClick={openExecutionComposer}>
-                + Add task
-              </button>
-            </div>
-          </div>
-
-          <div className="progress-bar">
-            <span style={{ width: `${dailyProgress}%` }} />
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
+              {executionExpanded ? 'Collapse' : 'Expand'}
+            </button>
           </div>
 
           <div className="execution-list">
-            <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
+            <InlineTaskComposer defaultPriority={false} onSubmit={addInlineTask} />
 
             {orderedTasks.length === 0 ? (
               <div className="empty-panel">
@@ -983,115 +1102,32 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, cal
                 + {executionOverflowCount} more
               </button>
             )}
-
-            <InlineTaskComposer defaultPriority={priorityOnly} onSubmit={addInlineTask} />
           </div>
-        </div>
-
-        {/* D. Agenda */}
-        <div className="today-zone">
-          <div className="task-card-header">
-            <p className="eyebrow">Agenda</p>
-            <div className="header-stack">
-              <input
-                className="task-title-input compact-search"
-                value={dailySearch}
-                onChange={event => setDailySearch(event.target.value)}
-                placeholder="Filter today"
-              />
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setAgendaExpanded(current => !current)}>
-                {agendaExpanded ? 'Less' : 'More'}
-              </button>
-            </div>
-          </div>
-          <div
-            className="subtle-feed agenda-groups"
-            role="button"
-            tabIndex={0}
-            onClick={() => setAgendaExpanded(current => !current)}
-            onKeyDown={event => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                setAgendaExpanded(current => !current);
-              }
-            }}
-          >
-            {agendaGroups.every(group => group.items.length === 0) ? (
-              <div className="empty-panel">
-                <strong>No items for today</strong>
-                <p>Capture something with the plus button.</p>
-              </div>
-            ) : (
-              agendaGroups.map(group => {
-                const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
-                const overflowCount = Math.max(0, group.items.length - visibleItems.length);
-
-                if (group.items.length === 0) return null;
-
-                return (
-                  <article key={group.key} className="feed-card agenda-group">
-                    <div className="agenda-group-header">
-                      <strong>{group.label}</strong>
-                      <span>{group.items.length}</span>
-                    </div>
-                    <div className="agenda-group-list">
-                      {visibleItems.map(item => (
-                        <div key={item.id} className="agenda-item">
-                          <strong>{item.title}</strong>
-                          <span>{item.subtitle}</span>
-                        </div>
-                      ))}
-                      {!agendaExpanded && overflowCount > 0 && (
-                        <button
-                          type="button"
-                          className="agenda-overflow"
-                          onClick={event => {
-                            event.stopPropagation();
-                            setAgendaExpanded(true);
-                          }}
-                        >
-                          + {overflowCount} more
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* E. Meals */}
-        <div className="today-zone">
-          <div className="task-card-header">
-            <p className="eyebrow">Meals</p>
-            {todaysMeals.length > 1 && (
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setMealsExpanded(current => !current)}>
-                {mealsExpanded ? 'Less' : `${todaysMeals.length} meals`}
-              </button>
-            )}
-          </div>
-          {visibleMeals.length > 0 ? (
-            <div className="subtle-feed">
-              {visibleMeals.map(meal => (
-                <article key={meal.id} className="feed-card">
-                  <strong>{meal.name}</strong>
-                  <p>{meal.tags.length ? meal.tags.join(' · ') : 'No tags yet'}</p>
-                </article>
-              ))}
-              {!mealsExpanded && todaysMeals.length > 1 && (
-                <p className="empty-message">{todaysMeals.length - 1} more meals hidden</p>
-              )}
-            </div>
-          ) : (
-            <div className="empty-panel">
-              <strong>No meals logged today</strong>
-              <p>Nutrition stays lightweight here.</p>
-            </div>
-          )}
         </div>
 
       </section>
+
+      {/* Execution toolbar */}
+      <div className="dashboard-toolbar">
+        <button type="button" className="ghost-button compact-ghost" onClick={openExecutionComposer}>
+          Add Task
+        </button>
+        {showCompleteAllConfirm ? (
+          <button type="button" className="ghost-button compact-ghost dashboard-toolbar-danger" onClick={completeAllTasks}>
+            Confirm complete all
+          </button>
+        ) : (
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setShowCompleteAllConfirm(true)}>
+            Complete All
+          </button>
+        )}
+        <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
+          Brain Dump
+        </button>
+        <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(true)}>
+          Back to Planning
+        </button>
+      </div>
     </div>
   );
 }
@@ -2796,7 +2832,8 @@ function AppShell() {
               now={now}
               activeWorkoutId={activeWorkoutId}
               onStartWorkout={setActiveWorkoutId}
-              calendarItems={weeklyItems}
+              onSwitchToCalendar={() => setActiveTab('calendar')}
+              onSwitchToFitness={() => setActiveTab('fitness')}
             />
           </RootTabPanel>
 

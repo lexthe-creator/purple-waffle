@@ -101,6 +101,16 @@ function createNotification(overrides = {}) {
   };
 }
 
+function createHabit(overrides = {}) {
+  return {
+    id: generateId('habit'),
+    title: '',
+    frequency: 'daily',
+    completedDates: [],
+    ...overrides,
+  };
+}
+
 function normalizeTask(task, index) {
   return {
     id: task?.id || generateId('task'),
@@ -180,6 +190,17 @@ function normalizeNotification(notification, index) {
   };
 }
 
+function normalizeHabit(habit) {
+  return {
+    id: habit?.id || generateId('habit'),
+    title: typeof habit?.title === 'string' ? habit.title : '',
+    frequency: ['daily', 'weekly'].includes(habit?.frequency) ? habit.frequency : 'daily',
+    completedDates: Array.isArray(habit?.completedDates)
+      ? habit.completedDates.filter(d => typeof d === 'string')
+      : [],
+  };
+}
+
 function loadInitialState() {
   if (typeof window === 'undefined') {
     return null;
@@ -207,6 +228,7 @@ function buildDefaultState() {
       createNotification({ title: 'Energy auto-filled', detail: 'Using your baseline until you check in.' }),
       createNotification({ title: 'Weekly review', detail: 'Two items need rescheduling this week.' }),
     ],
+    habits: [],
   };
 }
 
@@ -217,13 +239,14 @@ export function TaskProvider({ children }) {
   const [notes, setNotes] = useState(() => (initialState?.notes || buildDefaultState().notes).map(normalizeNote));
   const [workouts, setWorkouts] = useState(() => (initialState?.workouts || buildDefaultState().workouts).map(normalizeWorkout));
   const [notifications, setNotifications] = useState(() => (initialState?.notifications || buildDefaultState().notifications).map(normalizeNotification));
+  const [habits, setHabits] = useState(() => (initialState?.habits || buildDefaultState().habits).map(normalizeHabit));
 
   useEffect(() => {
     window.localStorage.setItem(
       TASKS_STORAGE_KEY,
-      JSON.stringify({ tasks, meals, notes, workouts, notifications }),
+      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits }),
     );
-  }, [tasks, meals, notes, workouts, notifications]);
+  }, [tasks, meals, notes, workouts, notifications, habits]);
 
   const value = useMemo(
     () => ({
@@ -244,8 +267,11 @@ export function TaskProvider({ children }) {
       createNotification,
       createSubtask,
       generateId,
+      habits,
+      setHabits,
+      createHabit,
     }),
-    [tasks, meals, notes, workouts, notifications],
+    [tasks, meals, notes, workouts, notifications, habits],
   );
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;
