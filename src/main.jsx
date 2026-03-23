@@ -5,6 +5,7 @@ import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import InboxView from './views/InboxView.jsx';
 import InboxScreen from './views/InboxScreen.jsx';
 import FinanceScreen from './views/FinanceScreen.jsx';
+import HomeScreen from './views/HomeScreen.jsx';
 import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
@@ -58,9 +59,9 @@ const ROOT_TABS = [
     iconPath: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>',
   },
   {
-    id: 'settings',
-    label: 'Settings',
-    iconPath: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>',
+    id: 'home-screen',
+    label: 'Home',
+    iconPath: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 16 15 16 15 22"/>',
   },
 ];
 
@@ -350,7 +351,7 @@ function SettingsSheet({ isOpen, onClose }) {
   }
 
   function toggleStation(key) {
-    setDraft(d => {
+    setAthleteDraft(d => {
       const current = Array.isArray(d.weakStations) ? d.weakStations : [];
       return {
         ...d,
@@ -362,7 +363,7 @@ function SettingsSheet({ isOpen, onClose }) {
   }
 
   const stationList = Object.values(ALL_STATIONS);
-  const weakStations = Array.isArray(draft.weakStations) ? draft.weakStations : [];
+  const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
 
   function handleExportData() {
     const exportKeys = [
@@ -1554,7 +1555,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const [activeSubTab, setActiveSubTab] = useState('today');
   const [checkInDraft, setCheckInDraft] = useState(() => ({
     mood: energyState.mood || 'steady',
-    energy: Number.isFinite(energyState.value) ? energyState.value : 3,
+    energy: Number.isFinite(energyState.value) ? energyState.value : 5,
     sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
   }));
   const [acceptedRecovery, setAcceptedRecovery] = useState(false);
@@ -1566,7 +1567,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   useEffect(() => {
     setCheckInDraft({
       mood: energyState.mood || 'steady',
-      energy: Number.isFinite(energyState.value) ? energyState.value : 3,
+      energy: Number.isFinite(energyState.value) ? energyState.value : 5,
       sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
     });
   }, [energyState.mood, energyState.value, energyState.sleepHours]);
@@ -1598,7 +1599,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const recoverySuggested =
     acceptedRecovery
       ? null
-      : ((checkInDraft.energy <= 2 || checkInDraft.sleepHours <= 6 || ['flat', 'tired', 'low'].includes(checkInDraft.mood))
+      : ((checkInDraft.energy <= 4 || checkInDraft.sleepHours <= 6 || ['flat', 'tired', 'low'].includes(checkInDraft.mood))
           ? {
               title: 'Recovery recommendation',
               detail: 'Low energy, short sleep, or a flat mood should move today toward recovery only if you accept it.',
@@ -1696,7 +1697,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       mood: checkInDraft.mood,
       lastCheckIn: new Date().toISOString(),
     }));
-    upsertNotification('Fitness check-in saved', `${checkInDraft.mood} · ${checkInDraft.energy}/5`);
+    upsertNotification('Fitness check-in saved', `${checkInDraft.mood} · ${checkInDraft.energy}/10`);
     setAcceptedRecovery(false);
   }
 
@@ -1835,7 +1836,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 <label className="field-stack compact-field">
                   <span>Energy</span>
                   <div className="status-chip-group" role="group" aria-label="Energy rating">
-                    {[1, 2, 3, 4, 5].map(value => (
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(value => (
                       <button
                         key={value}
                         type="button"
@@ -2201,10 +2202,6 @@ function AppShell() {
   }
 
   function handleTabChange(tab) {
-    if (tab === 'settings') {
-      setSettingsOpen(true);
-      return;
-    }
     setActiveTab(tab);
   }
 
@@ -2241,6 +2238,10 @@ function AppShell() {
           weeklyItems={weeklyItems}
         />
       );
+    }
+
+    if (activeTab === 'home-screen') {
+      return <HomeScreen />;
     }
 
     return null;

@@ -9,6 +9,7 @@ const DEFAULT_PROFILE = {
     fiveKTime: null,
     hyroxFinishTime: null,
     strongStations: [],
+    weakStations: [],
     squat5RM: null,
     deadlift5RM: null,
     fitnessLevel: 'intermediate',
@@ -24,6 +25,10 @@ const DEFAULT_PROFILE = {
   workoutHistory: [],
   transactions: [],
   recurringExpenses: [],
+  financialAccounts: [
+    { id: 'account-1', institution: '', name: 'Checking', type: 'checking', balance: null, isActive: false },
+    { id: 'account-2', institution: '', name: 'Savings',  type: 'savings',  balance: null, isActive: false },
+  ],
   habits: [],
   groceryList: [],
   maintenanceHistory: {},
@@ -52,6 +57,9 @@ function normalizeAthlete(raw) {
     strongStations: Array.isArray(src.strongStations)
       ? src.strongStations.filter(s => typeof s === 'string')
       : def.strongStations,
+    weakStations: Array.isArray(src.weakStations)
+      ? src.weakStations.filter(s => typeof s === 'string')
+      : def.weakStations,
     squat5RM: Number.isFinite(src.squat5RM) ? src.squat5RM : def.squat5RM,
     deadlift5RM: Number.isFinite(src.deadlift5RM) ? src.deadlift5RM : def.deadlift5RM,
     fitnessLevel: typeof src.fitnessLevel === 'string' ? src.fitnessLevel : def.fitnessLevel,
@@ -75,6 +83,9 @@ function normalizeProfile(raw) {
     workoutHistory: Array.isArray(src.workoutHistory) ? src.workoutHistory : [],
     transactions: Array.isArray(src.transactions) ? src.transactions : [],
     recurringExpenses: Array.isArray(src.recurringExpenses) ? src.recurringExpenses : [],
+    financialAccounts: Array.isArray(src.financialAccounts)
+      ? src.financialAccounts
+      : DEFAULT_PROFILE.financialAccounts,
     habits: Array.isArray(src.habits) ? src.habits : [],
     groceryList: Array.isArray(src.groceryList) ? src.groceryList : [],
     maintenanceHistory: isPlainObject(src.maintenanceHistory) ? src.maintenanceHistory : {},

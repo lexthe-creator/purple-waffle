@@ -12,7 +12,7 @@ const DEFAULT_CHECKLIST = [
 ];
 
 const DEFAULT_ENERGY = {
-  value: 3,
+  value: 5,
   sleepHours: 7,
   sleepSource: 'baseline',
   lastCheckIn: null,
@@ -29,7 +29,6 @@ const DEFAULT_FITNESS_SETTINGS = {
   equipmentAccess: 'full-gym',
   goalFinishTime: '',
   currentWeeklyMileage: null,
-  weakStations: [],
   injuriesOrLimitations: '',
 };
 
@@ -53,8 +52,6 @@ function migrateFitnessSettings(raw) {
     ...(typeof raw.equipmentAccess === 'string'       ? { equipmentAccess: raw.equipmentAccess }             : {}),
     ...(typeof raw.goalFinishTime === 'string'        ? { goalFinishTime: raw.goalFinishTime }               : {}),
     ...(Number.isFinite(raw.currentWeeklyMileage)     ? { currentWeeklyMileage: raw.currentWeeklyMileage }   : {}),
-    ...(Array.isArray(raw.weakStations)
-        ? { weakStations: raw.weakStations.filter(s => typeof s === 'string') }                              : {}),
     ...(typeof raw.injuriesOrLimitations === 'string' ? { injuriesOrLimitations: raw.injuriesOrLimitations } : {}),
   };
 }
@@ -129,7 +126,7 @@ export function AppProvider({ children }) {
 
   // Morning check-in modal state
   const [showMorningCheckin, setShowMorningCheckin] = useState(false);
-  const [morningStep, setMorningStep] = useState(0);
+  const [morningStep, setMorningStep] = useState(1);
   const [energyScore, setEnergyScore] = useState(3);
   const [sleepHours, setSleepHours] = useState(7);
 
