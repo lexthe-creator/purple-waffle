@@ -423,10 +423,6 @@ p {
   gap: 10px;
 }
 
-.agenda-groups {
-  gap: 8px;
-}
-
 .action-row,
 .calendar-nav,
 .calendar-form,
@@ -496,10 +492,6 @@ p {
   font-size: 0.7rem;
 }
 
-.compact-search {
-  min-width: 100px;
-}
-
 .pantry-item {
   display: inline-flex;
   align-items: center;
@@ -518,12 +510,6 @@ p {
 
 .pantry-remove:hover {
   color: var(--text);
-}
-
-.header-stack {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
 }
 
 .execution-task-item {
@@ -751,11 +737,6 @@ p {
   min-width: 0;
 }
 
-.compact-primary {
-  padding-inline: 14px;
-  white-space: nowrap;
-}
-
 /* Swipe hint backgrounds */
 .execution-task-wrapper {
   position: relative;
@@ -820,37 +801,6 @@ p {
   padding-top: 6px;
 }
 
-/* Habit tap row */
-.habit-tap-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.habit-tap {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: var(--r-full);
-  border: 1.5px solid var(--border);
-  background: var(--card);
-  color: var(--text);
-  font-size: var(--fs-sm);
-  cursor: pointer;
-  transition: background 0.14s, border-color 0.14s, color 0.14s;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.habit-tap:active {
-  opacity: 0.75;
-}
-
-.habit-tap.is-done {
-  background: var(--success-soft);
-  border-color: var(--success);
-  color: var(--success);
-}
-
 /* Quick capture modal */
 .quick-capture-card {
   max-width: 420px;
@@ -890,10 +840,6 @@ p {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 600;
-}
-
-.compact-field {
-  min-width: 124px;
 }
 
 .inline-collapse {
@@ -942,60 +888,6 @@ p {
 .feed-card {
   display: grid;
   gap: 6px;
-}
-
-.agenda-group {
-  gap: 8px;
-}
-
-.agenda-group-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
-
-.agenda-group-header span {
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.agenda-group-list {
-  display: grid;
-  gap: 6px;
-}
-
-.agenda-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.agenda-item strong,
-.agenda-item span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agenda-item span {
-  color: var(--muted);
-  font-size: 0.78rem;
-  flex: none;
-}
-
-.agenda-overflow {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--primary);
-  padding: 0;
-  text-align: left;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 .nutrition-slot-card {
@@ -1441,20 +1333,6 @@ p {
   }
 }
 
-/* ── Unified Today surface ──────────────────────────────── */
-.today-surface {
-  gap: 0;
-  padding: 0;
-}
-
-.today-zone {
-  padding: 12px;
-}
-
-.today-zone + .today-zone {
-  border-top: 1px solid var(--border-zone);
-}
-
 /* Icon-based priority toggle */
 .priority-toggle {
   width: 34px;
@@ -1473,187 +1351,11 @@ p {
   color: var(--card);
 }
 
-/* ── Dashboard: Planning / Execution mode ─────────────────────────────── */
-
-.planning-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.planning-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.mode-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.mode-pill--planning {
-  background: var(--success-alt);
-  color: var(--success-text);
-}
-
-.mode-pill--execution {
-  background: var(--warning-soft);
-  color: var(--warning-text);
-}
-
-/* Morning checklist */
-.morning-checklist {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.checklist-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 32px;
-}
-
-.checklist-label {
-  font-size: 0.875rem;
-  color: var(--text);
-  line-height: 1.3;
-}
-
-.checklist-item.is-done .checklist-label {
-  text-decoration: line-through;
-  color: var(--muted);
-}
-
-/* Metric strip */
-.metric-strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.metric-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 6px;
-  background: var(--surface);
-  border-radius: 12px;
-  border: none;
-  cursor: default;
-  text-align: center;
-}
-
-button.metric-tile {
-  cursor: pointer;
-}
-
-button.metric-tile:hover {
-  background: var(--card);
-}
-
-.metric-eyebrow {
-  font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  font-weight: 600;
-}
-
 .metric-value {
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--text);
   line-height: 1.2;
-}
-
-/* Priority list */
-.priority-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.priority-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  background: var(--surface);
-  border-radius: 10px;
-  font-size: 0.875rem;
-}
-
-.priority-title {
-  flex: 1;
-  color: var(--text);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.planning-heading {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--text);
-  margin: 6px 0 2px;
-}
-
-.planning-subtext {
-  font-size: 0.75rem;
-  color: var(--muted);
-  margin: 0 0 6px;
-}
-
-/* Contextual cards */
-.contextual-card {
-  background: var(--card);
-  border: 1px solid var(--black-faint);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.contextual-card-title {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text);
-  display: block;
-}
-
-.contextual-card-subtitle {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin: 0;
-}
-
-.contextual-card .secondary-button {
-  margin-top: 6px;
-  align-self: flex-start;
 }
 
 /* Active workout banner */
@@ -1682,158 +1384,6 @@ button.metric-tile:hover {
   font-size: 0.75rem;
   color: var(--muted);
   flex-shrink: 0;
-}
-
-/* Contextual toolbar (sits above bottom nav) */
-.dashboard-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 8px 12px;
-  background: var(--card);
-  border-top: 1px solid var(--black-faint);
-  border-bottom: 1px solid var(--black-faint);
-  margin-top: 4px;
-}
-
-.dashboard-toolbar .ghost-button {
-  flex: 1;
-  text-align: center;
-  font-size: 0.72rem;
-  padding: 6px 4px;
-  white-space: nowrap;
-}
-
-.dashboard-toolbar-danger {
-  color: var(--danger) !important;
-}
-
-/* ── GET TO FIRST VALUE card ─────────────────────────────────────────────── */
-
-.gtfv-card {
-  background: var(--surface-alt);
-  border-radius: 16px;
-  padding: 14px 14px 8px;
-  margin-top: 8px;
-}
-
-.gtfv-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.gtfv-subtitle {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0 0 10px;
-  line-height: 1.35;
-}
-
-.gtfv-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gtfv-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--card);
-  border-radius: 10px;
-  padding: 11px 12px;
-  cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.gtfv-item:active {
-  opacity: 0.8;
-}
-
-.gtfv-item.is-done .checklist-label {
-  text-decoration: line-through;
-  color: var(--muted);
-}
-
-.gtfv-indicator {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 0.85rem;
-  color: var(--muted);
-  background: transparent;
-  line-height: 1;
-}
-
-.gtfv-indicator.is-checked {
-  background: var(--success);
-  border-color: var(--success);
-  color: var(--card);
-}
-
-/* ── DAILY EXECUTION layout ──────────────────────────────────────────────── */
-
-.daily-exec-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2px;
-}
-
-.daily-exec-title-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  margin: 4px 0 4px;
-}
-
-.daily-exec-heading {
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--text);
-  line-height: 1.18;
-  margin: 0;
-  flex: 1;
-}
-
-/* ── Contextual card inline header ───────────────────────────────────────── */
-
-.contextual-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 5px;
-}
-
-.contextual-card-eyebrow {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--muted);
-  font-weight: 600;
-  margin: 0;
-}
-
-/* Override: buttons inside contextual-card-header are small ghost style */
-.contextual-card-header .ghost-button {
-  font-size: 0.75rem;
-  padding: 4px 10px;
 }
 
 /* ── Dashboard redesign ──────────────────────────────────────────────────── */
