@@ -19,7 +19,7 @@ const DEFAULT_ENERGY = {
 };
 
 const DEFAULT_FITNESS_SETTINGS = {
-  selectedProgramId: 'strength',
+  programType: 'hyrox',
   selectedFrequency: '4-day',
   programAnchor: 'Monday',
   programStartDate: new Date().toISOString().slice(0, 10),
