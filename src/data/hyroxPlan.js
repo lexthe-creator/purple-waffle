@@ -256,9 +256,9 @@ export function getPhaseForWeek(weekNumber) {
 export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
   const type = weekType ?? (weekNumber % 2 === 1 ? 'A' : 'B');
   if (!WEEKLY_TEMPLATES[type]?.[trainingDays]) {
-    console.warn('Invalid trainingDays or weekType', { trainingDays, type });
+    throw new Error(`Invalid HYROX config: ${type}, ${trainingDays}`);
   }
-  const sessions = WEEKLY_TEMPLATES[type]?.[trainingDays] ?? WEEKLY_TEMPLATES.A['4-day'];
+  const sessions = WEEKLY_TEMPLATES[type][trainingDays];
   return sessions.map(session => ({
     ...session,
     stations: session.stations.map(key => ALL_STATIONS[key]).filter(Boolean),
