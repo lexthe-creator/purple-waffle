@@ -401,7 +401,7 @@ function SettingsSheet({ isOpen, onClose }) {
   }
 
   const stationList = Object.values(ALL_STATIONS);
-  const weakStations = Array.isArray(draft.weakStations) ? draft.weakStations : [];
+  const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
 
   function handleExportData() {
     const exportKeys = [
