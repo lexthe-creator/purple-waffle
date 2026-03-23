@@ -311,6 +311,11 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate }) {
 export function getPlanState({ startDate, trainingDays }) {
   const week = getCurrentWeek({ startDate });
   const phase = getPhaseForWeek(week);
-  const sessions = buildWeeklySchedule({ trainingDays, weekNumber: week, startDate });
-  return { week, phase, sessions };
+  const sessions = buildWeeklySchedule({
+    trainingDays,
+    weekNumber: week,
+    startDate,
+  });
+  const label = `Week ${week} · ${phase.name}`;
+  return { week, phase, sessions, label };
 }
