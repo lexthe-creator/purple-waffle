@@ -152,7 +152,7 @@ function buildWeeklySchedule(program, frequency, anchorDay, now) {
   });
 }
 
-function getWorkoutStats(workouts, now, selectedProgramId) {
+function getWorkoutStats(workouts, now, programType) {
   const weekStart = alignDateToAnchor(now, 'Monday');
   const nextWeekStart = addDays(weekStart, 7);
   const previousWeekStart = addDays(weekStart, -7);
@@ -167,7 +167,7 @@ function getWorkoutStats(workouts, now, selectedProgramId) {
 
   const completedCurrent = currentWeek.filter(workout => workout.status === 'completed');
   const completedPrevious = previousWeek.filter(workout => workout.status === 'completed');
-  const selectedCurrent = currentWeek.filter(workout => getWorkoutProgramKey(workout) === selectedProgramId);
+  const selectedCurrent = currentWeek.filter(workout => getWorkoutProgramKey(workout) === programType);
 
   const milesCompleted = completedCurrent.reduce((total, workout) => total + (Number.isFinite(workout.distanceMiles) ? workout.distanceMiles : 0), 0);
   const strengthSessions = completedCurrent.filter(workout => ['strength', 'hyrox'].includes(getWorkoutProgramKey(workout))).length;
@@ -1796,7 +1796,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   useEffect(() => {
     setFitnessSettings(current => ({
       ...current,
-      selectedProgramId: 'hyrox',
+      programType: 'hyrox',
       selectedFrequency,
       programAnchor,
       programStartDate: toDateKey(alignDateToAnchor(now, programAnchor)),

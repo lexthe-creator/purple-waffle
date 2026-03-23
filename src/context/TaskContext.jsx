@@ -71,9 +71,9 @@ function createWorkout(overrides = {}) {
   return {
     id: generateId('workout'),
     name: 'Focus Session',
-    programId: 'strength',
-    programName: 'Strength Base',
-    type: 'strength',
+    programId: 'hyrox',
+    programName: 'HYROX 32-week plan',
+    type: 'hyrox',
     status: 'planned',
     scheduledDate: null,
     sessionOffset: null,
