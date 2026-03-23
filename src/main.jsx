@@ -922,6 +922,9 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onSwitchToFitness, 
         </button>
 
       </div>
+
+      {/* Home content — grocery list and maintenance tracker */}
+      <HomeScreen />
     </div>
   );
 }
@@ -2238,9 +2241,6 @@ function AppShell() {
       );
     }
 
-    if (activeTab === 'home-screen') {
-      return <HomeScreen />;
-    }
 
     return null;
   }, [activeTab, activeWorkoutId, now, setWeeklyItems, unreadNotifications.length, weeklyItems]);
