@@ -275,15 +275,6 @@ export function getCurrentWeek({ startDate, today = new Date() }) {
   return Math.max(1, Math.min(32, Math.floor(diff / 7) + 1));
 }
 
-/**
- * Returns a summary of plan state for a given week and training frequency.
- */
-export function getPlanState({ trainingDays, weekNumber }) {
-  const phase = getPhaseForWeek(weekNumber);
-  const sessions = getWeeklyTemplate({ trainingDays, weekNumber });
-  const label = `Week ${weekNumber} · ${phase.name}`;
-  return { week: weekNumber, phase, sessions, label };
-}
 
 /**
  * Returns the station metadata object for a given station key, or null.
@@ -320,6 +311,11 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate }) {
 export function getPlanState({ startDate, trainingDays }) {
   const week = getCurrentWeek({ startDate });
   const phase = getPhaseForWeek(week);
-  const sessions = buildWeeklySchedule({ trainingDays, weekNumber: week, startDate });
-  return { week, phase, sessions };
+  const sessions = buildWeeklySchedule({
+    trainingDays,
+    weekNumber: week,
+    startDate,
+  });
+  const label = `Week ${week} · ${phase.name}`;
+  return { week, phase, sessions, label };
 }
