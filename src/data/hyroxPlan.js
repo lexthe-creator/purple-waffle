@@ -302,3 +302,35 @@ export function getCurrentWeek({ startDate, today = new Date() }) {
 export function getStationMeta(stationKey) {
   return ALL_STATIONS[stationKey] ?? null;
 }
+
+/**
+ * Builds the session list for a specific week, with concrete dates attached.
+ * weekStart is derived from startDate + (weekNumber - 1) * 7 days.
+ */
+export function buildWeeklySchedule({ trainingDays, weekNumber, startDate }) {
+  const sessions = getWeeklyTemplate({ trainingDays, weekNumber });
+  const weekStart = new Date(startDate);
+  weekStart.setDate(weekStart.getDate() + (weekNumber - 1) * 7);
+
+  return sessions.map(session => {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + session.offset);
+    return {
+      ...session,
+      date,
+      dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    };
+  });
+}
+
+/**
+ * Returns unified plan state for the current week: week number, phase, and
+ * scheduled sessions with concrete dates.
+ */
+export function getPlanState({ startDate, trainingDays }) {
+  const week = getCurrentWeek({ startDate });
+  const phase = getPhaseForWeek(week);
+  const sessions = buildWeeklySchedule({ trainingDays, weekNumber: week, startDate });
+  return { week, phase, sessions };
+}
