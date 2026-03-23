@@ -8,12 +8,14 @@ const DEFAULT_PROFILE = {
   athlete: {
     fiveKTime: null,
     hyroxFinishTime: null,
-    weakStations: [],
     strongStations: [],
     squat5RM: null,
     deadlift5RM: null,
-    programType: '4-day',
-    preferredTrainingDays: ['Mon', 'Wed', 'Fri', 'Sat'],
+    bodyWeight: null,
+    bodyWeightUnit: 'kg',
+    age: null,
+    biologicalSex: '',
+    sweatRate: null,
   },
   dailyLogs: {},        // keyed YYYY-MM-DD
   top3: {},             // keyed YYYY-MM-DD
@@ -45,14 +47,18 @@ function normalizeAthlete(raw) {
   return {
     fiveKTime: typeof src.fiveKTime === 'string' ? src.fiveKTime : def.fiveKTime,
     hyroxFinishTime: typeof src.hyroxFinishTime === 'string' ? src.hyroxFinishTime : def.hyroxFinishTime,
-    weakStations: Array.isArray(src.weakStations) ? src.weakStations.filter(s => typeof s === 'string') : def.weakStations,
-    strongStations: Array.isArray(src.strongStations) ? src.strongStations.filter(s => typeof s === 'string') : def.strongStations,
+    strongStations: Array.isArray(src.strongStations)
+      ? src.strongStations.filter(s => typeof s === 'string')
+      : def.strongStations,
     squat5RM: Number.isFinite(src.squat5RM) ? src.squat5RM : def.squat5RM,
     deadlift5RM: Number.isFinite(src.deadlift5RM) ? src.deadlift5RM : def.deadlift5RM,
-    programType: typeof src.programType === 'string' ? src.programType : def.programType,
-    preferredTrainingDays: Array.isArray(src.preferredTrainingDays)
-      ? src.preferredTrainingDays.filter(d => typeof d === 'string')
-      : def.preferredTrainingDays,
+    bodyWeight: Number.isFinite(src.bodyWeight) ? src.bodyWeight : def.bodyWeight,
+    bodyWeightUnit: src.bodyWeightUnit === 'lbs' ? 'lbs' : def.bodyWeightUnit,
+    age: Number.isFinite(src.age) ? src.age : def.age,
+    biologicalSex: ['male', 'female', 'other'].includes(src.biologicalSex)
+      ? src.biologicalSex
+      : def.biologicalSex,
+    sweatRate: Number.isFinite(src.sweatRate) ? src.sweatRate : def.sweatRate,
   };
 }
 
