@@ -266,6 +266,28 @@ export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
 }
 
 /**
+ * Returns the session array for a given week with concrete Date objects attached.
+ * startDate is the program's Week 1 Day 0 anchor (e.g. new Date('2026-01-05')).
+ * Each returned session includes all fields from getWeeklyTemplate plus `date`.
+ */
+export function buildWeeklySchedule({
+  trainingDays,
+  weekNumber,
+  startDate,
+}) {
+  const template = getWeeklyTemplate({ trainingDays, weekNumber });
+  const start = new Date(startDate);
+  return template.map(session => {
+    const date = new Date(start);
+    date.setDate(date.getDate() + session.offset + (weekNumber - 1) * 7);
+    return {
+      ...session,
+      date,
+    };
+  });
+}
+
+/**
  * Returns the current 1-based week number (1–32) relative to the program start date.
  */
 export function getCurrentWeek({ startDate, today = new Date() }) {
