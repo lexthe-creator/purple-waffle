@@ -71,6 +71,16 @@ const DEFAULT_NOTIFICATION_PREFS = {
   workoutReminder: true,
 };
 
+const DEFAULT_CALENDAR_PATTERNS = [];
+const DEFAULT_RECOVERY_INPUTS = {
+  preferredSession: 'fullbody',
+  lastRecoveryFocus: '',
+};
+const DEFAULT_HUB_INSIGHTS = {
+  favoriteSections: [],
+  weeklyNotes: [],
+};
+
 function getTodayDateKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -122,6 +132,15 @@ export function AppProvider({ children }) {
     ...DEFAULT_NOTIFICATION_PREFS,
     ...(saved?.notificationPrefs || {}),
   }));
+  const [calendarPatterns, setCalendarPatterns] = useState(() => saved?.calendarPatterns ?? DEFAULT_CALENDAR_PATTERNS);
+  const [recoveryInputs, setRecoveryInputs] = useState(() => ({
+    ...DEFAULT_RECOVERY_INPUTS,
+    ...(saved?.recoveryInputs || {}),
+  }));
+  const [hubInsights, setHubInsights] = useState(() => ({
+    ...DEFAULT_HUB_INSIGHTS,
+    ...(saved?.hubInsights || {}),
+  }));
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
 
   // Morning check-in modal state
@@ -134,9 +153,19 @@ export function AppProvider({ children }) {
   useEffect(() => {
     window.localStorage.setItem(
       APP_STATE_KEY,
-      JSON.stringify({ planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs }),
+      JSON.stringify({
+        planningMode,
+        energyState,
+        fitnessSettings,
+        workCalendarPrefs,
+        mealPrefs,
+        notificationPrefs,
+        calendarPatterns,
+        recoveryInputs,
+        hubInsights,
+      }),
     );
-  }, [planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs]);
+  }, [planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs, calendarPatterns, recoveryInputs, hubInsights]);
 
   // Persist daily checklist
   useEffect(() => {
@@ -164,6 +193,12 @@ export function AppProvider({ children }) {
       setMealPrefs,
       notificationPrefs,
       setNotificationPrefs,
+      calendarPatterns,
+      setCalendarPatterns,
+      recoveryInputs,
+      setRecoveryInputs,
+      hubInsights,
+      setHubInsights,
       morningChecklist,
       setMorningChecklist,
       // Morning check-in modal
@@ -179,6 +214,7 @@ export function AppProvider({ children }) {
     [
       planningMode, quickAddOpen, notificationCenterOpen,
       energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
+      calendarPatterns, recoveryInputs, hubInsights,
       morningChecklist, showMorningCheckin, morningStep, energyScore, sleepHours,
     ],
   );
