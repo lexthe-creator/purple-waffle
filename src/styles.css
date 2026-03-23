@@ -11,7 +11,7 @@
   --primary-soft: #E6EBF2;
   --success: #A5B38C;
   --success-soft: #EEF2EC;
-  --warning: #D97706;
+  --warning: #E6A84A;
   --warning-soft: #FDF3E3;
   --danger: #C65A4B;
   --shadow: 0 10px 24px rgba(31, 41, 51, 0.08);
@@ -20,8 +20,10 @@
   --scrim: rgba(0, 0, 0, 0.45);
   --scrim-strong: rgba(0, 0, 0, 0.65);
   --header-bg: rgba(246, 243, 239, 0.9);
-  --nav-bg: rgba(246, 243, 239, 0.96);
-  --white-soft: rgba(255, 255, 255, 0.8);
+  --nav-bg: rgba(255, 255, 255, 0.96);
+  --white-soft: rgba(255, 255, 255, 0.18);
+  --white-soft-border: rgba(255, 255, 255, 0.28);
+  --white-soft-4:      rgba(255, 255, 255, 0.75);
   --white-soft-2: rgba(255, 255, 255, 0.6);
   --white-soft-3: rgba(255, 255, 255, 0.4);
   --white-soft-5: rgba(255, 255, 255, 0.12);
@@ -2096,4 +2098,109 @@ button.metric-tile:hover {
   border: none;
   border-top: 1px solid var(--border);
   margin: 4px 0;
+}
+
+/* ── Shared screen layout ─────────────────────────────────── */
+.screen-content {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+/* ── List primitives ──────────────────────────────────────── */
+.plain-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(214, 221, 228, 0.5);
+  font-size: 0.875rem;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+.list-row-label {
+  flex: 1;
+  color: var(--text);
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.list-row-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* ── Metric row (Finance summary) ─────────────────────────── */
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric-block {
+  background: var(--surface);
+  border: 1px solid rgba(47, 64, 90, 0.08);
+  border-radius: var(--r-lg, 18px);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.metric-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* ── Empty hint ───────────────────────────────────────────── */
+.empty-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* ── Status pills (maintenance urgency) ──────────────────── */
+.pill-danger {
+  background: #fce8e6;
+  color: var(--danger);
+  border-color: transparent;
+}
+
+.pill-warning {
+  background: var(--warning-soft);
+  color: #8a4f10;
+  border-color: transparent;
+}
+
+.pill-ok {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: transparent;
 }
