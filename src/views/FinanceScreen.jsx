@@ -11,7 +11,7 @@ function getTodayDateKey() {
 
 export default function FinanceScreen() {
   const { profile, setProfile } = useProfileContext();
-  const { transactions, recurringExpenses } = profile;
+  const { transactions, recurringExpenses, financialAccounts } = profile;
 
   // Add-transaction form state
   const [txOpen, setTxOpen] = useState(false);
@@ -66,8 +66,73 @@ export default function FinanceScreen() {
     setProfile(p => ({ ...p, recurringExpenses: p.recurringExpenses.filter(r => r.id !== id) }));
   }
 
+  const activeAccountsTotal = useMemo(
+    () => (financialAccounts ?? []).filter(a => a.isActive).reduce((sum, a) => sum + (a.balance ?? 0), 0),
+    [financialAccounts],
+  );
+
+  function toggleAccountActive(id) {
+    setProfile(p => ({
+      ...p,
+      financialAccounts: (p.financialAccounts ?? []).map(a =>
+        a.id === id ? { ...a, isActive: !a.isActive } : a,
+      ),
+    }));
+  }
+
+  function updateAccountBalance(id, value) {
+    setProfile(p => ({
+      ...p,
+      financialAccounts: (p.financialAccounts ?? []).map(a =>
+        a.id === id ? { ...a, balance: value === '' ? null : Number.parseFloat(value) } : a,
+      ),
+    }));
+  }
+
   return (
     <div className="screen-content">
+      {/* Accounts */}
+      <section className="task-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Connected</p>
+            <h2>Accounts</h2>
+          </div>
+        </div>
+        <ul className="plain-list">
+          {(financialAccounts ?? []).map(account => (
+            <li key={account.id} className="list-row">
+              <button
+                type="button"
+                className={`status-chip ${account.isActive ? 'is-active' : ''}`}
+                style={{ flexShrink: 0 }}
+                onClick={() => toggleAccountActive(account.id)}
+                aria-label={account.isActive ? 'Deactivate account' : 'Activate account'}
+              >
+                {account.isActive ? 'Active' : 'Off'}
+              </button>
+              <span className="list-row-label">
+                {account.institution ? `${account.institution} — ` : ''}{account.name}
+              </span>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Balance"
+                value={account.balance ?? ''}
+                onChange={e => updateAccountBalance(account.id, e.target.value)}
+                style={{ width: '100px', textAlign: 'right', fontSize: '0.875rem' }}
+                className="brain-dump-input"
+              />
+            </li>
+          ))}
+        </ul>
+        {(financialAccounts ?? []).some(a => a.isActive) && (
+          <p className="eyebrow" style={{ marginTop: '8px' }}>
+            Total active balance: {formatCurrency(activeAccountsTotal)}
+          </p>
+        )}
+      </section>
+
       {/* Budget summary */}
       <section className="task-card">
         <div className="task-card-header">

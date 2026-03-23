@@ -54,11 +54,22 @@ export default function MorningCheckinModal() {
       lastCheckIn: new Date().toISOString(),
     }));
 
+    const todayKey = getTodayDateKey();
+
     // Persist top-3 to profile
     const entries = top3.map(t => t.trim()).filter(Boolean);
     setProfile(p => ({
       ...p,
-      top3: { ...p.top3, [getTodayDateKey()]: entries },
+      top3: { ...p.top3, [todayKey]: entries },
+      dailyLogs: {
+        ...p.dailyLogs,
+        [todayKey]: {
+          ...(p.dailyLogs[todayKey] || {}),
+          energyScore,
+          sleepHours,
+          checkInDone: true,
+        },
+      },
     }));
 
     // Mark morning check-in checklist item done
