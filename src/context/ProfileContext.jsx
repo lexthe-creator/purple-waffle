@@ -14,6 +14,8 @@ const DEFAULT_PROFILE = {
     deadlift5RM: null,
     programType: '4-day',
     preferredTrainingDays: ['Mon', 'Wed', 'Fri', 'Sat'],
+    fitnessLevel: 'intermediate',
+    equipment: [],
   },
   dailyLogs: {},        // keyed YYYY-MM-DD
   top3: {},             // keyed YYYY-MM-DD
@@ -53,6 +55,8 @@ function normalizeAthlete(raw) {
     preferredTrainingDays: Array.isArray(src.preferredTrainingDays)
       ? src.preferredTrainingDays.filter(d => typeof d === 'string')
       : def.preferredTrainingDays,
+    fitnessLevel: typeof src.fitnessLevel === 'string' ? src.fitnessLevel : def.fitnessLevel,
+    equipment: Array.isArray(src.equipment) ? src.equipment.filter(e => typeof e === 'string') : def.equipment,
   };
 }
 

@@ -11,7 +11,7 @@ import HomeScreen from './views/HomeScreen.jsx';
 import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
-import { ProfileProvider } from './context/ProfileContext.jsx';
+import { ProfileProvider, useProfileContext } from './context/ProfileContext.jsx';
 import { ALL_STATIONS, getPhaseForWeek, getWeeklyTemplate } from './data/hyroxPlan.js';
 import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, FloatingActionButton, ExpandablePanel } from './components/ui/index.js';
 import './styles.css';
@@ -424,8 +424,82 @@ function InlineTaskComposer({ defaultPriority, onSubmit }) {
   );
 }
 
+const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
+const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
+const ALL_STATION_KEYS = Object.values(ALL_STATIONS).map(s => s.key);
+const ALL_STATION_NAMES = Object.values(ALL_STATIONS).map(s => s.name);
+
 function SettingsSheet({ isOpen, onClose }) {
+  const {
+    fitnessSettings, setFitnessSettings,
+    raceSettings, setRaceSettings,
+    workCalendarPrefs, setWorkCalendarPrefs,
+    mealPrefs, setMealPrefs,
+    notificationPrefs, setNotificationPrefs,
+  } = useAppContext();
+  const { profile, updateAthlete } = useProfileContext();
+  const { athlete } = profile;
+
+  const raceCountdown = useMemo(() => {
+    if (!raceSettings.raceDate) return null;
+    const target = new Date(`${raceSettings.raceDate}T00:00:00`);
+    const now = new Date();
+    const days = Math.round((target - now) / 86_400_000);
+    if (days < 0) return `${Math.abs(days)} days ago`;
+    if (days === 0) return 'Today';
+    return `${days} days away`;
+  }, [raceSettings.raceDate]);
+
   if (!isOpen) return null;
+
+  function handleExportData() {
+    const exportKeys = [
+      'purple-waffle-app-state',
+      'purple-waffle-profile',
+      'purple-waffle-dashboard-v2',
+      'aiml-morning-checklist',
+    ];
+    const exported = {};
+    for (const key of exportKeys) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        exported[key] = raw ? JSON.parse(raw) : null;
+      } catch {
+        exported[key] = null;
+      }
+    }
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purple-waffle-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function getStorageInfo() {
+    const keys = [
+      'purple-waffle-app-state',
+      'purple-waffle-profile',
+      'purple-waffle-dashboard-v2',
+      'aiml-morning-checklist',
+    ];
+    return keys.map(key => {
+      const raw = window.localStorage.getItem(key);
+      const bytes = raw ? new Blob([raw]).size : 0;
+      return { key, size: bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B` };
+    });
+  }
+
+  const storageInfo = getStorageInfo();
+
+  function toggleWeakStation(stationName) {
+    const current = athlete.weakStations || [];
+    const updated = current.includes(stationName)
+      ? current.filter(s => s !== stationName)
+      : [...current, stationName];
+    updateAthlete({ weakStations: updated });
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -433,7 +507,7 @@ function SettingsSheet({ isOpen, onClose }) {
         <div className="modal-header">
           <div>
             <p className="eyebrow">Settings</p>
-            <h2>App shell</h2>
+            <h2>Configuration</h2>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings">
             ×
@@ -441,18 +515,296 @@ function SettingsSheet({ isOpen, onClose }) {
         </div>
 
         <div className="settings-stack">
-          <article className="settings-card">
-            <strong>Navigation</strong>
-            <p>Bottom tabs stay mounted, and global actions remain available from every screen.</p>
-          </article>
-          <article className="settings-card">
-            <strong>Capture</strong>
-            <p>The brain dump action and floating capture button both open quick add.</p>
-          </article>
-          <article className="settings-card">
-            <strong>More</strong>
-            <p>This screen is reserved for summaries and rollups, not configuration.</p>
-          </article>
+
+          {/* 1. Work Calendar */}
+          <ExpandablePanel header={<strong>Work Calendar</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Planning order</span>
+                <div className="segmented-control">
+                  {['priority', 'time'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      className={`status-chip ${workCalendarPrefs.planningOrder === opt ? 'is-active' : ''}`}
+                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, planningOrder: opt }))}
+                    >
+                      {opt === 'priority' ? 'Priority first' : 'Chronological'}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Busy-block behavior</span>
+                <div className="segmented-control">
+                  {['hard', 'soft'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
+                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
+                    >
+                      {opt === 'hard' ? 'Hard block' : 'Soft block'}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <p className="empty-message">Calendar blocking and availability are managed in the Calendar tab.</p>
+            </div>
+          </ExpandablePanel>
+
+          {/* 2. Finance */}
+          <ExpandablePanel header={<strong>Finance</strong>}>
+            <div className="field-stack">
+              <p className="empty-message">Transactions and recurring expenses are logged in the Finance tab. Budget targets will be configurable in a future update.</p>
+            </div>
+          </ExpandablePanel>
+
+          {/* 3. Google Integration */}
+          <ExpandablePanel header={<strong>Google Integration</strong>}>
+            <div className="field-stack">
+              <ListRow variant="card" label="Google Calendar" sub="Not connected" />
+              <button type="button" className="secondary-button" disabled>
+                Connect Google — coming soon
+              </button>
+              <p className="empty-message">OAuth sync will pull calendar events and busy blocks automatically once connected.</p>
+            </div>
+          </ExpandablePanel>
+
+          {/* 4. Fitness Profile */}
+          <ExpandablePanel header={<strong>Fitness Profile</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Training frequency</span>
+                <div className="segmented-control">
+                  {FITNESS_FREQUENCIES.map(freq => (
+                    <button
+                      key={freq}
+                      type="button"
+                      className={`status-chip ${fitnessSettings.selectedFrequency === freq ? 'is-active' : ''}`}
+                      onClick={() => setFitnessSettings(s => ({ ...s, selectedFrequency: freq }))}
+                    >
+                      {freq}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Program anchor day</span>
+                <div className="segmented-control">
+                  {FITNESS_ANCHORS.map(anchor => (
+                    <button
+                      key={anchor}
+                      type="button"
+                      className={`status-chip ${fitnessSettings.programAnchor === anchor ? 'is-active' : ''}`}
+                      onClick={() => setFitnessSettings(s => ({ ...s, programAnchor: anchor }))}
+                    >
+                      {anchor}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Program start date</span>
+                <input
+                  type="date"
+                  className="task-title-input"
+                  value={fitnessSettings.programStartDate || ''}
+                  onChange={e => setFitnessSettings(s => ({ ...s, programStartDate: e.target.value }))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Fitness level</span>
+                <div className="segmented-control">
+                  {FITNESS_LEVELS.map(level => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`status-chip ${athlete.fitnessLevel === level ? 'is-active' : ''}`}
+                      onClick={() => updateAthlete({ fitnessLevel: level })}
+                    >
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Weak stations</span>
+                <div className="tag-row">
+                  {ALL_STATION_NAMES.map((name, i) => (
+                    <button
+                      key={ALL_STATION_KEYS[i]}
+                      type="button"
+                      className={`status-chip ${(athlete.weakStations || []).includes(name) ? 'is-active' : ''}`}
+                      onClick={() => toggleWeakStation(name)}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>5K time</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. 22:30"
+                  value={athlete.fiveKTime || ''}
+                  onChange={e => updateAthlete({ fiveKTime: e.target.value })}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>HYROX finish time (personal best)</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. 1:12:00"
+                  value={athlete.hyroxFinishTime || ''}
+                  onChange={e => updateAthlete({ hyroxFinishTime: e.target.value })}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Squat 5RM (kg)</span>
+                <input
+                  type="number"
+                  className="task-title-input"
+                  placeholder="e.g. 100"
+                  value={athlete.squat5RM ?? ''}
+                  onChange={e => updateAthlete({ squat5RM: e.target.value ? Number(e.target.value) : null })}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Deadlift 5RM (kg)</span>
+                <input
+                  type="number"
+                  className="task-title-input"
+                  placeholder="e.g. 140"
+                  value={athlete.deadlift5RM ?? ''}
+                  onChange={e => updateAthlete({ deadlift5RM: e.target.value ? Number(e.target.value) : null })}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          {/* 5. Goals and Targets */}
+          <ExpandablePanel header={<strong>Goals and Targets</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Race date</span>
+                <input
+                  type="date"
+                  className="task-title-input"
+                  value={raceSettings.raceDate || ''}
+                  onChange={e => setRaceSettings(s => ({ ...s, raceDate: e.target.value || null }))}
+                />
+              </label>
+              {raceCountdown && (
+                <p className="empty-message">Countdown: {raceCountdown}</p>
+              )}
+              <label className="field-stack compact-field">
+                <span>Race name</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. HYROX London"
+                  value={raceSettings.raceName}
+                  onChange={e => setRaceSettings(s => ({ ...s, raceName: e.target.value }))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Category</span>
+                <div className="segmented-control">
+                  {RACE_CATEGORIES.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`status-chip ${raceSettings.raceCategory === cat ? 'is-active' : ''}`}
+                      onClick={() => setRaceSettings(s => ({ ...s, raceCategory: cat }))}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Target finish time</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. 1:05:00"
+                  value={raceSettings.targetFinishTime}
+                  onChange={e => setRaceSettings(s => ({ ...s, targetFinishTime: e.target.value }))}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          {/* 6. Meal Preferences */}
+          <ExpandablePanel header={<strong>Meal Preferences</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Daily hydration goal (cups)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  className="task-title-input"
+                  value={mealPrefs.hydrationGoal}
+                  onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Dietary notes</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  placeholder="e.g. No gluten, high protein"
+                  value={mealPrefs.dietaryNotes}
+                  onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          {/* 7. Notifications */}
+          <ExpandablePanel header={<strong>Notifications</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Morning reminder</span>
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.morningReminder}
+                  onChange={e => setNotificationPrefs(p => ({ ...p, morningReminder: e.target.checked }))}
+                />
+              </label>
+              <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Workout reminder</span>
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.workoutReminder}
+                  onChange={e => setNotificationPrefs(p => ({ ...p, workoutReminder: e.target.checked }))}
+                />
+              </label>
+              <p className="empty-message">Notifications are in-app only. Push notification support is not yet available.</p>
+            </div>
+          </ExpandablePanel>
+
+          {/* 8. Security & Data */}
+          <ExpandablePanel header={<strong>Security &amp; Data</strong>}>
+            <div className="field-stack">
+              <SectionHeader eyebrow="Local storage" title="Data stored on this device" />
+              <div className="subtle-feed">
+                {storageInfo.map(({ key, size }) => (
+                  <ListRow key={key} variant="card" label={key} sub={size} />
+                ))}
+              </div>
+              <button type="button" className="secondary-button" onClick={handleExportData}>
+                Export all data (JSON)
+              </button>
+              <p className="empty-message">Data is stored locally in your browser. No cloud backup. Export regularly to avoid data loss.</p>
+            </div>
+          </ExpandablePanel>
+
         </div>
       </section>
     </div>
@@ -1786,10 +2138,10 @@ function NutritionScreen({ now }) {
 
 function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const { workouts, notes, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
-  const { energyState, setEnergyState, fitnessSettings, setFitnessSettings } = useAppContext();
+  const { energyState, setEnergyState, fitnessSettings, setFitnessSettings, raceSettings } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState('today');
-  const [selectedFrequency, setSelectedFrequency] = useState(() => fitnessSettings.selectedFrequency || '4-day');
-  const [programAnchor, setProgramAnchor] = useState(() => fitnessSettings.programAnchor || 'Monday');
+  const selectedFrequency = fitnessSettings.selectedFrequency || '4-day';
+  const programAnchor = fitnessSettings.programAnchor || 'Monday';
   const [checkInDraft, setCheckInDraft] = useState(() => ({
     mood: energyState.mood || 'steady',
     energy: Number.isFinite(energyState.value) ? energyState.value : 3,
@@ -1804,17 +2156,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved)) return new Date(`${saved}T00:00:00`);
     return alignDateToAnchor(now, programAnchor);
   }, [fitnessSettings.programStartDate, programAnchor, now]);
-
-  // Persist fitness settings back to AppContext whenever they change
-  useEffect(() => {
-    setFitnessSettings(current => ({
-      ...current,
-      programType: 'hyrox',
-      selectedFrequency,
-      programAnchor,
-      programStartDate: toDateKey(alignDateToAnchor(now, programAnchor)),
-    }));
-  }, [selectedFrequency, programAnchor]);
 
   useEffect(() => {
     setCheckInDraft({
@@ -1834,7 +2175,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const programPhase = getPhaseForWeek(programWeek).name;
   const activeProgram = useMemo(() => buildHyroxProgramForWeek(programWeek), [programWeek]);
   const weeklyStats = useMemo(() => getWorkoutStats(workouts, now, 'hyrox'), [workouts, now]);
-  const programGoalDate = useMemo(() => addDays(programStartDate, 224), [programStartDate]);
+  const programGoalDate = useMemo(() => {
+    if (raceSettings.raceDate) return new Date(`${raceSettings.raceDate}T00:00:00`);
+    return addDays(programStartDate, 224);
+  }, [raceSettings.raceDate, programStartDate]);
   const programCountdown = programGoalDate ? formatCountdown(programGoalDate, now) : null;
   const weeklySchedule = useMemo(
     () => buildWeeklySchedule(activeProgram, selectedFrequency, programAnchor, now),
@@ -1898,10 +2242,9 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   function startWorkout(workoutId) {
     const workout = workouts.find(item => item.id === workoutId);
     if (workout) {
-      setSelectedFrequency(workout.frequency === '5-day' ? '5-day' : '4-day');
-      if (FITNESS_ANCHORS.includes(workout.anchorDay)) {
-        setProgramAnchor(workout.anchorDay);
-      }
+      const freq = workout.frequency === '5-day' ? '5-day' : '4-day';
+      const anchor = FITNESS_ANCHORS.includes(workout.anchorDay) ? workout.anchorDay : fitnessSettings.programAnchor;
+      setFitnessSettings(s => ({ ...s, selectedFrequency: freq, programAnchor: anchor }));
     }
 
     onStartWorkout(workoutId);
@@ -2248,39 +2591,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
               </p>
             </section>
           )}
-
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Training controls</p>
-                <h2>Frequency and anchor</h2>
-              </div>
-            </div>
-            <div className="segmented-control">
-              {FITNESS_FREQUENCIES.map(frequency => (
-                <button
-                  key={frequency}
-                  type="button"
-                  className={`status-chip ${selectedFrequency === frequency ? 'is-active' : ''}`}
-                  onClick={() => setSelectedFrequency(frequency)}
-                >
-                  {frequency}
-                </button>
-              ))}
-            </div>
-            <div className="segmented-control">
-              {FITNESS_ANCHORS.map(anchor => (
-                <button
-                  key={anchor}
-                  type="button"
-                  className={`status-chip ${programAnchor === anchor ? 'is-active' : ''}`}
-                  onClick={() => setProgramAnchor(anchor)}
-                >
-                  {anchor}
-                </button>
-              ))}
-            </div>
-          </section>
 
           <section className="task-card">
             <SectionHeader eyebrow="Weekly schedule" title="Program week layout" />
