@@ -3,7 +3,11 @@ import Header from './Header.jsx';
 
 function BottomNav({ tabs, activeTab, onChange }) {
   return (
-    <nav className="bottom-nav" aria-label="Primary tabs">
+    <nav
+      className="bottom-nav"
+      aria-label="Primary tabs"
+      style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+    >
       {tabs.map(tab => (
         <button
           key={tab.id}
