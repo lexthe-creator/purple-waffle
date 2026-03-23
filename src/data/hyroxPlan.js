@@ -266,11 +266,19 @@ export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
 }
 
 
+function assertValidStartDate(startDate) {
+  const parsed = new Date(startDate);
+  if (!startDate || Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid or missing startDate');
+  }
+  return parsed;
+}
+
 /**
  * Returns the current 1-based week number (1–32) relative to the program start date.
  */
 export function getCurrentWeek({ startDate, today = new Date() }) {
-  const start = new Date(startDate);
+  const start = assertValidStartDate(startDate);
   const diff = Math.floor((today - start) / (1000 * 60 * 60 * 24));
   return Math.max(1, Math.min(32, Math.floor(diff / 7) + 1));
 }
@@ -289,7 +297,7 @@ export function getStationMeta(stationKey) {
  */
 export function buildWeeklySchedule({ trainingDays, weekNumber, startDate }) {
   const sessions = getWeeklyTemplate({ trainingDays, weekNumber });
-  const weekStart = new Date(startDate);
+  const weekStart = assertValidStartDate(startDate);
   weekStart.setDate(weekStart.getDate() + (weekNumber - 1) * 7);
 
   return sessions.map(session => {
