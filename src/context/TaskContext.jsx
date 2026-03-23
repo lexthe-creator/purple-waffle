@@ -116,6 +116,17 @@ function createNotification(overrides = {}) {
   };
 }
 
+function createInboxItem(overrides = {}) {
+  return {
+    id: generateId('inbox'),
+    text: '',
+    createdAt: Date.now(),
+    module: null, // null | 'task' | 'fitness' | 'calendar' | 'note'
+    scheduledDate: null,
+    ...overrides,
+  };
+}
+
 function createHabit(overrides = {}) {
   return {
     id: generateId('habit'),
@@ -247,6 +258,16 @@ function normalizeHabit(habit) {
   };
 }
 
+function normalizeInboxItem(item, index) {
+  return {
+    id: item?.id || generateId('inbox'),
+    text: typeof item?.text === 'string' ? item.text : '',
+    createdAt: Number.isFinite(item?.createdAt) ? item.createdAt : Date.now() + index,
+    module: ['task', 'fitness', 'calendar', 'note'].includes(item?.module) ? item.module : null,
+    scheduledDate: typeof item?.scheduledDate === 'string' ? item.scheduledDate : null,
+  };
+}
+
 function normalizeCalendarItem(item) {
   return {
     id: item?.id || generateId('calendar'),
@@ -299,6 +320,11 @@ function buildDefaultState() {
     ],
     habits: [],
     pantryItems: DEFAULT_PANTRY_ITEMS,
+    inboxItems: [
+      createInboxItem({ text: 'Look into new running shoes before race' }),
+      createInboxItem({ text: 'Book physio appointment' }),
+      createInboxItem({ text: 'Call mom back this week' }),
+    ],
     calendarItems: [
       createCalendarItem({ id: 'calendar-seed-1', type: 'busy', title: 'Deep work block', date: todayKey, startTime: '09:00', endTime: '11:00', repeatWeekly: true, priority: true }),
       createCalendarItem({ id: 'calendar-seed-2', type: 'event', title: 'Lunch check-in', date: todayKey, startTime: '12:30', endTime: '13:00' }),
@@ -317,6 +343,7 @@ export function TaskProvider({ children }) {
   const [notifications, setNotifications] = useState(() => (initialState?.notifications || defaults.notifications).map(normalizeNotification));
   const [habits, setHabits] = useState(() => (initialState?.habits || defaults.habits).map(normalizeHabit));
   const [calendarItems, setCalendarItems] = useState(() => (initialState?.calendarItems || defaults.calendarItems).map(normalizeCalendarItem));
+  const [inboxItems, setInboxItems] = useState(() => (initialState?.inboxItems || defaults.inboxItems).map(normalizeInboxItem));
   const [pantryItems, setPantryItems] = useState(() => {
     const saved = initialState?.pantryItems;
     return Array.isArray(saved) ? saved.filter(item => typeof item === 'string' && item.trim()) : defaults.pantryItems;
@@ -325,9 +352,9 @@ export function TaskProvider({ children }) {
   useEffect(() => {
     window.localStorage.setItem(
       TASKS_STORAGE_KEY,
-      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, calendarItems, pantryItems }),
+      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, calendarItems, inboxItems, pantryItems }),
     );
-  }, [tasks, meals, notes, workouts, notifications, habits, calendarItems, pantryItems]);
+  }, [tasks, meals, notes, workouts, notifications, habits, calendarItems, inboxItems, pantryItems]);
 
   const value = useMemo(
     () => ({
@@ -354,10 +381,13 @@ export function TaskProvider({ children }) {
       createHabit,
       calendarItems,
       setCalendarItems,
+      inboxItems,
+      setInboxItems,
+      createInboxItem,
       pantryItems,
       setPantryItems,
     }),
-    [tasks, meals, notes, workouts, notifications, habits, calendarItems, pantryItems],
+    [tasks, meals, notes, workouts, notifications, habits, calendarItems, inboxItems, pantryItems],
   );
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;
