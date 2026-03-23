@@ -7,7 +7,6 @@ import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
 import FinanceScreen from './views/FinanceScreen.jsx';
-import HomeScreen from './views/HomeScreen.jsx';
 import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
@@ -41,9 +40,9 @@ const NUTRITION_SLOTS = [
 ];
 const ROOT_TABS = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
-    iconPath: '<path d="M3 12L12 3l9 9v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9Z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+    id: 'home',
+    label: 'Home',
+    iconPath: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><polyline points="9 21 9 12 15 12 15 21"/>',
   },
   {
     id: 'calendar',
@@ -64,11 +63,6 @@ const ROOT_TABS = [
     id: 'finance',
     label: 'Finance',
     iconPath: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>',
-  },
-  {
-    id: 'home',
-    label: 'Home',
-    iconPath: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><polyline points="9 21 9 12 15 12 15 21"/>',
   },
   {
     id: 'more',
@@ -350,19 +344,39 @@ function InlineTaskComposer({ defaultPriority, onSubmit }) {
   );
 }
 
+const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
+const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
+const ALL_STATION_KEYS = Object.values(ALL_STATIONS).map(s => s.key);
+const ALL_STATION_NAMES = Object.values(ALL_STATIONS).map(s => s.name);
+
 function SettingsSheet({ isOpen, onClose }) {
-  const { fitnessSettings, setFitnessSettings } = useAppContext();
+  const {
+    fitnessSettings, setFitnessSettings,
+    workCalendarPrefs, setWorkCalendarPrefs,
+    mealPrefs, setMealPrefs,
+    notificationPrefs, setNotificationPrefs,
+  } = useAppContext();
   const { profile, updateAthlete } = useProfileContext();
 
-  const [draft, setDraft] = React.useState(() => ({ ...fitnessSettings }));
-  const [athleteDraft, setAthleteDraft] = React.useState(() => ({ ...profile.athlete }));
+  const [draft, setDraft] = useState(() => ({ ...fitnessSettings }));
+  const [athleteDraft, setAthleteDraft] = useState(() => ({ ...profile.athlete }));
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       setDraft({ ...fitnessSettings });
       setAthleteDraft({ ...profile.athlete });
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const raceCountdown = useMemo(() => {
+    if (!draft.raceDate) return null;
+    const target = new Date(`${draft.raceDate}T00:00:00`);
+    const now = new Date();
+    const days = Math.round((target - now) / 86_400_000);
+    if (days < 0) return `${Math.abs(days)} days ago`;
+    if (days === 0) return 'Today';
+    return `${days} days away`;
+  }, [draft.raceDate]);
 
   if (!isOpen) return null;
 
@@ -395,13 +409,54 @@ function SettingsSheet({ isOpen, onClose }) {
   const stationList = Object.values(ALL_STATIONS);
   const weakStations = Array.isArray(draft.weakStations) ? draft.weakStations : [];
 
+  function handleExportData() {
+    const exportKeys = [
+      'purple-waffle-app-state',
+      'purple-waffle-profile',
+      'purple-waffle-dashboard-v2',
+      'aiml-morning-checklist',
+    ];
+    const exported = {};
+    for (const key of exportKeys) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        exported[key] = raw ? JSON.parse(raw) : null;
+      } catch {
+        exported[key] = null;
+      }
+    }
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purple-waffle-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function getStorageInfo() {
+    const keys = [
+      'purple-waffle-app-state',
+      'purple-waffle-profile',
+      'purple-waffle-dashboard-v2',
+      'aiml-morning-checklist',
+    ];
+    return keys.map(key => {
+      const raw = window.localStorage.getItem(key);
+      const bytes = raw ? new Blob([raw]).size : 0;
+      return { key, size: bytes > 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${bytes} B` };
+    });
+  }
+
+  const storageInfo = getStorageInfo();
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <section className="modal-card settings-sheet" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
           <div>
             <p className="eyebrow">Settings</p>
-            <h2>HYROX settings</h2>
+            <h2>Configuration</h2>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings">
             ×
@@ -410,244 +465,371 @@ function SettingsSheet({ isOpen, onClose }) {
 
         <div className="settings-stack">
 
-          {/* ── Training program ── */}
-          <article className="settings-card">
-            <strong>Training program</strong>
-
-            <label className="field-stack">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-
-            <label className="field-stack">
-              <span>Training days</span>
-              <div className="segmented-control">
-                {FITNESS_FREQUENCIES.map(freq => (
-                  <button
-                    key={freq}
-                    type="button"
-                    className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                    onClick={() => patch('trainingDays', freq)}
-                  >
-                    {freq}
-                  </button>
-                ))}
-              </div>
-            </label>
-
-            <label className="field-stack">
-              <span>Fitness level</span>
-              <div className="segmented-control">
-                {['beginner', 'intermediate', 'advanced'].map(level => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={`status-chip ${draft.fitnessLevel === level ? 'is-active' : ''}`}
-                    onClick={() => patch('fitnessLevel', level)}
-                  >
-                    {level}
-                  </button>
-                ))}
-              </div>
-            </label>
-
-            <label className="field-stack">
-              <span>Equipment access</span>
-              <div className="segmented-control">
-                {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-                  <button
-                    key={eq}
-                    type="button"
-                    className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                    onClick={() => patch('equipmentAccess', eq)}
-                  >
-                    {eq}
-                  </button>
-                ))}
-              </div>
-            </label>
-
-            <label className="field-stack">
-              <span>Current weekly mileage</span>
-              <input
-                type="number"
-                className="task-title-input"
-                min="0"
-                step="0.5"
-                value={draft.currentWeeklyMileage ?? ''}
-                placeholder="e.g. 20"
-                onChange={e => patch('currentWeeklyMileage', e.target.value === '' ? null : Number(e.target.value))}
-              />
-            </label>
-
-            <label className="field-stack">
-              <span>Weak stations</span>
-              <div className="segmented-control" style={{ flexWrap: 'wrap' }}>
-                {stationList.map(station => (
-                  <button
-                    key={station.key}
-                    type="button"
-                    className={`status-chip ${weakStations.includes(station.key) ? 'is-active' : ''}`}
-                    onClick={() => toggleStation(station.key)}
-                  >
-                    {station.name}
-                  </button>
-                ))}
-              </div>
-            </label>
-
-            <label className="field-stack">
-              <span>Injuries or limitations</span>
-              <textarea
-                className="notes-textarea"
-                value={draft.injuriesOrLimitations ?? ''}
-                placeholder="Any injuries or movement limitations"
-                onChange={e => patch('injuriesOrLimitations', e.target.value)}
-              />
-            </label>
-          </article>
-
-          {/* ── Race details ── */}
-          <article className="settings-card">
-            <strong>Race details</strong>
-
-            <label className="field-stack">
-              <span>Race name</span>
-              <input
-                type="text"
-                className="task-title-input"
-                value={draft.raceName ?? ''}
-                placeholder="e.g. HYROX London"
-                onChange={e => patch('raceName', e.target.value)}
-              />
-            </label>
-
-            <label className="field-stack">
-              <span>Race date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.raceDate ?? ''}
-                onChange={e => patch('raceDate', e.target.value || null)}
-              />
-            </label>
-
-            <label className="field-stack">
-              <span>Category</span>
-              <div className="segmented-control" style={{ flexWrap: 'wrap' }}>
-                {['Open Men', 'Open Women', 'Open Mixed', 'Pro Men', 'Pro Women', 'Pro Mixed', 'Elite Men', 'Elite Women', 'Elite Mixed'].map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    className={`status-chip ${draft.raceCategory === cat ? 'is-active' : ''}`}
-                    onClick={() => patch('raceCategory', cat)}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </label>
-
-            <label className="field-stack">
-              <span>Goal finish time</span>
-              <input
-                type="text"
-                className="task-title-input"
-                value={draft.goalFinishTime ?? ''}
-                placeholder="e.g. 1:15:00"
-                onChange={e => patch('goalFinishTime', e.target.value)}
-              />
-            </label>
-          </article>
-
-          {/* ── Athlete profile ── */}
-          <article className="settings-card">
-            <strong>Athlete profile</strong>
-
+          {/* 1. Work Calendar */}
+          <ExpandablePanel header={<strong>Work Calendar</strong>}>
             <div className="field-stack">
-              <span>Body weight</span>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <input
-                  type="number"
-                  className="task-title-input"
-                  style={{ flex: 1 }}
-                  min="0"
-                  step="0.1"
-                  value={athleteDraft.bodyWeight ?? ''}
-                  placeholder="e.g. 75"
-                  onChange={e => patchAthlete('bodyWeight', e.target.value === '' ? null : Number(e.target.value))}
-                />
+              <label className="field-stack compact-field">
+                <span>Planning order</span>
                 <div className="segmented-control">
-                  {['kg', 'lbs'].map(unit => (
+                  {['priority', 'time'].map(opt => (
                     <button
-                      key={unit}
+                      key={opt}
                       type="button"
-                      className={`status-chip ${athleteDraft.bodyWeightUnit === unit ? 'is-active' : ''}`}
-                      onClick={() => patchAthlete('bodyWeightUnit', unit)}
+                      className={`status-chip ${workCalendarPrefs.planningOrder === opt ? 'is-active' : ''}`}
+                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, planningOrder: opt }))}
                     >
-                      {unit}
+                      {opt === 'priority' ? 'Priority first' : 'Chronological'}
                     </button>
                   ))}
                 </div>
-              </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Busy-block behavior</span>
+                <div className="segmented-control">
+                  {['hard', 'soft'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
+                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
+                    >
+                      {opt === 'hard' ? 'Hard block' : 'Soft block'}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <p className="empty-message">Calendar blocking and availability are managed in the Calendar tab.</p>
             </div>
+          </ExpandablePanel>
 
-            <label className="field-stack">
-              <span>Age</span>
-              <input
-                type="number"
-                className="task-title-input"
-                min="1"
-                max="120"
-                value={athleteDraft.age ?? ''}
-                placeholder="e.g. 32"
-                onChange={e => patchAthlete('age', e.target.value === '' ? null : Number(e.target.value))}
-              />
-            </label>
+          {/* 2. Finance */}
+          <ExpandablePanel header={<strong>Finance</strong>}>
+            <div className="field-stack">
+              <p className="empty-message">Transactions and recurring expenses are logged in the Finance tab. Budget targets will be configurable in a future update.</p>
+            </div>
+          </ExpandablePanel>
 
-            <label className="field-stack">
-              <span>Biological sex</span>
-              <div className="segmented-control">
-                {['male', 'female', 'other'].map(sex => (
-                  <button
-                    key={sex}
-                    type="button"
-                    className={`status-chip ${athleteDraft.biologicalSex === sex ? 'is-active' : ''}`}
-                    onClick={() => patchAthlete('biologicalSex', sex)}
-                  >
-                    {sex}
-                  </button>
+          {/* 3. Google Integration */}
+          <ExpandablePanel header={<strong>Google Integration</strong>}>
+            <div className="field-stack">
+              <ListRow variant="card" label="Google Calendar" sub="Not connected" />
+              <button type="button" className="secondary-button" disabled>
+                Connect Google — coming soon
+              </button>
+              <p className="empty-message">OAuth sync will pull calendar events and busy blocks automatically once connected.</p>
+            </div>
+          </ExpandablePanel>
+
+          {/* 4. Fitness Profile */}
+          <ExpandablePanel header={<strong>Fitness Profile</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Training days</span>
+                <div className="segmented-control">
+                  {FITNESS_FREQUENCIES.map(freq => (
+                    <button
+                      key={freq}
+                      type="button"
+                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                      onClick={() => patch('trainingDays', freq)}
+                    >
+                      {freq}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Program start date</span>
+                <input
+                  type="date"
+                  className="task-title-input"
+                  value={draft.programStartDate ?? ''}
+                  onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Fitness level</span>
+                <div className="segmented-control">
+                  {FITNESS_LEVELS.map(level => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`status-chip ${draft.fitnessLevel === level ? 'is-active' : ''}`}
+                      onClick={() => patch('fitnessLevel', level)}
+                    >
+                      {level.charAt(0).toUpperCase() + level.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Equipment access</span>
+                <div className="segmented-control">
+                  {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
+                    <button
+                      key={eq}
+                      type="button"
+                      className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
+                      onClick={() => patch('equipmentAccess', eq)}
+                    >
+                      {eq}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Current weekly mileage (km)</span>
+                <input
+                  type="number"
+                  className="task-title-input"
+                  min="0"
+                  step="0.5"
+                  placeholder="e.g. 20"
+                  value={draft.currentWeeklyMileage ?? ''}
+                  onChange={e => patch('currentWeeklyMileage', e.target.value === '' ? null : Number(e.target.value))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Weak stations</span>
+                <div className="tag-row">
+                  {stationList.map(station => (
+                    <button
+                      key={station.key}
+                      type="button"
+                      className={`status-chip ${weakStations.includes(station.key) ? 'is-active' : ''}`}
+                      onClick={() => toggleStation(station.key)}
+                    >
+                      {station.name}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Injuries or limitations</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  placeholder="Any injuries or movement limitations"
+                  value={draft.injuriesOrLimitations ?? ''}
+                  onChange={e => patch('injuriesOrLimitations', e.target.value)}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>5K time</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. 22:30"
+                  value={athleteDraft.fiveKTime ?? ''}
+                  onChange={e => patchAthlete('fiveKTime', e.target.value || null)}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>HYROX finish time (personal best)</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. 1:12:00"
+                  value={athleteDraft.hyroxFinishTime ?? ''}
+                  onChange={e => patchAthlete('hyroxFinishTime', e.target.value || null)}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Squat 5RM (kg)</span>
+                <input
+                  type="number"
+                  className="task-title-input"
+                  placeholder="e.g. 100"
+                  value={athleteDraft.squat5RM ?? ''}
+                  onChange={e => patchAthlete('squat5RM', e.target.value ? Number(e.target.value) : null)}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Deadlift 5RM (kg)</span>
+                <input
+                  type="number"
+                  className="task-title-input"
+                  placeholder="e.g. 140"
+                  value={athleteDraft.deadlift5RM ?? ''}
+                  onChange={e => patchAthlete('deadlift5RM', e.target.value ? Number(e.target.value) : null)}
+                />
+              </label>
+              <div className="field-stack compact-field">
+                <span>Body weight</span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    className="task-title-input"
+                    style={{ flex: 1 }}
+                    min="0"
+                    step="0.1"
+                    placeholder="e.g. 75"
+                    value={athleteDraft.bodyWeight ?? ''}
+                    onChange={e => patchAthlete('bodyWeight', e.target.value === '' ? null : Number(e.target.value))}
+                  />
+                  <div className="segmented-control">
+                    {['kg', 'lbs'].map(unit => (
+                      <button
+                        key={unit}
+                        type="button"
+                        className={`status-chip ${athleteDraft.bodyWeightUnit === unit ? 'is-active' : ''}`}
+                        onClick={() => patchAthlete('bodyWeightUnit', unit)}
+                      >
+                        {unit}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <label className="field-stack compact-field">
+                <span>Age</span>
+                <input
+                  type="number"
+                  className="task-title-input"
+                  min="1"
+                  max="120"
+                  placeholder="e.g. 32"
+                  value={athleteDraft.age ?? ''}
+                  onChange={e => patchAthlete('age', e.target.value === '' ? null : Number(e.target.value))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Biological sex</span>
+                <div className="segmented-control">
+                  {['male', 'female', 'other'].map(sex => (
+                    <button
+                      key={sex}
+                      type="button"
+                      className={`status-chip ${athleteDraft.biologicalSex === sex ? 'is-active' : ''}`}
+                      onClick={() => patchAthlete('biologicalSex', sex)}
+                    >
+                      {sex}
+                    </button>
+                  ))}
+                </div>
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          {/* 5. Goals and Targets */}
+          <ExpandablePanel header={<strong>Goals and Targets</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Race date</span>
+                <input
+                  type="date"
+                  className="task-title-input"
+                  value={draft.raceDate ?? ''}
+                  onChange={e => patch('raceDate', e.target.value || null)}
+                />
+              </label>
+              {raceCountdown && (
+                <p className="empty-message">Countdown: {raceCountdown}</p>
+              )}
+              <label className="field-stack compact-field">
+                <span>Race name</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. HYROX London"
+                  value={draft.raceName ?? ''}
+                  onChange={e => patch('raceName', e.target.value)}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Category</span>
+                <div className="segmented-control" style={{ flexWrap: 'wrap' }}>
+                  {RACE_CATEGORIES.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={`status-chip ${draft.raceCategory === cat ? 'is-active' : ''}`}
+                      onClick={() => patch('raceCategory', cat)}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Goal finish time</span>
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder="e.g. 1:05:00"
+                  value={draft.goalFinishTime ?? ''}
+                  onChange={e => patch('goalFinishTime', e.target.value)}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          {/* 6. Meal Preferences */}
+          <ExpandablePanel header={<strong>Meal Preferences</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Daily hydration goal (cups)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  className="task-title-input"
+                  value={mealPrefs.hydrationGoal}
+                  onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Dietary notes</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  placeholder="e.g. No gluten, high protein"
+                  value={mealPrefs.dietaryNotes}
+                  onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          {/* 7. Notifications */}
+          <ExpandablePanel header={<strong>Notifications</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Morning reminder</span>
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.morningReminder}
+                  onChange={e => setNotificationPrefs(p => ({ ...p, morningReminder: e.target.checked }))}
+                />
+              </label>
+              <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Workout reminder</span>
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.workoutReminder}
+                  onChange={e => setNotificationPrefs(p => ({ ...p, workoutReminder: e.target.checked }))}
+                />
+              </label>
+              <p className="empty-message">Notifications are in-app only. Push notification support is not yet available.</p>
+            </div>
+          </ExpandablePanel>
+
+          {/* 8. Security & Data */}
+          <ExpandablePanel header={<strong>Security &amp; Data</strong>}>
+            <div className="field-stack">
+              <SectionHeader eyebrow="Local storage" title="Data stored on this device" />
+              <div className="subtle-feed">
+                {storageInfo.map(({ key, size }) => (
+                  <ListRow key={key} variant="card" label={key} sub={size} />
                 ))}
               </div>
-            </label>
+              <button type="button" className="secondary-button" onClick={handleExportData}>
+                Export all data (JSON)
+              </button>
+              <p className="empty-message">Data is stored locally in your browser. No cloud backup. Export regularly to avoid data loss.</p>
+            </div>
+          </ExpandablePanel>
 
-            <label className="field-stack">
-              <span>5K time</span>
-              <input
-                type="text"
-                className="task-title-input"
-                value={athleteDraft.fiveKTime ?? ''}
-                placeholder="e.g. 22:30"
-                onChange={e => patchAthlete('fiveKTime', e.target.value || null)}
-              />
-            </label>
-
-            <label className="field-stack">
-              <span>Best HYROX finish time</span>
-              <input
-                type="text"
-                className="task-title-input"
-                value={athleteDraft.hyroxFinishTime ?? ''}
-                placeholder="e.g. 1:18:45"
-                onChange={e => patchAthlete('hyroxFinishTime', e.target.value || null)}
-              />
-            </label>
-          </article>
         </div>
 
         <div className="inline-actions" style={{ padding: '1rem' }}>
@@ -663,9 +845,21 @@ function SettingsSheet({ isOpen, onClose }) {
   );
 }
 
+function daysUntilDue(lastDone, intervalDays) {
+  if (!lastDone) return -intervalDays;
+  const last = new Date(lastDone);
+  const due = new Date(last.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  return Math.round((due - now) / (24 * 60 * 60 * 1000));
+}
+
 function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToCalendar, onSwitchToFitness, weeklyItems }) {
   const { tasks, setTasks, meals, notes, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
-  const { planningMode, setPlanningMode, morningChecklist, setMorningChecklist, energyState, setQuickAddOpen, setShowMorningCheckin } = useAppContext();
+  const { morningChecklist, setMorningChecklist, energyState, setQuickAddOpen, setShowMorningCheckin } = useAppContext();
+  const { profile, setProfile } = useProfileContext();
+  const { groceryList, maintenanceHistory } = profile;
+
+  const [homeSubTab, setHomeSubTab] = useState('today');
   const [executionExpanded, setExecutionExpanded] = useState(true);
   const [priorityExpanded, setPriorityExpanded] = useState(false);
   const [agendaExpanded, setAgendaExpanded] = useState(false);
@@ -673,6 +867,10 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
   const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
   const [checklistHidden, setChecklistHidden] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
+  const [groceryInput, setGroceryInput] = useState('');
+  const [maintOpen, setMaintOpen] = useState(false);
+  const [maintLabel, setMaintLabel] = useState('');
+  const [maintInterval, setMaintInterval] = useState('30');
   const checklistRef = useRef(null);
   const dragStateRef = useRef({
     taskId: null,
@@ -769,10 +967,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
     setMorningChecklist(prev =>
       prev.map(item => (item.id === id ? { ...item, done: !item.done } : item)),
     );
-  }
-
-  function scrollToChecklist() {
-    checklistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function preserveScroll(runUpdate) {
@@ -918,450 +1112,585 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
     setDraggingTaskId(current => (current === taskId ? null : current));
   }
 
-  function openExecutionComposer() {
-    setExecutionExpanded(true);
-    window.requestAnimationFrame(() => {
-      const trigger = document.querySelector('.execution-list .inline-task-trigger');
-      if (trigger) { trigger.click(); return; }
-      document.querySelector('.execution-list .inline-task-input')?.focus();
-    });
+  // ── Grocery helpers ────────────────────────────────────────────────────────
+  function addGroceryItem() {
+    const label = groceryInput.trim();
+    if (!label) return;
+    setProfile(p => ({ ...p, groceryList: [...p.groceryList, { id: `gr-${Date.now()}`, label, done: false }] }));
+    setGroceryInput('');
   }
 
-  // ── Planning Mode ─────────────────────────────────────────────────────────
-  if (planningMode) {
-    return (
-      <div className="tab-stack">
-        <section className="task-card today-surface">
-
-          {/* Header — clean, just greeting + date */}
-          <div className="today-zone" ref={checklistRef}>
-            <p className="eyebrow">{formatFullDate(now)}</p>
-            <h2 style={{ margin: '2px 0 0' }}>{getGreeting(now)}</h2>
-          </div>
-
-          {/* GET TO FIRST VALUE card */}
-          <div className="today-zone">
-            <div className="gtfv-card">
-              <div className="gtfv-header">
-                <p className="eyebrow" style={{ margin: 0 }}>Get to first value</p>
-                <button
-                  type="button"
-                  className="ghost-button compact-ghost"
-                  onClick={() => setChecklistHidden(h => !h)}
-                >
-                  {checklistHidden ? 'Show' : 'Hide'}
-                </button>
-              </div>
-              {!checklistHidden && (
-                <>
-                  <p className="gtfv-subtitle">Finish the setup loop once, then let the day run itself.</p>
-                  <ul className="gtfv-list">
-                    {morningChecklist.map(item => (
-                      <li
-                        key={item.id}
-                        className={`gtfv-item${item.done ? ' is-done' : ''}`}
-                        onClick={() => toggleChecklistItem(item.id)}
-                      >
-                        <span className={`gtfv-indicator${item.done ? ' is-checked' : ''}`}>
-                          {item.done ? (
-                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                              <polyline points="1,6 4,10 11,2" />
-                            </svg>
-                          ) : '•'}
-                        </span>
-                        <span className="checklist-label">{item.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* DAILY EXECUTION — heading + pill + metric strip + priority list all in one zone */}
-          <div className="today-zone">
-            {/* Row 1: eyebrow + Planning pill */}
-            <div className="daily-exec-header">
-              <p className="eyebrow" style={{ margin: 0 }}>Daily Execution</p>
-              <span className="mode-pill mode-pill--planning">Planning</span>
-            </div>
-
-            {/* Row 2: big heading + Quick Capture button */}
-            <div className="daily-exec-title-row">
-              <h2 className="daily-exec-heading">Plan first, execute once the list is real</h2>
-              <button type="button" className="ghost-button compact-ghost" style={{ flexShrink: 0 }} onClick={() => setQuickAddOpen(true)}>
-                Quick Capture
-              </button>
-            </div>
-
-            {/* Subtext */}
-            <p className="planning-subtext">{formatFullDate(now)} · selected date</p>
-            <p className="planning-subtext" style={{ marginTop: 0 }}>Editable priorities with reorder and cleanup.</p>
-
-            {/* Metric strip — lives below the heading */}
-            <div className="ui-metrics-row" style={{ marginBottom: 12 }}>
-              <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
-              <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
-              <MetricBlock value={inboxCount} label="Inbox" />
-            </div>
-
-            {/* Priority list */}
-            {activeTasks.length === 0 ? (
-              <EmptyState
-                title="No priorities yet"
-                description="Add the tasks that define the day."
-              />
-            ) : (
-              <>
-                {visiblePriorities.map(task => (
-                <ExecutionTaskItem
-                  key={task.id}
-                  task={task}
-                  onUpdateTask={updateTask}
-                  onDeleteTask={deleteTask}
-                  onToggleDone={toggleTaskDone}
-                  onToggleSubtask={toggleSubtask}
-                  onAddSubtask={addSubtask}
-                  onSetStatus={setTaskStatus}
-                  onMoveUp={() => moveTask(task.id, -1)}
-                  onMoveDown={() => moveTask(task.id, 1)}
-                  onStartDrag={startTaskDrag}
-                  onMoveDrag={moveTaskDrag}
-                  onEndDrag={endTaskDrag}
-                  isDragging={draggingTaskId === task.id}
-                  mode="planning"
-                />
-              ))}
-              </>
-            )}
-            <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
-          </div>
-
-          {/* Next meal card */}
-          <div className="today-zone">
-            <article className="contextual-card">
-              <div className="contextual-card-header">
-                <p className="contextual-card-eyebrow">Next meal</p>
-                {todaysMeals.length === 0 ? (
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Plan meal</button>
-                ) : (
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Add another</button>
-                )}
-              </div>
-              {todaysMeals.length === 0 ? (
-                <>
-                  <strong className="contextual-card-title">Breakfast still open</strong>
-                  <p className="contextual-card-subtitle">Use templates or quick logging</p>
-                </>
-              ) : (
-                <>
-                  <strong className="contextual-card-title">{todaysMeals[0].name}</strong>
-                  {todaysMeals[0].tags.length > 0 && (
-                    <p className="contextual-card-subtitle">{todaysMeals[0].tags.join(' · ')}</p>
-                  )}
-                </>
-              )}
-            </article>
-          </div>
-
-          {/* Today's workout card */}
-          <div className="today-zone">
-            <article className="contextual-card">
-              <div className="contextual-card-header">
-                <p className="contextual-card-eyebrow">Today&apos;s workout</p>
-                {nextWorkout ? (
-                  <button
-                    type="button"
-                    className="ghost-button compact-ghost"
-                    onClick={() => { setPlanningMode(false); onStartWorkout(nextWorkout.id); }}
-                  >
-                    Start
-                  </button>
-                ) : (
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Add workout</button>
-                )}
-              </div>
-              {nextWorkout ? (
-                <>
-                  <strong className="contextual-card-title">{nextWorkout.name}</strong>
-                  <p className="contextual-card-subtitle">{nextWorkout.duration} min · Planning only. No recovery prompt for future dates.</p>
-                </>
-              ) : (
-                <strong className="contextual-card-title">No workout planned</strong>
-              )}
-            </article>
-          </div>
-
-          {/* Task flow card */}
-          <div className="today-zone">
-            <article className="contextual-card">
-              <div className="contextual-card-header">
-                <p className="contextual-card-eyebrow">Task flow</p>
-              </div>
-              {activeTasks.length > 0 ? (
-                <strong className="contextual-card-title">{activeTasks.length} queued</strong>
-              ) : (
-                <>
-                  <strong className="contextual-card-title">Nothing queued</strong>
-                  <p className="contextual-card-subtitle">Capture or schedule a task</p>
-                </>
-              )}
-            </article>
-          </div>
-
-          {/* Habits card */}
-          <div className="today-zone">
-            <article className="contextual-card">
-              <div className="contextual-card-header">
-                <p className="contextual-card-eyebrow">Habits</p>
-              </div>
-              {todayHabits.length === 0 ? (
-                <strong className="contextual-card-title">No habits set up yet</strong>
-              ) : (
-                <ul className="gtfv-list">
-                  {todayHabits.map(habit => {
-                    const doneToday = habit.completedDates.includes(todayStr);
-                    return (
-                      <li
-                        key={habit.id}
-                        className={`gtfv-item${doneToday ? ' is-done' : ''}`}
-                        onClick={() => toggleHabit(habit.id)}
-                      >
-                        <span className={`gtfv-indicator${doneToday ? ' is-checked' : ''}`}>
-                          {doneToday ? (
-                            <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                              <polyline points="1,6 4,10 11,2" />
-                            </svg>
-                          ) : '•'}
-                        </span>
-                        <span className="checklist-label">{habit.title}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </article>
-          </div>
-
-        </section>
-
-        {/* Planning toolbar */}
-        <div className="dashboard-toolbar">
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setShowMorningCheckin(true)}>
-            Morning check-in
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
-            Brain Dump
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(false)}>
-            Move to Execution
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToCalendar}>
-            Open Calendar
-          </button>
-        </div>
-      </div>
-    );
+  function toggleGroceryItem(id) {
+    setProfile(p => ({ ...p, groceryList: p.groceryList.map(item => item.id === id ? { ...item, done: !item.done } : item) }));
   }
 
-  // ── Execution Mode ────────────────────────────────────────────────────────
-  // Hierarchy: date orientation → today agenda → fitness state → top tasks → supporting metrics
+  function removeGroceryItem(id) {
+    setProfile(p => ({ ...p, groceryList: p.groceryList.filter(item => item.id !== id) }));
+  }
+
+  function clearChecked() {
+    setProfile(p => ({ ...p, groceryList: p.groceryList.filter(item => !item.done) }));
+  }
+
+  // ── Maintenance helpers ────────────────────────────────────────────────────
+  function addMaintenanceItem() {
+    const label = maintLabel.trim();
+    const intervalDays = Number.parseInt(maintInterval, 10);
+    if (!label || !Number.isFinite(intervalDays) || intervalDays <= 0) return;
+    const key = `mt-${Date.now()}`;
+    setProfile(p => ({ ...p, maintenanceHistory: { ...p.maintenanceHistory, [key]: { id: key, label, intervalDays, lastDone: null } } }));
+    setMaintLabel('');
+    setMaintInterval('30');
+    setMaintOpen(false);
+  }
+
+  function markMaintenanceDone(key) {
+    setProfile(p => ({ ...p, maintenanceHistory: { ...p.maintenanceHistory, [key]: { ...p.maintenanceHistory[key], lastDone: toDateKey(new Date()) } } }));
+  }
+
+  function removeMaintenanceItem(key) {
+    setProfile(p => { const next = { ...p.maintenanceHistory }; delete next[key]; return { ...p, maintenanceHistory: next }; });
+  }
+
+  const maintItems = useMemo(
+    () => Object.values(maintenanceHistory).sort((a, b) => daysUntilDue(a.lastDone, a.intervalDays) - daysUntilDue(b.lastDone, b.intervalDays)),
+    [maintenanceHistory],
+  );
+  const checkedGroceryCount = groceryList.filter(i => i.done).length;
+
+  // ── Sub-tab render ────────────────────────────────────────────────────────
   return (
     <div className="tab-stack">
-      <section className="task-card today-surface">
 
-        {/* 1. Date + quick orientation */}
-        <div className="today-zone">
-          <div className="planning-header">
-            <div>
+      {/* Sub-tab selector */}
+      <div className="segmented-control" style={{ marginBottom: 4 }}>
+        {[{ id: 'today', label: 'Today' }, { id: 'plan', label: 'Plan' }, { id: 'home', label: 'Home' }].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            className={`status-chip ${homeSubTab === id ? 'is-active' : ''}`}
+            onClick={() => setHomeSubTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TODAY ── */}
+      {homeSubTab === 'today' && (
+        <>
+          <section className="task-card today-surface">
+            {/* Date + greeting */}
+            <div className="today-zone">
               <p className="eyebrow">{formatFullDate(now)}</p>
               <h2>{getGreeting(now)}</h2>
             </div>
-            <div className="planning-header-actions">
-              <span className="mode-pill mode-pill--execution">Execution</span>
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(true)}>
-                Back to Planning
-              </button>
-            </div>
-          </div>
-        </div>
 
-        {/* 2. Today agenda — what's scheduled right now */}
-        <div className="today-zone">
-          <ExpandablePanel
-            defaultOpen
-            header={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <p className="eyebrow" style={{ margin: 0 }}>Today&apos;s agenda</p>
+            {/* Today's agenda */}
+            <div className="today-zone">
+              <ExpandablePanel
+                defaultOpen
+                header={<p className="eyebrow" style={{ margin: 0 }}>Today&apos;s agenda</p>}
+              >
+                <div className="subtle-feed agenda-groups" style={{ paddingTop: 8 }}>
+                  {todayAgendaGroups.map(group => {
+                    const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
+                    const overflowCount = Math.max(0, group.items.length - visibleItems.length);
+                    return (
+                      <article key={group.key} className="feed-card agenda-group">
+                        <div className="agenda-group-header">
+                          <strong>{group.label}</strong>
+                          <span>{group.items.length}</span>
+                        </div>
+                        <div className="agenda-group-list">
+                          {visibleItems.length === 0 ? (
+                            <p className="empty-message">None</p>
+                          ) : (
+                            visibleItems.map(item => (
+                              <div key={item.id} className="agenda-item">
+                                <strong>{item.title}</strong>
+                                <span>{item.subtitle}</span>
+                              </div>
+                            ))
+                          )}
+                          {!agendaExpanded && overflowCount > 0 && (
+                            <button type="button" className="agenda-overflow" onClick={() => setAgendaExpanded(true)}>
+                              + {overflowCount} more
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </ExpandablePanel>
+            </div>
+
+            {/* Fitness state */}
+            <div className="today-zone">
+              {activeWorkout ? (
+                <button type="button" className="active-workout-banner" onClick={onSwitchToFitness}>
+                  <span>{activeWorkout.name} in progress</span>
+                  <span className="active-workout-banner-cta">Tap to return →</span>
+                </button>
+              ) : nextWorkout ? (
+                <article className="contextual-card">
+                  <div className="contextual-card-header">
+                    <p className="contextual-card-eyebrow">Fitness</p>
+                    <button type="button" className="ghost-button compact-ghost" onClick={() => onStartWorkout(nextWorkout.id)}>
+                      Start
+                    </button>
+                  </div>
+                  <strong className="contextual-card-title">{nextWorkout.name}</strong>
+                  <p className="contextual-card-subtitle">{nextWorkout.duration} min</p>
+                </article>
+              ) : null}
+            </div>
+
+            {/* Top tasks execution list */}
+            <div className="today-zone today-zone-execution">
+              <div className="task-card-header">
+                <p className="eyebrow">Top tasks</p>
+                <div className="header-stack">
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityMode(current => !current)}>
+                    {priorityMode ? 'Priority mode' : 'All tasks'}
+                  </button>
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
+                    {executionExpanded ? 'Collapse' : 'Expand'}
+                  </button>
+                </div>
               </div>
-            }
-          >
-            <div className="subtle-feed agenda-groups" style={{ paddingTop: 8 }}>
-              {todayAgendaGroups.map(group => {
-                const visibleItems = agendaExpanded ? group.items : group.items.slice(0, 3);
-                const overflowCount = Math.max(0, group.items.length - visibleItems.length);
-                return (
-                  <article key={group.key} className="feed-card agenda-group">
-                    <div className="agenda-group-header">
-                      <strong>{group.label}</strong>
-                      <span>{group.items.length}</span>
-                    </div>
-                    <div className="agenda-group-list">
-                      {visibleItems.length === 0 ? (
-                        <p className="empty-message">None</p>
-                      ) : (
-                        visibleItems.map(item => (
-                          <div key={item.id} className="agenda-item">
-                            <strong>{item.title}</strong>
-                            <span>{item.subtitle}</span>
-                          </div>
-                        ))
-                      )}
-                      {!agendaExpanded && overflowCount > 0 && (
-                        <button type="button" className="agenda-overflow" onClick={() => setAgendaExpanded(true)}>
-                          + {overflowCount} more
-                        </button>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+              <div className="execution-list">
+                <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
+                {orderedTasks.length === 0 ? (
+                  <EmptyState title="No tasks yet" description="Capture one inline and keep moving." />
+                ) : (
+                  visibleExecutionTasks.map(task => (
+                    <ExecutionTaskItem
+                      key={task.id}
+                      task={task}
+                      onUpdateTask={updateTask}
+                      onDeleteTask={deleteTask}
+                      onToggleDone={toggleTaskDone}
+                      onToggleSubtask={toggleSubtask}
+                      onAddSubtask={addSubtask}
+                      onSetStatus={setTaskStatus}
+                      onStartDrag={startTaskDrag}
+                      onMoveDrag={moveTaskDrag}
+                      onEndDrag={endTaskDrag}
+                      isDragging={draggingTaskId === task.id}
+                    />
+                  ))
+                )}
+                {!executionExpanded && executionOverflowCount > 0 && (
+                  <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
+                    + {executionOverflowCount} more
+                  </button>
+                )}
+              </div>
             </div>
-          </ExpandablePanel>
-        </div>
 
-        {/* 3. Fitness state — active workout or next session */}
-        <div className="today-zone">
-          {activeWorkout ? (
-            <button type="button" className="active-workout-banner" onClick={onSwitchToFitness}>
-              <span>{activeWorkout.name} in progress</span>
-              <span className="active-workout-banner-cta">Tap to return →</span>
+            {/* Habits tap-row */}
+            {todayHabits.length > 0 && (
+              <div className="today-zone">
+                <p className="eyebrow" style={{ margin: '0 0 8px' }}>Habits</p>
+                <div className="habit-tap-row">
+                  {todayHabits.map(habit => {
+                    const doneToday = habit.completedDates.includes(todayStr);
+                    return (
+                      <button
+                        key={habit.id}
+                        type="button"
+                        className={`habit-tap${doneToday ? ' is-done' : ''}`}
+                        onClick={() => toggleHabit(habit.id)}
+                      >
+                        {doneToday && (
+                          <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true" style={{ marginRight: 4 }}>
+                            <polyline points="1,6 4,10 11,2" />
+                          </svg>
+                        )}
+                        {habit.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Recovery & signals */}
+            <div className="today-zone">
+              <ExpandablePanel
+                defaultOpen={false}
+                header={<p className="eyebrow" style={{ margin: 0 }}>Recovery &amp; signals</p>}
+              >
+                <div className="ui-metrics-row" style={{ paddingTop: 8 }}>
+                  <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
+                  <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
+                  <MetricBlock value={inboxCount > 0 ? inboxCount : '—'} label="Inbox" />
+                </div>
+              </ExpandablePanel>
+            </div>
+          </section>
+
+          {/* Today toolbar */}
+          <div className="dashboard-toolbar">
+            {showCompleteAllConfirm ? (
+              <button type="button" className="ghost-button compact-ghost dashboard-toolbar-danger" onClick={completeAllTasks}>
+                Confirm complete all
+              </button>
+            ) : (
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setShowCompleteAllConfirm(true)}>
+                Complete All
+              </button>
+            )}
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
+              Capture
             </button>
-          ) : nextWorkout ? (
-            <article className="contextual-card">
-              <div className="contextual-card-header">
-                <p className="contextual-card-eyebrow">Fitness</p>
-                <button
-                  type="button"
-                  className="ghost-button compact-ghost"
-                  onClick={() => { onStartWorkout(nextWorkout.id); }}
-                >
-                  Start
+          </div>
+        </>
+      )}
+
+      {/* ── PLAN ── */}
+      {homeSubTab === 'plan' && (
+        <>
+          <section className="task-card today-surface">
+            {/* Header */}
+            <div className="today-zone" ref={checklistRef}>
+              <p className="eyebrow">{formatFullDate(now)}</p>
+              <h2 style={{ margin: '2px 0 0' }}>{getGreeting(now)}</h2>
+            </div>
+
+            {/* Get to first value checklist */}
+            <div className="today-zone">
+              <div className="gtfv-card">
+                <div className="gtfv-header">
+                  <p className="eyebrow" style={{ margin: 0 }}>Get to first value</p>
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setChecklistHidden(h => !h)}>
+                    {checklistHidden ? 'Show' : 'Hide'}
+                  </button>
+                </div>
+                {!checklistHidden && (
+                  <>
+                    <p className="gtfv-subtitle">Finish the setup loop once, then let the day run itself.</p>
+                    <ul className="gtfv-list">
+                      {morningChecklist.map(item => (
+                        <li
+                          key={item.id}
+                          className={`gtfv-item${item.done ? ' is-done' : ''}`}
+                          onClick={() => toggleChecklistItem(item.id)}
+                        >
+                          <span className={`gtfv-indicator${item.done ? ' is-checked' : ''}`}>
+                            {item.done ? (
+                              <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                                <polyline points="1,6 4,10 11,2" />
+                              </svg>
+                            ) : '•'}
+                          </span>
+                          <span className="checklist-label">{item.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Daily execution zone */}
+            <div className="today-zone">
+              <div className="daily-exec-header">
+                <p className="eyebrow" style={{ margin: 0 }}>Daily Execution</p>
+              </div>
+              <div className="daily-exec-title-row">
+                <h2 className="daily-exec-heading">Plan first, execute once the list is real</h2>
+                <button type="button" className="ghost-button compact-ghost" style={{ flexShrink: 0 }} onClick={() => setQuickAddOpen(true)}>
+                  Quick Capture
                 </button>
               </div>
-              <strong className="contextual-card-title">{nextWorkout.name}</strong>
-              <p className="contextual-card-subtitle">{nextWorkout.duration} min</p>
-            </article>
-          ) : null}
-        </div>
-
-        {/* 4. Top tasks — the execution list */}
-        <div className="today-zone today-zone-execution">
-          <div className="task-card-header">
-            <p className="eyebrow">Top tasks</p>
-            <div className="header-stack">
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setPriorityMode(current => !current)}>
-                {priorityMode ? 'Priority mode' : 'All tasks'}
-              </button>
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setExecutionExpanded(current => !current)}>
-                {executionExpanded ? 'Collapse' : 'Expand'}
-              </button>
+              <p className="planning-subtext">{formatFullDate(now)} · selected date</p>
+              <p className="planning-subtext" style={{ marginTop: 0 }}>Editable priorities with reorder and cleanup.</p>
+              <div className="ui-metrics-row" style={{ marginBottom: 12 }}>
+                <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
+                <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
+                <MetricBlock value={inboxCount} label="Inbox" />
+              </div>
+              {activeTasks.length === 0 ? (
+                <EmptyState title="No priorities yet" description="Add the tasks that define the day." />
+              ) : (
+                visiblePriorities.map(task => (
+                  <ExecutionTaskItem
+                    key={task.id}
+                    task={task}
+                    onUpdateTask={updateTask}
+                    onDeleteTask={deleteTask}
+                    onToggleDone={toggleTaskDone}
+                    onToggleSubtask={toggleSubtask}
+                    onAddSubtask={addSubtask}
+                    onSetStatus={setTaskStatus}
+                    onMoveUp={() => moveTask(task.id, -1)}
+                    onMoveDown={() => moveTask(task.id, 1)}
+                    onStartDrag={startTaskDrag}
+                    onMoveDrag={moveTaskDrag}
+                    onEndDrag={endTaskDrag}
+                    isDragging={draggingTaskId === task.id}
+                    mode="planning"
+                  />
+                ))
+              )}
+              <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
             </div>
-          </div>
 
-          <div className="execution-list">
-            <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
-
-            {orderedTasks.length === 0 ? (
-              <EmptyState title="No tasks yet" description="Capture one inline and keep moving." />
-            ) : (
-              visibleExecutionTasks.map(task => (
-                <ExecutionTaskItem
-                  key={task.id}
-                  task={task}
-                  onUpdateTask={updateTask}
-                  onDeleteTask={deleteTask}
-                  onToggleDone={toggleTaskDone}
-                  onToggleSubtask={toggleSubtask}
-                  onAddSubtask={addSubtask}
-                  onSetStatus={setTaskStatus}
-                  onStartDrag={startTaskDrag}
-                  onMoveDrag={moveTaskDrag}
-                  onEndDrag={endTaskDrag}
-                  isDragging={draggingTaskId === task.id}
-                />
-              ))
-            )}
-
-            {!executionExpanded && executionOverflowCount > 0 && (
-              <button type="button" className="execution-overflow" onClick={() => setExecutionExpanded(true)}>
-                + {executionOverflowCount} more
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 5. Habits — tap to check off */}
-        {todayHabits.length > 0 && (
-          <div className="today-zone">
-            <p className="eyebrow" style={{ margin: '0 0 8px' }}>Habits</p>
-            <div className="habit-tap-row">
-              {todayHabits.map(habit => {
-                const doneToday = habit.completedDates.includes(todayStr);
-                return (
-                  <button
-                    key={habit.id}
-                    type="button"
-                    className={`habit-tap${doneToday ? ' is-done' : ''}`}
-                    onClick={() => toggleHabit(habit.id)}
-                  >
-                    {doneToday && (
-                      <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true" style={{ marginRight: 4 }}>
-                        <polyline points="1,6 4,10 11,2" />
-                      </svg>
-                    )}
-                    {habit.title}
+            {/* Next meal */}
+            <div className="today-zone">
+              <article className="contextual-card">
+                <div className="contextual-card-header">
+                  <p className="contextual-card-eyebrow">Next meal</p>
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
+                    {todaysMeals.length === 0 ? 'Plan meal' : 'Add another'}
                   </button>
-                );
-              })}
+                </div>
+                {todaysMeals.length === 0 ? (
+                  <>
+                    <strong className="contextual-card-title">Breakfast still open</strong>
+                    <p className="contextual-card-subtitle">Use templates or quick logging</p>
+                  </>
+                ) : (
+                  <>
+                    <strong className="contextual-card-title">{todaysMeals[0].name}</strong>
+                    {todaysMeals[0].tags.length > 0 && (
+                      <p className="contextual-card-subtitle">{todaysMeals[0].tags.join(' · ')}</p>
+                    )}
+                  </>
+                )}
+              </article>
             </div>
+
+            {/* Today's workout */}
+            <div className="today-zone">
+              <article className="contextual-card">
+                <div className="contextual-card-header">
+                  <p className="contextual-card-eyebrow">Today&apos;s workout</p>
+                  {nextWorkout ? (
+                    <button type="button" className="ghost-button compact-ghost" onClick={() => onStartWorkout(nextWorkout.id)}>
+                      Start
+                    </button>
+                  ) : (
+                    <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Add workout</button>
+                  )}
+                </div>
+                {nextWorkout ? (
+                  <>
+                    <strong className="contextual-card-title">{nextWorkout.name}</strong>
+                    <p className="contextual-card-subtitle">{nextWorkout.duration} min</p>
+                  </>
+                ) : (
+                  <strong className="contextual-card-title">No workout planned</strong>
+                )}
+              </article>
+            </div>
+
+            {/* Task flow */}
+            <div className="today-zone">
+              <article className="contextual-card">
+                <div className="contextual-card-header">
+                  <p className="contextual-card-eyebrow">Task flow</p>
+                </div>
+                {activeTasks.length > 0 ? (
+                  <strong className="contextual-card-title">{activeTasks.length} queued</strong>
+                ) : (
+                  <>
+                    <strong className="contextual-card-title">Nothing queued</strong>
+                    <p className="contextual-card-subtitle">Capture or schedule a task</p>
+                  </>
+                )}
+              </article>
+            </div>
+
+            {/* Habits */}
+            <div className="today-zone">
+              <article className="contextual-card">
+                <div className="contextual-card-header">
+                  <p className="contextual-card-eyebrow">Habits</p>
+                </div>
+                {todayHabits.length === 0 ? (
+                  <strong className="contextual-card-title">No habits set up yet</strong>
+                ) : (
+                  <ul className="gtfv-list">
+                    {todayHabits.map(habit => {
+                      const doneToday = habit.completedDates.includes(todayStr);
+                      return (
+                        <li
+                          key={habit.id}
+                          className={`gtfv-item${doneToday ? ' is-done' : ''}`}
+                          onClick={() => toggleHabit(habit.id)}
+                        >
+                          <span className={`gtfv-indicator${doneToday ? ' is-checked' : ''}`}>
+                            {doneToday ? (
+                              <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+                                <polyline points="1,6 4,10 11,2" />
+                              </svg>
+                            ) : '•'}
+                          </span>
+                          <span className="checklist-label">{habit.title}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </article>
+            </div>
+          </section>
+
+          {/* Plan toolbar */}
+          <div className="dashboard-toolbar">
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setShowMorningCheckin(true)}>
+              Morning check-in
+            </button>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
+              Brain Dump
+            </button>
+            <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToCalendar}>
+              Open Calendar
+            </button>
           </div>
-        )}
+        </>
+      )}
 
-        {/* 6. Supporting metrics — recovery signals, collapsed by default */}
-        <div className="today-zone">
-          <ExpandablePanel
-            defaultOpen={false}
-            header={<p className="eyebrow" style={{ margin: 0 }}>Recovery &amp; signals</p>}
-          >
-            <div className="ui-metrics-row" style={{ paddingTop: 8 }}>
-              <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
-              <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
-              <MetricBlock value={inboxCount > 0 ? inboxCount : '—'} label="Inbox" />
+      {/* ── HOME ── */}
+      {homeSubTab === 'home' && (
+        <div className="screen-content">
+          {/* Grocery list */}
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Shopping</p>
+                <h2>Grocery list</h2>
+              </div>
+              {checkedGroceryCount > 0 && (
+                <button type="button" className="ghost-button compact-ghost" onClick={clearChecked}>
+                  Clear checked
+                </button>
+              )}
             </div>
-          </ExpandablePanel>
+            <div className="quick-entry-row" style={{ marginBottom: '12px' }}>
+              <input
+                className="brain-dump-input"
+                placeholder="Add item…"
+                value={groceryInput}
+                onChange={e => setGroceryInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addGroceryItem(); } }}
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="secondary-button" onClick={addGroceryItem}>Add</button>
+            </div>
+            {groceryList.length === 0 ? (
+              <p className="empty-hint">Your grocery list is empty.</p>
+            ) : (
+              <ul className="plain-list">
+                {groceryList.map(item => (
+                  <li key={item.id} className="list-row" style={{ alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className={`status-chip ${item.done ? 'is-active' : ''}`}
+                      style={{ minWidth: '20px', height: '20px', borderRadius: '4px', padding: '0 6px', fontSize: '12px' }}
+                      onClick={() => toggleGroceryItem(item.id)}
+                      aria-label={item.done ? `Uncheck ${item.label}` : `Check ${item.label}`}
+                    >
+                      {item.done ? '✓' : ''}
+                    </button>
+                    <span
+                      className="list-row-label"
+                      style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? 'var(--muted)' : 'inherit' }}
+                    >
+                      {item.label}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--muted)' }}
+                      onClick={() => removeGroceryItem(item.id)}
+                      aria-label={`Remove ${item.label}`}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Maintenance tracker */}
+          <section className="task-card">
+            <div className="task-card-header">
+              <div>
+                <p className="eyebrow">Upkeep</p>
+                <h2>Maintenance tracker</h2>
+              </div>
+              <button type="button" className="ghost-button compact-ghost" onClick={() => setMaintOpen(o => !o)}>
+                {maintOpen ? 'Cancel' : '+ Add'}
+              </button>
+            </div>
+            {maintOpen && (
+              <div className="inline-collapse" style={{ marginBottom: '12px' }}>
+                <input
+                  className="brain-dump-input"
+                  placeholder="Task (e.g. Change air filter)"
+                  value={maintLabel}
+                  onChange={e => setMaintLabel(e.target.value)}
+                />
+                <input
+                  className="brain-dump-input"
+                  type="number"
+                  min="1"
+                  placeholder="Repeat every N days"
+                  value={maintInterval}
+                  onChange={e => setMaintInterval(e.target.value)}
+                />
+                <button type="button" className="primary-button full-width" onClick={addMaintenanceItem}>
+                  Save task
+                </button>
+              </div>
+            )}
+            {maintItems.length === 0 ? (
+              <p className="empty-hint">No maintenance tasks yet. Add recurring home tasks above.</p>
+            ) : (
+              <ul className="plain-list">
+                {maintItems.map(item => {
+                  const days = daysUntilDue(item.lastDone, item.intervalDays);
+                  const isOverdue = days < 0;
+                  const isDueSoon = days >= 0 && days <= 7;
+                  return (
+                    <li key={item.id} className="list-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '4px' }}>
+                      <div style={{ flex: 1 }}>
+                        <span className="list-row-label">{item.label}</span>
+                        <span className="list-row-meta" style={{ display: 'block', fontSize: '12px', color: 'var(--muted)' }}>
+                          Every {item.intervalDays} days
+                          {item.lastDone ? ` · last done ${item.lastDone}` : ' · never done'}
+                        </span>
+                      </div>
+                      <span className={`status-pill ${isOverdue ? 'pill-danger' : isDueSoon ? 'pill-warning' : 'pill-ok'}`}>
+                        {isOverdue ? `${Math.abs(days)}d overdue` : days === 0 ? 'due today' : `${days}d`}
+                      </span>
+                      <button type="button" className="ghost-button compact-ghost" onClick={() => markMaintenanceDone(item.id)}>
+                        Done
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        style={{ fontSize: '12px', color: 'var(--muted)' }}
+                        onClick={() => removeMaintenanceItem(item.id)}
+                        aria-label={`Remove ${item.label}`}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
         </div>
+      )}
 
-      </section>
-
-      {/* Execution toolbar */}
-      <div className="dashboard-toolbar">
-        {showCompleteAllConfirm ? (
-          <button type="button" className="ghost-button compact-ghost dashboard-toolbar-danger" onClick={completeAllTasks}>
-            Confirm complete all
-          </button>
-        ) : (
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setShowCompleteAllConfirm(true)}>
-            Complete All
-          </button>
-        )}
-        <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
-          Capture
-        </button>
-        <button type="button" className="ghost-button compact-ghost" onClick={() => setPlanningMode(true)}>
-          Back to Planning
-        </button>
-      </div>
     </div>
   );
 }
@@ -2844,7 +3173,7 @@ function AppShell() {
     setShowMorningCheckin,
     energyState,
   } = useAppContext();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('home');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [now, setNow] = useState(() => new Date());
@@ -2930,24 +3259,24 @@ function AppShell() {
     }
 
     if (activeTab === 'home') {
-      return <HomeScreen />;
+      return (
+        <DashboardScreen
+          inboxCount={unreadNotifications.length}
+          now={now}
+          activeWorkoutId={activeWorkoutId}
+          onStartWorkout={setActiveWorkoutId}
+          onSwitchToCalendar={() => setActiveTab('calendar')}
+          onSwitchToFitness={() => setActiveTab('fitness')}
+          weeklyItems={weeklyItems}
+        />
+      );
     }
 
     if (activeTab === 'more') {
       return <MoreScreen now={now} />;
     }
 
-    return (
-      <DashboardScreen
-        inboxCount={unreadNotifications.length}
-        now={now}
-        activeWorkoutId={activeWorkoutId}
-        onStartWorkout={setActiveWorkoutId}
-        onSwitchToCalendar={() => setActiveTab('calendar')}
-        onSwitchToFitness={() => setActiveTab('fitness')}
-        weeklyItems={weeklyItems}
-      />
-    );
+    return null;
   }, [activeTab, activeWorkoutId, now, setWeeklyItems, unreadNotifications.length, weeklyItems]);
 
   return (

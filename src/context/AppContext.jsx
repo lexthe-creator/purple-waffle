@@ -59,6 +59,21 @@ function migrateFitnessSettings(raw) {
   };
 }
 
+const DEFAULT_WORK_CALENDAR_PREFS = {
+  planningOrder: 'priority',
+  busyBlockBehavior: 'hard',
+};
+
+const DEFAULT_MEAL_PREFS = {
+  hydrationGoal: 8,
+  dietaryNotes: '',
+};
+
+const DEFAULT_NOTIFICATION_PREFS = {
+  morningReminder: true,
+  workoutReminder: true,
+};
+
 function getTodayDateKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -98,6 +113,18 @@ export function AppProvider({ children }) {
   const [fitnessSettings, setFitnessSettings] = useState(() =>
     migrateFitnessSettings(saved?.fitnessSettings),
   );
+  const [workCalendarPrefs, setWorkCalendarPrefs] = useState(() => ({
+    ...DEFAULT_WORK_CALENDAR_PREFS,
+    ...(saved?.workCalendarPrefs || {}),
+  }));
+  const [mealPrefs, setMealPrefs] = useState(() => ({
+    ...DEFAULT_MEAL_PREFS,
+    ...(saved?.mealPrefs || {}),
+  }));
+  const [notificationPrefs, setNotificationPrefs] = useState(() => ({
+    ...DEFAULT_NOTIFICATION_PREFS,
+    ...(saved?.notificationPrefs || {}),
+  }));
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
 
   // Morning check-in modal state
@@ -110,9 +137,9 @@ export function AppProvider({ children }) {
   useEffect(() => {
     window.localStorage.setItem(
       APP_STATE_KEY,
-      JSON.stringify({ planningMode, energyState, fitnessSettings }),
+      JSON.stringify({ planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs }),
     );
-  }, [planningMode, energyState, fitnessSettings]);
+  }, [planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs]);
 
   // Persist daily checklist
   useEffect(() => {
@@ -134,6 +161,12 @@ export function AppProvider({ children }) {
       setEnergyState,
       fitnessSettings,
       setFitnessSettings,
+      workCalendarPrefs,
+      setWorkCalendarPrefs,
+      mealPrefs,
+      setMealPrefs,
+      notificationPrefs,
+      setNotificationPrefs,
       morningChecklist,
       setMorningChecklist,
       // Morning check-in modal
@@ -148,8 +181,8 @@ export function AppProvider({ children }) {
     }),
     [
       planningMode, quickAddOpen, notificationCenterOpen,
-      energyState, fitnessSettings, morningChecklist,
-      showMorningCheckin, morningStep, energyScore, sleepHours,
+      energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
+      morningChecklist, showMorningCheckin, morningStep, energyScore, sleepHours,
     ],
   );
 
