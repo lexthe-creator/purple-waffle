@@ -755,8 +755,15 @@ function TasksScreen() {
   );
 }
 
-function TodayScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCalendar, onSwitchToMore, onOpenMoreSection, onOpenInbox, onOpenQuickAdd, onOpenSettings }) {
-  const { tasks, workouts, inboxItems, meals, calendarItems } = useTaskContext();
+function TodayScreen({
+  now,
+  activeWorkoutId,
+  onSwitchToFitness,
+  onOpenMoreSection,
+  onOpenInbox,
+  onStartWorkout,
+}) {
+  const { workouts, meals } = useTaskContext();
   const { fitnessSettings, energyState, mealPrefs } = useAppContext();
   const { profile } = useProfileContext();
 
@@ -776,166 +783,197 @@ function TodayScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCalend
     [activeWorkoutId, workouts],
   );
 
-  const nextCalendarItem = useMemo(
-    () => calendarItems.filter(item => item.date === todayKey).sort((a, b) => a.startTime.localeCompare(b.startTime))[0] ?? null,
-    [calendarItems, todayKey],
-  );
-
-  const pendingTasks = useMemo(() => tasks.filter(task => task.status !== 'done'), [tasks]);
-  const unreadInbox = useMemo(() => inboxItems.filter(item => item.module === null), [inboxItems]);
   const todaysMeals = useMemo(() => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey), [meals, todayKey]);
+  const mealCount = useMemo(
+    () => todaysMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('water')).length,
+    [todaysMeals],
+  );
   const hydrationCount = todaysMeals.filter(meal => Array.isArray(meal.tags) && meal.tags.includes('water')).length;
   const readiness = computeRecoveryState({ energyScore: energyState.value, sleepHours: energyState.sleepHours }, energyState.value, energyState.sleepHours);
-  const maintenance = getMaintenanceSnapshot(profile.maintenanceHistory);
-  const finance = getFinanceSnapshot(profile);
-  const top3 = Array.isArray(profile.top3?.[todayKey]) ? profile.top3[todayKey] : [];
-  const todayItems = getTodayItems({ tasks, workouts, meals, calendarItems, todayKey });
-  const primaryActionLabel = readiness.level === 'Low'
-    ? 'Open recovery'
-    : activeWorkout
-      ? 'Continue workout'
-      : todaysWorkout
-        ? 'Start workout'
-        : 'Review plan';
+  const planWorkout = useMemo(() => {
+    if (!todaysWorkout) return null;
+    const sessionName = todaysWorkout.label || todaysWorkout.title || 'Today\'s workout';
+    return adjustWorkoutForRecovery({
+      id: todaysWorkout.id || `session-${todayKey}`,
+      name: sessionName,
+      title: todaysWorkout.title || sessionName,
+      type: todaysWorkout.type || 'hyrox',
+      duration: todaysWorkout.duration || 45,
+      ex: [],
+    }, readiness);
+  }, [readiness, todayKey, todaysWorkout]);
+
+  const workoutName = planWorkout?.originalName || planWorkout?.name || 'Recovery reset';
+  const workoutDuration = planWorkout?.duration ? `${planWorkout.duration} min` : '20 min';
+  const workoutStatus = planWorkout?.adjustmentLabel === 'Reduced Volume'
+    ? 'Reduced volume'
+    : planWorkout?.adjustmentLabel === 'Recovery Replacement'
+      ? 'Recovery replacement'
+      : planWorkout?.adjustmentLabel === 'Planned Session'
+        ? 'Planned session'
+        : (todaysWorkout ? 'Planned session' : 'Recovery day');
+  const workoutDetail = planWorkout?.originalName
+    ? 'Reduced volume to keep the day moving.'
+    : todaysWorkout
+      ? `${planState.phase.name} phase · ${planState.label}`
+      : 'Use a recovery session to keep momentum on non-training days.';
+
+  const workoutLaunch = () => {
+    if (onStartWorkout && (todaysWorkout || planWorkout)) {
+      onStartWorkout({
+        label: planWorkout?.name || workoutName,
+        title: planWorkout?.originalName || planWorkout?.name || workoutName,
+        type: planWorkout?.type || todaysWorkout?.type || 'hyrox',
+        duration: planWorkout?.duration || todaysWorkout?.duration || 45,
+        offset: todaysWorkout?.offset ?? null,
+        phase: todaysWorkout?.phase || '',
+        week: todaysWorkout?.week || null,
+      });
+      return;
+    }
+    onSwitchToFitness();
+  };
+
+  const habitList = Array.isArray(profile.habits) ? profile.habits : [];
+  const completedHabits = habitList.filter(habit => Array.isArray(habit.completedDates) && habit.completedDates.includes(todayKey));
+  const habitPreview = habitList.slice(0, 2);
 
   return (
-    <div className="tab-stack">
-      <section className="task-card today-hero">
+    <div className="tab-stack execution-home-stack">
+      <section className="task-card execution-hero-card today-hero">
         <div className="task-card-header">
           <div>
             <p className="eyebrow">{formatFullDate(now)}</p>
-            <h2>{getGreeting(now)}</h2>
+            <h2>Today&apos;s Workout</h2>
           </div>
-          <button type="button" className="ghost-button compact-ghost" onClick={onOpenQuickAdd}>
-            Quick capture
-          </button>
         </div>
 
-        <div className="ui-metrics-row">
-          <MetricBlock value={planState.label} label="Plan" />
-          <MetricBlock value={readiness.level} label="Readiness" />
-          <MetricBlock value={hydrationCount} label="Water" />
-          <MetricBlock value={maintenance.overdue.length} label="Maintenance" />
-        </div>
-
-        {top3.length > 0 && (
-          <div className="feed-card">
-            <strong>Top 3</strong>
-            <p>{top3.join(' · ')}</p>
+        <div className="execution-hero-copy">
+          <div>
+            <div className="execution-title-row">
+              <strong className="execution-title">{workoutName}</strong>
+              <span className="status-pill">{workoutDuration}</span>
+            </div>
+            <p className="execution-subtitle">{workoutDetail}</p>
           </div>
-        )}
+          <span className={`status-pill ${workoutStatus === 'Reduced volume' ? 'status-planned' : workoutStatus === 'Recovery day' || workoutStatus === 'Recovery replacement' ? 'pill-warning' : 'status-active'}`}>
+            {workoutStatus}
+          </span>
+        </div>
 
         <div className="inline-actions">
-          <button type="button" className="primary-button" onClick={onSwitchToFitness}>
-            {primaryActionLabel}
+          <button type="button" className="primary-button" onClick={workoutLaunch}>
+            {activeWorkout ? 'Continue workout' : 'Start workout'}
           </button>
-          <button type="button" className="secondary-button" onClick={onSwitchToCalendar}>
-            Open calendar
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToMore}>
-            More
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={onOpenSettings}>
-            Settings
+          <button type="button" className="secondary-button" onClick={onSwitchToFitness}>
+            View plan
           </button>
         </div>
       </section>
 
-      <div className="dashboard-cards">
-        <button type="button" className="dashboard-summary-card" onClick={onSwitchToFitness}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Do now</p>
-            <span className="dsc-badge">{planState.phase.name}</span>
+      <div className="execution-stack">
+        <section className="task-card execution-summary-card">
+          <div className="task-card-header">
+            <div>
+              <p className="eyebrow">Nutrition today</p>
+              <h2>Have you eaten?</h2>
+            </div>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => onOpenMoreSection?.('meals')}>
+              Open Nutrition
+            </button>
           </div>
-          <p className="dsc-body">
-            {readiness.level === 'Low'
-              ? 'Recovery-first day'
-              : activeWorkout
-                ? `${activeWorkout.name} in progress`
-                : todaysWorkout
-                  ? todaysWorkout.label || todaysWorkout.title
-                  : 'No training block today'}
-          </p>
-          <span className="dsc-cta">Open Fitness →</span>
-        </button>
+          <div className="execution-summary-grid">
+            <div className="summary-tile">
+              <span>Meals logged</span>
+              <strong>{mealCount}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Hydration</span>
+              <strong>{hydrationCount}/{mealPrefs.hydrationGoal}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Latest</span>
+              <strong>{todaysMeals[0]?.name || 'Nothing yet'}</strong>
+            </div>
+          </div>
+        </section>
 
-        <button type="button" className="dashboard-summary-card" onClick={onSwitchToCalendar}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Calendar</p>
-            <span className="dsc-count">{calendarItems.length}</span>
+        <section className="task-card execution-summary-card">
+          <div className="task-card-header">
+            <div>
+              <p className="eyebrow">Recovery</p>
+              <h2>How are you recovering?</h2>
+            </div>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => onOpenMoreSection?.('health')}>
+              Open Recovery
+            </button>
           </div>
-          <p className="dsc-body">
-            {nextCalendarItem ? `${nextCalendarItem.startTime} · ${nextCalendarItem.title}` : 'No events today'}
-          </p>
-          <span className="dsc-cta">Open Calendar →</span>
-        </button>
+          <div className="execution-summary-grid">
+            <div className="summary-tile">
+              <span>Readiness</span>
+              <strong>{readiness.level}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Sleep</span>
+              <strong>{Number.isFinite(energyState.sleepHours) ? `${energyState.sleepHours}h` : '—'}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Energy</span>
+              <strong>{Number.isFinite(energyState.value) ? `${energyState.value}/10` : '—'}</strong>
+            </div>
+          </div>
+          <p className="empty-message">{readiness.level === 'Low' ? 'Recovery is the right call today.' : readiness.level === 'Moderate' ? 'Reduced volume keeps the day productive.' : 'You are good to push the plan.'}</p>
+        </section>
 
-        <button type="button" className="dashboard-summary-card" onClick={() => onOpenMoreSection?.('tasks')}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Tasks</p>
-            <span className="dsc-count">{pendingTasks.length}</span>
+        <section className="task-card execution-summary-card">
+          <div className="task-card-header">
+            <div>
+              <p className="eyebrow">Habits / Lifestyle</p>
+              <h2>Habits today</h2>
+            </div>
+            <button type="button" className="ghost-button compact-ghost" onClick={() => onOpenMoreSection?.('habits')}>
+              Open Lifestyle
+            </button>
           </div>
-          <p className="dsc-body">
-            {pendingTasks[0] ? pendingTasks[0].title : 'Nothing pending'}
-          </p>
-          <span className="dsc-cta">Open More →</span>
-        </button>
-
-        <button type="button" className={`dashboard-summary-card${unreadInbox.length > 0 ? ' dsc-attention' : ''}`} onClick={onOpenInbox}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Inbox</p>
-            {unreadInbox.length > 0 && <span className="dsc-count dsc-count-warn">{unreadInbox.length}</span>}
+          <div className="execution-summary-grid">
+            <div className="summary-tile">
+              <span>Habits total</span>
+              <strong>{habitList.length}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Completed today</span>
+              <strong>{completedHabits.length}</strong>
+            </div>
+            <div className="summary-tile">
+              <span>Top habit</span>
+              <strong>{habitPreview[0]?.title || 'None yet'}</strong>
+            </div>
           </div>
-          <p className="dsc-body">{unreadInbox.length === 0 ? 'All clear' : `${unreadInbox.length} item${unreadInbox.length === 1 ? '' : 's'} to triage`}</p>
-          <span className="dsc-cta">Open Inbox →</span>
-        </button>
-
-        <button type="button" className="dashboard-summary-card" onClick={() => onOpenMoreSection?.('meals')}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Meals</p>
-            <span className="dsc-count">{todaysMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('water')).length}</span>
-          </div>
-          <p className="dsc-body">
-            Hydration goal {mealPrefs.hydrationGoal} cups · {hydrationCount} logged
-          </p>
-          <span className="dsc-cta">Open Meals →</span>
-        </button>
-
-        <button type="button" className={`dashboard-summary-card${maintenance.overdue.length > 0 ? ' dsc-attention' : ''}`} onClick={() => onOpenMoreSection?.('maintenance')}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Maintenance</p>
-            <span className={`dsc-count${maintenance.overdue.length > 0 ? ' dsc-count-warn' : ''}`}>{maintenance.overdue.length}</span>
-          </div>
-          <p className="dsc-body">
-            {maintenance.nextItem ? `${maintenance.nextItem.label} · ${maintenance.nextItem.daysRemaining < 0 ? `${Math.abs(maintenance.nextItem.daysRemaining)}d overdue` : `${maintenance.nextItem.daysRemaining}d left`}` : 'Nothing due right now'}
-          </p>
-          <span className="dsc-cta">Open More →</span>
-        </button>
-
-        <button type="button" className="dashboard-summary-card" onClick={() => onOpenMoreSection?.('finance')}>
-          <div className="dsc-header">
-            <p className="dsc-eyebrow">Finance</p>
-            <span className="dsc-count">{formatSignedNumber(finance.net)}</span>
-          </div>
-          <p className="dsc-body">
-            Active balance ${Math.round(finance.activeBalance || 0)} · {finance.unreviewed} transactions this month
-          </p>
-          <span className="dsc-cta">Open Finance →</span>
-        </button>
+          {habitPreview.length > 0 ? (
+            <div className="subtle-feed">
+              {habitPreview.map(habit => (
+                <ListRow
+                  key={habit.id}
+                  variant="card"
+                  label={habit.title || 'Habit'}
+                  sub={habit.frequency || 'daily'}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="empty-message">Use Lifestyle for routines, repetition, and low-friction structure.</p>
+          )}
+        </section>
       </div>
 
-      <Card>
-        <SectionHeader eyebrow="Today" title="Command center" />
-        <div className="subtle-feed">
-          {todayItems.length === 0 ? (
-            <EmptyState title="Nothing lined up yet" description="Use Calendar, Fitness, or Inbox to seed the day." />
-          ) : (
-            todayItems.map(item => (
-              <ListRow key={item.id} variant="card" label={item.title} sub={item.sub} />
-            ))
-          )}
-        </div>
-      </Card>
+      <div className="execution-secondary-actions">
+        <button type="button" className="secondary-button" onClick={onOpenInbox}>
+          Open Inbox
+        </button>
+        <button type="button" className="secondary-button" onClick={() => onOpenMoreSection?.('tasks')}>
+          Open More
+        </button>
+      </div>
     </div>
   );
 }
@@ -2379,6 +2417,7 @@ function AppShell() {
     showMorningCheckin,
     setShowMorningCheckin,
     energyState,
+    fitnessSettings,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState('today');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2439,6 +2478,42 @@ function AppShell() {
     setNotifications(current => [createNotification({ title: 'Note captured', detail: content || title || notes }), ...current]);
   }
 
+  function startTodayWorkout(session) {
+    const existingTodayWorkout = workouts.find(workout => workout.scheduledDate === toDateKey(now) && workout.status !== 'completed');
+    if (existingTodayWorkout) {
+      setWorkouts(current => current.map(workout => (
+        workout.id === existingTodayWorkout.id
+          ? { ...workout, status: 'active' }
+          : workout.status === 'active'
+            ? { ...workout, status: 'planned' }
+            : workout
+      )));
+      setActiveWorkoutId(existingTodayWorkout.id);
+      setActiveTab('fitness');
+      return;
+    }
+
+    if (!session) {
+      setActiveTab('fitness');
+      return;
+    }
+
+    const sessionWorkout = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session,
+      settings: fitnessSettings,
+      todayKey: toDateKey(now),
+    });
+
+    setWorkouts(current => [
+      { ...sessionWorkout, status: 'active' },
+      ...current.map(workout => (workout.status === 'active' ? { ...workout, status: 'planned' } : workout)),
+    ]);
+    setActiveWorkoutId(sessionWorkout.id);
+    setActiveTab('fitness');
+  }
+
   const primaryScreen = useMemo(() => {
     if (activeTab === 'calendar') {
       return <CalendarScreen />;
@@ -2461,15 +2536,12 @@ function AppShell() {
         now={now}
         activeWorkoutId={activeWorkoutId}
         onSwitchToFitness={() => setActiveTab('fitness')}
-        onSwitchToCalendar={() => setActiveTab('calendar')}
-        onSwitchToMore={() => setActiveTab('more')}
         onOpenMoreSection={openMoreSection}
         onOpenInbox={() => openMoreSection('inbox')}
-        onOpenQuickAdd={() => setQuickAddOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onStartWorkout={startTodayWorkout}
       />
     );
-  }, [activeTab, activeWorkoutId, moreSection, now, setQuickAddOpen]);
+  }, [activeTab, activeWorkoutId, moreSection, now, workouts, createWorkout, createExercise, fitnessSettings]);
 
   function handleTabChange(tab) {
     setActiveTab(tab);
