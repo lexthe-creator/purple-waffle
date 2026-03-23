@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AppFrame from './components/AppFrame.jsx';
+import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
+import QuickAddModal from './components/QuickAddModal.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import InboxView from './views/InboxView.jsx';
 import InboxScreen from './views/InboxScreen.jsx';
@@ -38,8 +40,8 @@ import './styles.css';
 
 const ROOT_TABS = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
+    id: 'today',
+    label: 'Today',
     iconPath: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><polyline points="9 21 9 12 15 12 15 21"/>',
   },
   {
@@ -68,7 +70,7 @@ const FITNESS_SUBTABS = [
   { id: 'today', label: 'Today' },
   { id: 'plan', label: 'Plan' },
   { id: 'library', label: 'Library' },
-  { id: 'logging', label: 'Logging' },
+  { id: 'history', label: 'History' },
 ];
 
 const MORE_SECTIONS = [
@@ -280,6 +282,70 @@ function getTodayItems({ tasks, workouts, meals, calendarItems, todayKey }) {
       sub: `${item.startTime} - ${item.endTime}`,
     })),
   ];
+}
+
+function daysUntilDue(lastDone, intervalDays) {
+  if (!Number.isFinite(intervalDays) || intervalDays <= 0) return null;
+  if (!lastDone) return -intervalDays;
+
+  const last = new Date(lastDone);
+  const due = new Date(last.getTime() + intervalDays * 24 * 60 * 60 * 1000);
+  const now = new Date();
+  return Math.round((due - now) / (24 * 60 * 60 * 1000));
+}
+
+function getMaintenanceSnapshot(history = {}) {
+  const items = Object.values(history).filter(item => item && typeof item === 'object');
+  const resolved = items.map(item => ({
+    ...item,
+    daysRemaining: daysUntilDue(item.lastDone, Number.parseInt(item.intervalDays, 10)),
+  }));
+
+  const overdue = resolved.filter(item => typeof item.daysRemaining === 'number' && item.daysRemaining < 0);
+  const dueSoon = resolved.filter(item => typeof item.daysRemaining === 'number' && item.daysRemaining >= 0 && item.daysRemaining <= 7);
+  const nextItem = [...resolved]
+    .sort((left, right) => {
+      const leftDays = typeof left.daysRemaining === 'number' ? left.daysRemaining : 999;
+      const rightDays = typeof right.daysRemaining === 'number' ? right.daysRemaining : 999;
+      return leftDays - rightDays;
+    })[0] || null;
+
+  return {
+    items: resolved,
+    overdue,
+    dueSoon,
+    nextItem,
+  };
+}
+
+function getFinanceSnapshot(profile) {
+  const transactions = Array.isArray(profile?.transactions) ? profile.transactions : [];
+  const recurringExpenses = Array.isArray(profile?.recurringExpenses) ? profile.recurringExpenses : [];
+  const financialAccounts = Array.isArray(profile?.financialAccounts) ? profile.financialAccounts : [];
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().slice(0, 10);
+  const monthTx = transactions.filter(tx => tx.date >= monthStart && tx.date < monthEnd);
+
+  const income = monthTx.filter(tx => tx.type === 'income').reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
+  const expenses = monthTx.filter(tx => tx.type === 'expense').reduce((sum, tx) => sum + (tx.amount ?? 0), 0);
+  const subscriptionTotal = recurringExpenses.reduce((sum, entry) => sum + (entry.amount ?? 0), 0);
+  const activeBalance = financialAccounts.filter(account => account.isActive).reduce((sum, account) => sum + (account.balance ?? 0), 0);
+
+  return {
+    income,
+    expenses,
+    net: income - expenses,
+    subscriptionTotal,
+    activeBalance,
+    unreviewed: monthTx.length,
+  };
+}
+
+function formatSignedNumber(value) {
+  const rounded = Math.round(value ?? 0);
+  return `${rounded >= 0 ? '+' : '-'}${Math.abs(rounded)}`;
 }
 
 function SettingsSheet({ isOpen, onClose }) {
@@ -565,9 +631,134 @@ function SettingsSheet({ isOpen, onClose }) {
   );
 }
 
-function DashboardScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCalendar, onSwitchToMore, onOpenInbox }) {
+function TasksScreen() {
+  const { tasks, setTasks, createTask, createSubtask } = useTaskContext();
+  const [draftTitle, setDraftTitle] = useState('');
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  const visibleTasks = useMemo(
+    () => (showCompleted ? tasks : tasks.filter(task => task.status !== 'done')),
+    [showCompleted, tasks],
+  );
+
+  const taskStats = useMemo(() => ({
+    active: tasks.filter(task => task.status === 'active').length,
+    planned: tasks.filter(task => task.status === 'planned').length,
+    done: tasks.filter(task => task.status === 'done').length,
+    priority: tasks.filter(task => task.priority).length,
+  }), [tasks]);
+
+  function addTask() {
+    const title = draftTitle.trim();
+    if (!title) return;
+    setTasks(current => [createTask({ title, status: 'active', priority: true, subtasks: [createSubtask('')] }), ...current]);
+    setDraftTitle('');
+  }
+
+  function updateTask(taskId, patch) {
+    setTasks(current => current.map(task => (task.id === taskId ? { ...task, ...patch } : task)));
+  }
+
+  function deleteTask(taskId) {
+    setTasks(current => current.filter(task => task.id !== taskId));
+  }
+
+  function toggleDone(taskId) {
+    setTasks(current => current.map(task => {
+      if (task.id !== taskId) return task;
+      return { ...task, status: task.status === 'done' ? 'planned' : 'done' };
+    }));
+  }
+
+  function toggleSubtask(taskId, subtaskId) {
+    setTasks(current => current.map(task => {
+      if (task.id !== taskId) return task;
+      return {
+        ...task,
+        subtasks: task.subtasks.map(subtask => (
+          subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask
+        )),
+      };
+    }));
+  }
+
+  function addSubtask(taskId) {
+    setTasks(current => current.map(task => {
+      if (task.id !== taskId) return task;
+      return {
+        ...task,
+        subtasks: [...task.subtasks, createSubtask('')],
+      };
+    }));
+  }
+
+  function setStatus(taskId, status) {
+    setTasks(current => current.map(task => (task.id === taskId ? { ...task, status } : task)));
+  }
+
+  return (
+    <div className="tab-stack">
+      <Card>
+        <SectionHeader eyebrow="Tasks" title="Execution list" />
+        <div className="ui-metrics-row">
+          <MetricBlock value={taskStats.active} label="Active" />
+          <MetricBlock value={taskStats.planned} label="Planned" />
+          <MetricBlock value={taskStats.done} label="Done" />
+          <MetricBlock value={taskStats.priority} label="Priority" />
+        </div>
+        <div className="inline-task-form">
+          <input
+            className="task-title-input"
+            placeholder="Add a task"
+            value={draftTitle}
+            onChange={event => setDraftTitle(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addTask();
+              }
+            }}
+          />
+          <button type="button" className="primary-button" onClick={addTask}>
+            Add
+          </button>
+        </div>
+        <button type="button" className="ghost-button compact-ghost" onClick={() => setShowCompleted(current => !current)}>
+          {showCompleted ? 'Hide completed' : 'Show completed'}
+        </button>
+      </Card>
+
+      <div className="execution-list">
+        {visibleTasks.length === 0 ? (
+          <Card>
+            <EmptyState
+              title="No tasks yet"
+              description="Capture a few priorities, then move them through execution."
+            />
+          </Card>
+        ) : (
+          visibleTasks.map(task => (
+            <ExecutionTaskItem
+              key={task.id}
+              task={task}
+              onUpdateTask={updateTask}
+              onDeleteTask={deleteTask}
+              onToggleDone={toggleDone}
+              onToggleSubtask={toggleSubtask}
+              onAddSubtask={addSubtask}
+              onSetStatus={setStatus}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TodayScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCalendar, onSwitchToMore, onOpenMoreSection, onOpenInbox, onOpenQuickAdd, onOpenSettings }) {
   const { tasks, workouts, inboxItems, meals, calendarItems } = useTaskContext();
-  const { fitnessSettings, energyState } = useAppContext();
+  const { fitnessSettings, energyState, mealPrefs } = useAppContext();
+  const { profile } = useProfileContext();
 
   const todayKey = toDateKey(now);
   const planState = useMemo(
@@ -595,22 +786,58 @@ function DashboardScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCa
   const todaysMeals = useMemo(() => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey), [meals, todayKey]);
   const hydrationCount = todaysMeals.filter(meal => Array.isArray(meal.tags) && meal.tags.includes('water')).length;
   const readiness = computeRecoveryState({ energyScore: energyState.value, sleepHours: energyState.sleepHours }, energyState.value, energyState.sleepHours);
-
+  const maintenance = getMaintenanceSnapshot(profile.maintenanceHistory);
+  const finance = getFinanceSnapshot(profile);
+  const top3 = Array.isArray(profile.top3?.[todayKey]) ? profile.top3[todayKey] : [];
   const todayItems = getTodayItems({ tasks, workouts, meals, calendarItems, todayKey });
+  const primaryActionLabel = readiness.level === 'Low'
+    ? 'Open recovery'
+    : activeWorkout
+      ? 'Continue workout'
+      : todaysWorkout
+        ? 'Start workout'
+        : 'Review plan';
 
   return (
     <div className="tab-stack">
-      <section className="task-card">
+      <section className="task-card today-hero">
         <div className="task-card-header">
           <div>
             <p className="eyebrow">{formatFullDate(now)}</p>
             <h2>{getGreeting(now)}</h2>
           </div>
+          <button type="button" className="ghost-button compact-ghost" onClick={onOpenQuickAdd}>
+            Quick capture
+          </button>
         </div>
+
         <div className="ui-metrics-row">
           <MetricBlock value={planState.label} label="Plan" />
           <MetricBlock value={readiness.level} label="Readiness" />
           <MetricBlock value={hydrationCount} label="Water" />
+          <MetricBlock value={maintenance.overdue.length} label="Maintenance" />
+        </div>
+
+        {top3.length > 0 && (
+          <div className="feed-card">
+            <strong>Top 3</strong>
+            <p>{top3.join(' · ')}</p>
+          </div>
+        )}
+
+        <div className="inline-actions">
+          <button type="button" className="primary-button" onClick={onSwitchToFitness}>
+            {primaryActionLabel}
+          </button>
+          <button type="button" className="secondary-button" onClick={onSwitchToCalendar}>
+            Open calendar
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToMore}>
+            More
+          </button>
+          <button type="button" className="ghost-button compact-ghost" onClick={onOpenSettings}>
+            Settings
+          </button>
         </div>
       </section>
 
@@ -643,7 +870,7 @@ function DashboardScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCa
           <span className="dsc-cta">Open Calendar →</span>
         </button>
 
-        <button type="button" className="dashboard-summary-card" onClick={onSwitchToMore}>
+        <button type="button" className="dashboard-summary-card" onClick={() => onOpenMoreSection?.('tasks')}>
           <div className="dsc-header">
             <p className="dsc-eyebrow">Tasks</p>
             <span className="dsc-count">{pendingTasks.length}</span>
@@ -661,6 +888,39 @@ function DashboardScreen({ now, activeWorkoutId, onSwitchToFitness, onSwitchToCa
           </div>
           <p className="dsc-body">{unreadInbox.length === 0 ? 'All clear' : `${unreadInbox.length} item${unreadInbox.length === 1 ? '' : 's'} to triage`}</p>
           <span className="dsc-cta">Open Inbox →</span>
+        </button>
+
+        <button type="button" className="dashboard-summary-card" onClick={() => onOpenMoreSection?.('meals')}>
+          <div className="dsc-header">
+            <p className="dsc-eyebrow">Meals</p>
+            <span className="dsc-count">{todaysMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('water')).length}</span>
+          </div>
+          <p className="dsc-body">
+            Hydration goal {mealPrefs.hydrationGoal} cups · {hydrationCount} logged
+          </p>
+          <span className="dsc-cta">Open Meals →</span>
+        </button>
+
+        <button type="button" className={`dashboard-summary-card${maintenance.overdue.length > 0 ? ' dsc-attention' : ''}`} onClick={() => onOpenMoreSection?.('maintenance')}>
+          <div className="dsc-header">
+            <p className="dsc-eyebrow">Maintenance</p>
+            <span className={`dsc-count${maintenance.overdue.length > 0 ? ' dsc-count-warn' : ''}`}>{maintenance.overdue.length}</span>
+          </div>
+          <p className="dsc-body">
+            {maintenance.nextItem ? `${maintenance.nextItem.label} · ${maintenance.nextItem.daysRemaining < 0 ? `${Math.abs(maintenance.nextItem.daysRemaining)}d overdue` : `${maintenance.nextItem.daysRemaining}d left`}` : 'Nothing due right now'}
+          </p>
+          <span className="dsc-cta">Open More →</span>
+        </button>
+
+        <button type="button" className="dashboard-summary-card" onClick={() => onOpenMoreSection?.('finance')}>
+          <div className="dsc-header">
+            <p className="dsc-eyebrow">Finance</p>
+            <span className="dsc-count">{formatSignedNumber(finance.net)}</span>
+          </div>
+          <p className="dsc-body">
+            Active balance ${Math.round(finance.activeBalance || 0)} · {finance.unreviewed} transactions this month
+          </p>
+          <span className="dsc-cta">Open Finance →</span>
         </button>
       </div>
 
@@ -1854,10 +2114,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         </>
       )}
 
-      {activeSubTab === 'logging' && (
+      {activeSubTab === 'history' && (
         <>
           <section className="task-card">
-            <SectionHeader eyebrow="Logging" title="Lightweight and expandable" />
+            <SectionHeader eyebrow="History" title="Lightweight and expandable" />
             <div className="ui-metrics-row">
               <MetricBlock value={workouts.length} label="Workouts" />
               <MetricBlock value={workouts.filter(workout => getCurrentWorkoutType(workout) === 'running').length} label="Runs" />
@@ -1889,7 +2149,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 }
 
-function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab }) {
+function MoreScreen({ initialSection = 'tasks', onOpenSettings, onSwitchToTab, now }) {
   const { profile, setProfile } = useProfileContext();
   const { workouts, inboxItems, setInboxItems } = useTaskContext();
   const { energyState, recoveryInputs, setRecoveryInputs, hubInsights, setHubInsights } = useAppContext();
@@ -1901,14 +2161,14 @@ function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab
   }, [initialSection]);
 
   const weeklyAnalytics = useMemo(() => {
-    const weekStart = toDateKey(alignDateToAnchor(new Date(), 'Monday'));
+    const weekStart = toDateKey(alignDateToAnchor(now || new Date(), 'Monday'));
     const history = workouts.map(workout => ({
       type: getCurrentWorkoutType(workout),
       date: workout.scheduledDate || toDateKey(workout.createdAt),
       data: { plannedDate: workout.scheduledDate || null, calories: workout.calories || 0 },
     }));
     return computeWeeklyAnalytics(history, weekStart);
-  }, [workouts]);
+  }, [now, workouts]);
 
   function addInsightNote() {
     const trimmed = insightDraft.trim();
@@ -1920,17 +2180,39 @@ function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab
     setInsightDraft('');
   }
 
-  function promoteInboxItem(itemId) {
+  function promoteInboxItem(itemId, module = 'note') {
     const item = inboxItems.find(entry => entry.id === itemId);
     if (!item) return;
     setInboxItems(current => current.filter(entry => entry.id !== itemId));
-    setProfile(current => ({ ...current, dailyLogs: { ...current.dailyLogs, [toDateKey(new Date())]: [...(current.dailyLogs[toDateKey(new Date())] || []), item.text] } }));
+    if (module === 'note') {
+      setProfile(current => ({
+        ...current,
+        dailyLogs: {
+          ...current.dailyLogs,
+          [toDateKey(new Date())]: [...(current.dailyLogs[toDateKey(new Date())] || []), item.text],
+        },
+      }));
+    }
+    if (module === 'task' && onSwitchToTab) onSwitchToTab('more');
   }
+
+  const sectionDescriptions = {
+    tasks: 'Task execution and triage.',
+    meals: 'Fuel logging and planning.',
+    finance: 'Accounts, subscriptions, and transactions.',
+    lifestyle: 'Habits and recurring routines.',
+    recovery: 'Energy, sleep, and recovery defaults.',
+    maintenance: 'Home upkeep and recurring chores.',
+    insights: 'Weekly review and notes.',
+    settings: 'App preferences and training configuration.',
+    inbox: 'Capture and route incoming items.',
+  };
 
   return (
     <div className="tab-stack">
       <Card>
         <SectionHeader eyebrow="More" title="Secondary workspaces" />
+        <p className="empty-message">Today, Calendar, and Fitness stay in the primary nav. Everything else lives here.</p>
         <div className="tag-row">
           {MORE_SECTIONS.map(section => (
             <button
@@ -1945,15 +2227,18 @@ function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab
         </div>
       </Card>
 
+      {activeSection === 'tasks' && <TasksScreen />}
+      {activeSection === 'meals' && <NutritionScreen now={now || new Date()} />}
+      {activeSection === 'finance' && <FinanceScreen />}
       {activeSection === 'recovery' && (
         <Card>
           <SectionHeader eyebrow="Recovery / Health" title="Downshift and restore" />
-          <div className="ui-metrics-row">
-            <MetricBlock value={energyState.value} label="Energy" />
-            <MetricBlock value={energyState.sleepHours} label="Sleep" />
-            <MetricBlock value={recoveryInputs.preferredSession} label="Default recovery" />
-          </div>
           <div className="subtle-feed">
+            <div className="ui-metrics-row">
+              <MetricBlock value={energyState.value} label="Energy" />
+              <MetricBlock value={energyState.sleepHours} label="Sleep" />
+              <MetricBlock value={recoveryInputs.preferredSession} label="Default recovery" />
+            </div>
             {RECOVERY_SESSIONS.map(session => (
               <ListRow
                 key={session.id}
@@ -1974,7 +2259,6 @@ function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab
           </div>
         </Card>
       )}
-
       {activeSection === 'lifestyle' && (
         <Card>
           <SectionHeader eyebrow="Lifestyle" title="Habits and daily notes" />
@@ -1987,48 +2271,40 @@ function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab
           </div>
         </Card>
       )}
-
       {activeSection === 'maintenance' && (
         <Card>
           <SectionHeader eyebrow="Maintenance" title="Household and upkeep" />
           <HomeScreen />
         </Card>
       )}
-
       {activeSection === 'insights' && (
         <Card>
           <SectionHeader eyebrow="Insights" title="Weekly review" />
-          <div className="ui-metrics-row">
-            <MetricBlock value={weeklyAnalytics.sessionsLogged} label="Sessions" />
-            <MetricBlock value={weeklyAnalytics.runMiles} label="Run mi" />
-            <MetricBlock value={weeklyAnalytics.totalMinutes} label="Minutes" />
-          </div>
-          <div className="field-stack">
-            <textarea
-              className="notes-textarea"
-              value={insightDraft}
-              onChange={event => setInsightDraft(event.target.value)}
-              placeholder="Capture a weekly insight"
-            />
-            <button type="button" className="secondary-button" onClick={addInsightNote}>
-              Save insight
-            </button>
-          </div>
           <div className="subtle-feed">
-            {(hubInsights.weeklyNotes || []).map(note => (
+            <div className="ui-metrics-row">
+              <MetricBlock value={weeklyAnalytics.sessionsLogged} label="Sessions" />
+              <MetricBlock value={weeklyAnalytics.runMiles} label="Run mi" />
+              <MetricBlock value={weeklyAnalytics.totalMinutes} label="Minutes" />
+            </div>
+            <div className="field-stack">
+              <textarea
+                className="notes-textarea"
+                value={insightDraft}
+                onChange={event => setInsightDraft(event.target.value)}
+                placeholder="Capture a weekly insight"
+              />
+              <button type="button" className="secondary-button" onClick={addInsightNote}>
+                Save insight
+              </button>
+            </div>
+            {(hubInsights.weeklyNotes || []).length > 0 ? (hubInsights.weeklyNotes || []).map(note => (
               <ListRow key={note.id} variant="card" label={note.text} />
-            ))}
+            )) : (
+              <EmptyState title="No insights yet" description="Capture a weekly note before the week ends." />
+            )}
           </div>
         </Card>
       )}
-
-      {activeSection === 'finance' && (
-        <Card>
-          <SectionHeader eyebrow="Finance" title="Accounts and budget" />
-          <FinanceScreen />
-        </Card>
-      )}
-
       {activeSection === 'settings' && (
         <Card>
           <SectionHeader eyebrow="Settings" title="Configuration entry point" />
@@ -2038,22 +2314,38 @@ function MoreScreen({ initialSection = 'recovery', onOpenSettings, onSwitchToTab
           </button>
         </Card>
       )}
-
       {activeSection === 'inbox' && (
         <Card>
           <SectionHeader eyebrow="Inbox" title="Capture and triage" />
-          <InboxScreen onSwitchToTab={onSwitchToTab} />
+          <div className="subtle-feed">
+            <InboxScreen onSwitchToTab={onSwitchToTab} />
+            {inboxItems.filter(item => item.module === null).slice(0, 4).map(item => (
+              <ListRow
+                key={item.id}
+                variant="card"
+                label={item.text}
+                action={(
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => promoteInboxItem(item.id)}>
+                    Promote
+                  </button>
+                )}
+              />
+            ))}
+          </div>
         </Card>
       )}
 
       <Card>
-        <SectionHeader eyebrow="Quick" title="Legacy items and shortcuts" />
+        <SectionHeader eyebrow="Quick" title="Shortcuts" />
         <div className="inline-actions">
-          <button type="button" className="secondary-button" onClick={() => setActiveSection('maintenance')}>
-            Open maintenance
+          <button type="button" className="secondary-button" onClick={() => setActiveSection('tasks')}>
+            Open tasks
           </button>
           <button type="button" className="secondary-button" onClick={() => setActiveSection('recovery')}>
             Open recovery
+          </button>
+          <button type="button" className="secondary-button" onClick={() => setActiveSection('inbox')}>
+            Open inbox
           </button>
         </div>
       </Card>
@@ -2065,23 +2357,34 @@ function AppShell() {
   const {
     setNotifications,
     createNotification,
+    createTask,
+    createMeal,
+    createNote,
+    createWorkout,
+    createExercise,
     notifications,
     calendarItems,
     setCalendarItems,
+    setTasks,
+    setMeals,
+    setNotes,
+    setWorkouts,
     inboxItems,
   } = useTaskContext();
   const {
+    quickAddOpen,
+    setQuickAddOpen,
     notificationCenterOpen,
     setNotificationCenterOpen,
     showMorningCheckin,
     setShowMorningCheckin,
     energyState,
   } = useAppContext();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('today');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [now, setNow] = useState(() => new Date());
-  const [moreSection, setMoreSection] = useState('recovery');
+  const [moreSection, setMoreSection] = useState('tasks');
 
   useEffect(() => {
     const lastCheckIn = energyState.lastCheckIn;
@@ -2111,6 +2414,31 @@ function AppShell() {
     setActiveTab('more');
   }
 
+  function handleQuickAddSubmit(payload) {
+    const { type, title, notes, tags, duration, content } = payload;
+
+    if (type === 'task') {
+      setTasks(current => [createTask({ title, notes, status: 'active', priority: true }), ...current]);
+      setNotifications(current => [createNotification({ title: 'Task captured', detail: title }), ...current]);
+      return;
+    }
+
+    if (type === 'meal') {
+      setMeals(current => [createMeal({ name: title, tags }), ...current]);
+      setNotifications(current => [createNotification({ title: 'Meal captured', detail: title }), ...current]);
+      return;
+    }
+
+    if (type === 'workout') {
+      setWorkouts(current => [createWorkout({ name: title, duration: Number.isFinite(duration) ? duration : 30, status: 'planned', exercises: [createExercise({ name: 'Warm-up', detail: '5 min mobility' }), createExercise({ name: 'Main set', detail: 'Start with intent' }), createExercise({ name: 'Cooldown', detail: 'Breathe and reset' })] }), ...current]);
+      setNotifications(current => [createNotification({ title: 'Workout captured', detail: title }), ...current]);
+      return;
+    }
+
+    setNotes(current => [createNote({ content: content || title || notes }), ...current]);
+    setNotifications(current => [createNotification({ title: 'Note captured', detail: content || title || notes }), ...current]);
+  }
+
   const primaryScreen = useMemo(() => {
     if (activeTab === 'calendar') {
       return <CalendarScreen />;
@@ -2125,29 +2453,32 @@ function AppShell() {
     }
 
     if (activeTab === 'more') {
-      return <MoreScreen initialSection={moreSection} onOpenSettings={() => setSettingsOpen(true)} onSwitchToTab={setActiveTab} />;
+      return <MoreScreen initialSection={moreSection} onOpenSettings={() => setSettingsOpen(true)} onSwitchToTab={setActiveTab} now={now} />;
     }
 
     return (
-      <DashboardScreen
+      <TodayScreen
         now={now}
         activeWorkoutId={activeWorkoutId}
         onSwitchToFitness={() => setActiveTab('fitness')}
         onSwitchToCalendar={() => setActiveTab('calendar')}
         onSwitchToMore={() => setActiveTab('more')}
+        onOpenMoreSection={openMoreSection}
         onOpenInbox={() => openMoreSection('inbox')}
+        onOpenQuickAdd={() => setQuickAddOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
     );
-  }, [activeTab, activeWorkoutId, moreSection, now]);
+  }, [activeTab, activeWorkoutId, moreSection, now, setQuickAddOpen]);
 
   function handleTabChange(tab) {
     setActiveTab(tab);
     if (tab !== 'more') return;
-    setMoreSection(prev => prev || 'recovery');
+    setMoreSection(prev => prev || 'tasks');
   }
 
   function openQuickCapture() {
-    openMoreSection('inbox');
+    setQuickAddOpen(true);
   }
 
   return (
@@ -2164,6 +2495,12 @@ function AppShell() {
       >
         {primaryScreen}
       </AppFrame>
+
+      <QuickAddModal
+        isOpen={quickAddOpen}
+        onClose={() => setQuickAddOpen(false)}
+        onSubmit={handleQuickAddSubmit}
+      />
 
       <InboxView
         isOpen={notificationCenterOpen}
