@@ -20,17 +20,44 @@ const DEFAULT_ENERGY = {
 
 const DEFAULT_FITNESS_SETTINGS = {
   programType: 'hyrox',
-  selectedFrequency: '4-day',
-  programAnchor: 'Monday',
   programStartDate: new Date().toISOString().slice(0, 10),
-};
-
-const DEFAULT_RACE_SETTINGS = {
+  trainingDays: '4-day',
   raceDate: null,
   raceName: '',
-  raceCategory: 'Open',
-  targetFinishTime: '',
+  raceCategory: '',
+  fitnessLevel: '',
+  equipmentAccess: 'full-gym',
+  goalFinishTime: '',
+  currentWeeklyMileage: null,
+  weakStations: [],
+  injuriesOrLimitations: '',
 };
+
+function migrateFitnessSettings(raw) {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_FITNESS_SETTINGS };
+
+  const trainingDays =
+    raw.trainingDays === '5-day' || raw.selectedFrequency === '5-day' ? '5-day' : '4-day';
+
+  return {
+    ...DEFAULT_FITNESS_SETTINGS,
+    programStartDate:
+      typeof raw.programStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.programStartDate)
+        ? raw.programStartDate
+        : DEFAULT_FITNESS_SETTINGS.programStartDate,
+    trainingDays,
+    ...(typeof raw.raceDate === 'string'              ? { raceDate: raw.raceDate }                           : {}),
+    ...(typeof raw.raceName === 'string'              ? { raceName: raw.raceName }                           : {}),
+    ...(typeof raw.raceCategory === 'string'          ? { raceCategory: raw.raceCategory }                   : {}),
+    ...(typeof raw.fitnessLevel === 'string'          ? { fitnessLevel: raw.fitnessLevel }                   : {}),
+    ...(typeof raw.equipmentAccess === 'string'       ? { equipmentAccess: raw.equipmentAccess }             : {}),
+    ...(typeof raw.goalFinishTime === 'string'        ? { goalFinishTime: raw.goalFinishTime }               : {}),
+    ...(Number.isFinite(raw.currentWeeklyMileage)     ? { currentWeeklyMileage: raw.currentWeeklyMileage }   : {}),
+    ...(Array.isArray(raw.weakStations)
+        ? { weakStations: raw.weakStations.filter(s => typeof s === 'string') }                              : {}),
+    ...(typeof raw.injuriesOrLimitations === 'string' ? { injuriesOrLimitations: raw.injuriesOrLimitations } : {}),
+  };
+}
 
 const DEFAULT_WORK_CALENDAR_PREFS = {
   planningOrder: 'priority',
@@ -83,14 +110,9 @@ export function AppProvider({ children }) {
     ...DEFAULT_ENERGY,
     ...(saved?.energyState || {}),
   }));
-  const [fitnessSettings, setFitnessSettings] = useState(() => ({
-    ...DEFAULT_FITNESS_SETTINGS,
-    ...(saved?.fitnessSettings || {}),
-  }));
-  const [raceSettings, setRaceSettings] = useState(() => ({
-    ...DEFAULT_RACE_SETTINGS,
-    ...(saved?.raceSettings || {}),
-  }));
+  const [fitnessSettings, setFitnessSettings] = useState(() =>
+    migrateFitnessSettings(saved?.fitnessSettings),
+  );
   const [workCalendarPrefs, setWorkCalendarPrefs] = useState(() => ({
     ...DEFAULT_WORK_CALENDAR_PREFS,
     ...(saved?.workCalendarPrefs || {}),
@@ -115,9 +137,9 @@ export function AppProvider({ children }) {
   useEffect(() => {
     window.localStorage.setItem(
       APP_STATE_KEY,
-      JSON.stringify({ planningMode, energyState, fitnessSettings, raceSettings, workCalendarPrefs, mealPrefs, notificationPrefs }),
+      JSON.stringify({ planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs }),
     );
-  }, [planningMode, energyState, fitnessSettings, raceSettings, workCalendarPrefs, mealPrefs, notificationPrefs]);
+  }, [planningMode, energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs]);
 
   // Persist daily checklist
   useEffect(() => {
@@ -139,8 +161,6 @@ export function AppProvider({ children }) {
       setEnergyState,
       fitnessSettings,
       setFitnessSettings,
-      raceSettings,
-      setRaceSettings,
       workCalendarPrefs,
       setWorkCalendarPrefs,
       mealPrefs,
@@ -161,7 +181,7 @@ export function AppProvider({ children }) {
     }),
     [
       planningMode, quickAddOpen, notificationCenterOpen,
-      energyState, fitnessSettings, raceSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
+      energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
       morningChecklist, showMorningCheckin, morningStep, energyScore, sleepHours,
     ],
   );
