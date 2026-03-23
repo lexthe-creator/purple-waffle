@@ -6,6 +6,9 @@ import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
+import FinanceScreen from './views/FinanceScreen.jsx';
+import HomeScreen from './views/HomeScreen.jsx';
+import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
 import { ProfileProvider } from './context/ProfileContext.jsx';
@@ -56,6 +59,16 @@ const ROOT_TABS = [
     id: 'fitness',
     label: 'Fitness',
     iconPath: '<rect x="6" y="9" width="12" height="6" rx="3"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="M7.5 9V7.5"/><path d="M16.5 9V7.5"/><path d="M7.5 15v1.5"/><path d="M16.5 15v1.5"/>',
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    iconPath: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>',
+  },
+  {
+    id: 'home',
+    label: 'Home',
+    iconPath: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><polyline points="9 21 9 12 15 12 15 21"/>',
   },
   {
     id: 'more',
@@ -448,7 +461,7 @@ function SettingsSheet({ isOpen, onClose }) {
 
 function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToCalendar, onSwitchToFitness, weeklyItems }) {
   const { tasks, setTasks, meals, notes, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
-  const { planningMode, setPlanningMode, morningChecklist, setMorningChecklist, energyState, setQuickAddOpen } = useAppContext();
+  const { planningMode, setPlanningMode, morningChecklist, setMorningChecklist, energyState, setQuickAddOpen, setShowMorningCheckin } = useAppContext();
   const [executionExpanded, setExecutionExpanded] = useState(true);
   const [priorityExpanded, setPriorityExpanded] = useState(false);
   const [agendaExpanded, setAgendaExpanded] = useState(false);
@@ -930,7 +943,7 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
 
         {/* Planning toolbar */}
         <div className="dashboard-toolbar">
-          <button type="button" className="ghost-button compact-ghost" onClick={scrollToChecklist}>
+          <button type="button" className="ghost-button compact-ghost" onClick={() => setShowMorningCheckin(true)}>
             Morning check-in
           </button>
           <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
@@ -2642,11 +2655,24 @@ function AppShell() {
     setQuickAddOpen,
     notificationCenterOpen,
     setNotificationCenterOpen,
+    showMorningCheckin,
+    setShowMorningCheckin,
+    energyState,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [now, setNow] = useState(() => new Date());
+
+  // Auto-open morning check-in when user hasn't checked in today
+  useEffect(() => {
+    const lastCheckIn = energyState.lastCheckIn;
+    const alreadyCheckedIn = lastCheckIn && sameDay(new Date(lastCheckIn), now);
+    if (!alreadyCheckedIn && !showMorningCheckin) {
+      setShowMorningCheckin(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
@@ -2714,6 +2740,14 @@ function AppShell() {
       return <FitnessScreen now={now} activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />;
     }
 
+    if (activeTab === 'finance') {
+      return <FinanceScreen />;
+    }
+
+    if (activeTab === 'home') {
+      return <HomeScreen />;
+    }
+
     if (activeTab === 'more') {
       return <MoreScreen now={now} />;
     }
@@ -2760,6 +2794,8 @@ function AppShell() {
       />
 
       <SettingsSheet isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      <MorningCheckinModal />
     </>
   );
 }

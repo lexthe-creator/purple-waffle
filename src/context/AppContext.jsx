@@ -67,6 +67,12 @@ export function AppProvider({ children }) {
   }));
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
 
+  // Morning check-in modal state
+  const [showMorningCheckin, setShowMorningCheckin] = useState(false);
+  const [morningStep, setMorningStep] = useState(0);
+  const [energyScore, setEnergyScore] = useState(3);
+  const [sleepHours, setSleepHours] = useState(7);
+
   // Persist app state whenever it changes
   useEffect(() => {
     window.localStorage.setItem(
@@ -97,8 +103,21 @@ export function AppProvider({ children }) {
       setFitnessSettings,
       morningChecklist,
       setMorningChecklist,
+      // Morning check-in modal
+      showMorningCheckin,
+      setShowMorningCheckin,
+      morningStep,
+      setMorningStep,
+      energyScore,
+      setEnergyScore,
+      sleepHours,
+      setSleepHours,
     }),
-    [planningMode, quickAddOpen, notificationCenterOpen, energyState, fitnessSettings, morningChecklist],
+    [
+      planningMode, quickAddOpen, notificationCenterOpen,
+      energyState, fitnessSettings, morningChecklist,
+      showMorningCheckin, morningStep, energyScore, sleepHours,
+    ],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

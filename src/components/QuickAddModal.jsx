@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { routeCapture } from '../utils/routeCapture.js';
 
 const TYPES = ['task', 'meal', 'workout', 'note'];
 
@@ -20,8 +21,27 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
   const [duration, setDuration] = useState(INITIAL_STATE.duration);
   const [content, setContent] = useState(INITIAL_STATE.content);
   const [notesOpen, setNotesOpen] = useState(false);
+
+  // Command bar state
+  const [commandText, setCommandText] = useState('');
+
+  const commandRef = useRef(null);
   const titleRef = useRef(null);
   const contentRef = useRef(null);
+
+  // Routing suggestion from command bar
+  const routeSuggestion = useMemo(
+    () => commandText.trim() ? routeCapture(commandText) : null,
+    [commandText],
+  );
+
+  // Auto-select type from routing suggestion (only when user hasn't manually switched)
+  const [manualType, setManualType] = useState(false);
+  useEffect(() => {
+    if (routeSuggestion && !manualType) {
+      setType(routeSuggestion.type);
+    }
+  }, [routeSuggestion, manualType]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -32,6 +52,8 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
       setDuration(INITIAL_STATE.duration);
       setContent(INITIAL_STATE.content);
       setNotesOpen(false);
+      setCommandText('');
+      setManualType(false);
       return undefined;
     }
 
@@ -41,14 +63,15 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
     setDuration(INITIAL_STATE.duration);
     setContent(INITIAL_STATE.content);
     setNotesOpen(false);
+    setCommandText('');
+    setManualType(false);
 
     const frame = window.requestAnimationFrame(() => {
-      const focusTarget = type === 'note' ? contentRef.current : titleRef.current;
-      focusTarget?.focus();
+      commandRef.current?.focus();
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [isOpen, type]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -63,30 +86,15 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
 
   const config = useMemo(() => {
     if (type === 'task') {
-      return {
-        placeholder: 'What needs attention?',
-        submitLabel: 'Save task',
-      };
+      return { placeholder: 'What needs attention?', submitLabel: 'Save task' };
     }
-
     if (type === 'meal') {
-      return {
-        placeholder: 'What did you eat?',
-        submitLabel: 'Save meal',
-      };
+      return { placeholder: 'What did you eat?', submitLabel: 'Save meal' };
     }
-
     if (type === 'workout') {
-      return {
-        placeholder: 'Workout name',
-        submitLabel: 'Save workout',
-      };
+      return { placeholder: 'Workout name', submitLabel: 'Save workout' };
     }
-
-    return {
-      placeholder: 'Capture the thought…',
-      submitLabel: 'Save note',
-    };
+    return { placeholder: 'Capture the thought…', submitLabel: 'Save note' };
   }, [type]);
 
   if (!isOpen) return null;
@@ -95,19 +103,20 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
   function handleSubmit(event) {
     event.preventDefault();
 
-    const trimmedTitle = title.trim();
-    const trimmedContent = content.trim();
+    // Use commandText as title/content if specific fields are empty
+    const resolvedTitle = title.trim() || commandText.trim();
+    const resolvedContent = content.trim() || (type === 'note' ? commandText.trim() : '');
 
-    if (type !== 'note' && !trimmedTitle) return;
-    if (type === 'note' && !trimmedContent) return;
+    if (type !== 'note' && !resolvedTitle) return;
+    if (type === 'note' && !resolvedContent) return;
 
     onSubmit({
       type,
-      title: trimmedTitle,
+      title: resolvedTitle,
       notes: notes.trim(),
       tags: tags.split(',').map(tag => tag.trim()).filter(Boolean),
       duration: Number.parseInt(duration, 10),
-      content: trimmedContent,
+      content: resolvedContent,
     });
     onClose();
   }
@@ -119,6 +128,18 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
     }
   }
 
+  function handleCommandKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSubmit(event);
+    }
+  }
+
+  function handleManualTypeSwitch(newType) {
+    setType(newType);
+    setManualType(true);
+  }
+
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card quick-capture-card" onClick={event => event.stopPropagation()}>
@@ -127,6 +148,26 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close quick add">
             ×
           </button>
+        </div>
+
+        {/* Command bar */}
+        <div style={{ position: 'relative', marginBottom: '8px' }}>
+          <input
+            ref={commandRef}
+            className="brain-dump-input quick-capture-input"
+            value={commandText}
+            onChange={event => setCommandText(event.target.value)}
+            onKeyDown={handleCommandKeyDown}
+            placeholder="Type anything to capture…"
+          />
+          {routeSuggestion && (
+            <span
+              className="status-chip is-active"
+              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', pointerEvents: 'none' }}
+            >
+              → {routeSuggestion.label}
+            </span>
+          )}
         </div>
 
         <form className="quick-add-form" onSubmit={handleSubmit}>
@@ -197,7 +238,7 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
               key={item}
               type="button"
               className={`segment-button ${item === type ? 'is-active' : ''}`}
-              onClick={() => setType(item)}
+              onClick={() => handleManualTypeSwitch(item)}
             >
               {item}
             </button>
