@@ -20,10 +20,44 @@ const DEFAULT_ENERGY = {
 
 const DEFAULT_FITNESS_SETTINGS = {
   programType: 'hyrox',
-  selectedFrequency: '4-day',
-  programAnchor: 'Monday',
   programStartDate: new Date().toISOString().slice(0, 10),
+  trainingDays: '4-day',
+  raceDate: null,
+  raceName: '',
+  raceCategory: '',
+  fitnessLevel: '',
+  equipmentAccess: 'full-gym',
+  goalFinishTime: '',
+  currentWeeklyMileage: null,
+  weakStations: [],
+  injuriesOrLimitations: '',
 };
+
+function migrateFitnessSettings(raw) {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_FITNESS_SETTINGS };
+
+  const trainingDays =
+    raw.trainingDays === '5-day' || raw.selectedFrequency === '5-day' ? '5-day' : '4-day';
+
+  return {
+    ...DEFAULT_FITNESS_SETTINGS,
+    programStartDate:
+      typeof raw.programStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.programStartDate)
+        ? raw.programStartDate
+        : DEFAULT_FITNESS_SETTINGS.programStartDate,
+    trainingDays,
+    ...(typeof raw.raceDate === 'string'              ? { raceDate: raw.raceDate }                           : {}),
+    ...(typeof raw.raceName === 'string'              ? { raceName: raw.raceName }                           : {}),
+    ...(typeof raw.raceCategory === 'string'          ? { raceCategory: raw.raceCategory }                   : {}),
+    ...(typeof raw.fitnessLevel === 'string'          ? { fitnessLevel: raw.fitnessLevel }                   : {}),
+    ...(typeof raw.equipmentAccess === 'string'       ? { equipmentAccess: raw.equipmentAccess }             : {}),
+    ...(typeof raw.goalFinishTime === 'string'        ? { goalFinishTime: raw.goalFinishTime }               : {}),
+    ...(Number.isFinite(raw.currentWeeklyMileage)     ? { currentWeeklyMileage: raw.currentWeeklyMileage }   : {}),
+    ...(Array.isArray(raw.weakStations)
+        ? { weakStations: raw.weakStations.filter(s => typeof s === 'string') }                              : {}),
+    ...(typeof raw.injuriesOrLimitations === 'string' ? { injuriesOrLimitations: raw.injuriesOrLimitations } : {}),
+  };
+}
 
 function getTodayDateKey() {
   return new Date().toISOString().slice(0, 10);
@@ -61,10 +95,9 @@ export function AppProvider({ children }) {
     ...DEFAULT_ENERGY,
     ...(saved?.energyState || {}),
   }));
-  const [fitnessSettings, setFitnessSettings] = useState(() => ({
-    ...DEFAULT_FITNESS_SETTINGS,
-    ...(saved?.fitnessSettings || {}),
-  }));
+  const [fitnessSettings, setFitnessSettings] = useState(() =>
+    migrateFitnessSettings(saved?.fitnessSettings),
+  );
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
 
   // Morning check-in modal state
