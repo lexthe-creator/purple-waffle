@@ -8,6 +8,8 @@ import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
+import { ProfileProvider } from './context/ProfileContext.jsx';
+import { ALL_STATIONS, getPhaseForWeek, getWeeklyTemplate } from './data/hyroxPlan.js';
 import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, FloatingActionButton, ExpandablePanel } from './components/ui/index.js';
 import './styles.css';
 
@@ -69,130 +71,6 @@ const FITNESS_SUBTABS = [
   { id: 'logging', label: 'Logging' },
 ];
 
-const FITNESS_PROGRAMS = {
-  hyrox: {
-    id: 'hyrox',
-    name: 'HYROX',
-    description: 'Hybrid prep with stations, strength, and runs.',
-    tags: ['Race prep', 'Hybrid', 'Engine'],
-    goalLabel: 'Race build',
-    countdownLabel: 'Race countdown',
-    focus: 'hybrid',
-    schedules: {
-      '4-day': [
-        { offset: 0, title: 'Strength + stations', detail: 'Lower body and sled patterning' },
-        { offset: 1, title: 'Run intervals', detail: 'Short repeats with controlled breathing' },
-        { offset: 3, title: 'Hybrid brick', detail: 'Mixed station work and tempo running' },
-        { offset: 5, title: 'Recovery reset', detail: 'Mobility, easy spin, and tissue work' },
-      ],
-      '5-day': [
-        { offset: 0, title: 'Strength + stations', detail: 'Heavy compound work' },
-        { offset: 1, title: 'Run intervals', detail: 'Quality speed work' },
-        { offset: 2, title: 'Engine builder', detail: 'Aerobic conditioning' },
-        { offset: 4, title: 'Hybrid brick', detail: 'Race-specific combinations' },
-        { offset: 5, title: 'Recovery reset', detail: 'Mobility and easy movement' },
-      ],
-    },
-  },
-  strength: {
-    id: 'strength',
-    name: 'Strength',
-    description: 'Progressive lifting with enough recovery to keep moving.',
-    tags: ['Lift', 'Progressive', 'Base'],
-    goalLabel: 'Strength build',
-    countdownLabel: null,
-    focus: 'strength',
-    schedules: {
-      '4-day': [
-        { offset: 0, title: 'Lower body', detail: 'Squat pattern and accessory work' },
-        { offset: 1, title: 'Upper body', detail: 'Press, pull, and trunk control' },
-        { offset: 3, title: 'Full body', detail: 'Compound lifts with moderate volume' },
-        { offset: 5, title: 'Recovery', detail: 'Walk, mobility, and reset' },
-      ],
-      '5-day': [
-        { offset: 0, title: 'Lower body', detail: 'Primary strength session' },
-        { offset: 1, title: 'Upper body', detail: 'Push and pull volume' },
-        { offset: 2, title: 'Power', detail: 'Explosive work and carries' },
-        { offset: 4, title: 'Full body', detail: 'Second heavy lift' },
-        { offset: 5, title: 'Recovery', detail: 'Mobility and tissue work' },
-      ],
-    },
-  },
-  running: {
-    id: 'running',
-    name: 'Running',
-    description: 'Mileage and quality work with compact recovery support.',
-    tags: ['Mileage', 'Intervals', 'Tempo'],
-    goalLabel: 'Race / mileage build',
-    countdownLabel: 'Goal countdown',
-    focus: 'running',
-    schedules: {
-      '4-day': [
-        { offset: 0, title: 'Easy run', detail: 'Aerobic base and cadence' },
-        { offset: 1, title: 'Intervals', detail: 'Threshold or VO2 reps' },
-        { offset: 3, title: 'Tempo', detail: 'Steady effort with pace control' },
-        { offset: 5, title: 'Long run', detail: 'The week’s mileage anchor' },
-      ],
-      '5-day': [
-        { offset: 0, title: 'Easy run', detail: 'Light aerobic volume' },
-        { offset: 1, title: 'Intervals', detail: 'Quality speed session' },
-        { offset: 2, title: 'Recovery jog', detail: 'Short shakeout' },
-        { offset: 4, title: 'Tempo', detail: 'Controlled steady effort' },
-        { offset: 5, title: 'Long run', detail: 'Mileage anchor' },
-      ],
-    },
-  },
-  pilates: {
-    id: 'pilates',
-    name: 'Pilates',
-    description: 'Core control, posture, and smooth movement quality.',
-    tags: ['Core', 'Mobility', 'Control'],
-    goalLabel: 'Movement quality',
-    countdownLabel: null,
-    focus: 'mobility',
-    schedules: {
-      '4-day': [
-        { offset: 0, title: 'Mat flow', detail: 'Core and breath-led control' },
-        { offset: 1, title: 'Stability', detail: 'Balance and trunk sequencing' },
-        { offset: 3, title: 'Reformer / flow', detail: 'Longer controlled session' },
-        { offset: 5, title: 'Recovery walk', detail: 'Light reset and mobility' },
-      ],
-      '5-day': [
-        { offset: 0, title: 'Mat flow', detail: 'Spine articulation and core' },
-        { offset: 1, title: 'Stability', detail: 'Single-leg control' },
-        { offset: 2, title: 'Mobility', detail: 'Restore range and posture' },
-        { offset: 4, title: 'Reformer / flow', detail: 'Longer session' },
-        { offset: 5, title: 'Recovery walk', detail: 'Easy movement' },
-      ],
-    },
-  },
-  recovery: {
-    id: 'recovery',
-    name: 'Recovery',
-    description: 'Restore first, then stack the next session.',
-    tags: ['Recovery', 'Reset', 'Low load'],
-    goalLabel: 'Restore',
-    countdownLabel: null,
-    focus: 'recovery',
-    schedules: {
-      '4-day': [
-        { offset: 0, title: 'Mobility', detail: 'Gentle full-body range work' },
-        { offset: 1, title: 'Easy walk', detail: 'Keep circulation moving' },
-        { offset: 3, title: 'Breath + mobility', detail: 'Short reset block' },
-        { offset: 5, title: 'Soft tissue', detail: 'Self-massage and unwind' },
-      ],
-      '5-day': [
-        { offset: 0, title: 'Mobility', detail: 'Gentle reset' },
-        { offset: 1, title: 'Easy walk', detail: 'Very low intensity' },
-        { offset: 2, title: 'Breath work', detail: 'Recovery emphasis' },
-        { offset: 4, title: 'Mobility', detail: 'Second reset touchpoint' },
-        { offset: 5, title: 'Soft tissue', detail: 'Unwind and prepare' },
-      ],
-    },
-  },
-};
-
-const FITNESS_PROGRAM_ORDER = ['hyrox', 'strength', 'running', 'pilates', 'recovery'];
 const FITNESS_FREQUENCIES = ['4-day', '5-day'];
 const FITNESS_ANCHORS = ['Sunday', 'Monday', 'Wednesday'];
 const WEEKDAY_INDEX = {
@@ -234,11 +112,25 @@ function formatCountdown(targetDate, now = new Date()) {
   return `${days} days`;
 }
 
-function getProgramPhase(weekNumber) {
-  if (weekNumber <= 2) return 'Base';
-  if (weekNumber <= 4) return 'Build';
-  if (weekNumber <= 6) return 'Peak';
-  return 'Taper';
+// Builds a program-compatible HYROX object for the given 1-based week number.
+// Uses A/B alternation (odd=A, even=B) and derives phase description from the
+// 32-week plan so existing helpers (buildWeeklySchedule, etc.) work unchanged.
+function buildHyroxProgramForWeek(weekNumber) {
+  const weekType = weekNumber % 2 === 1 ? 'A' : 'B';
+  const phase = getPhaseForWeek(weekNumber);
+  return {
+    id: 'hyrox',
+    name: 'HYROX',
+    description: phase.description,
+    tags: ['Race prep', 'Hybrid', 'Engine'],
+    goalLabel: 'Race build',
+    countdownLabel: 'Race countdown',
+    weekType,
+    schedules: {
+      '4-day': getWeeklyTemplate({ trainingDays: '4-day', weekType, weekNumber }),
+      '5-day': getWeeklyTemplate({ trainingDays: '5-day', weekType, weekNumber }),
+    },
+  };
 }
 
 function getWorkoutProgramKey(workout) {
@@ -1883,7 +1775,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const { workouts, notes, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
   const { energyState, setEnergyState, fitnessSettings, setFitnessSettings } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState('today');
-  const [selectedProgramId, setSelectedProgramId] = useState(() => fitnessSettings.selectedProgramId || 'strength');
   const [selectedFrequency, setSelectedFrequency] = useState(() => fitnessSettings.selectedFrequency || '4-day');
   const [programAnchor, setProgramAnchor] = useState(() => fitnessSettings.programAnchor || 'Monday');
   const [checkInDraft, setCheckInDraft] = useState(() => ({
@@ -1902,17 +1793,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }, [fitnessSettings.programStartDate, programAnchor, now]);
 
   // Persist fitness settings back to AppContext whenever they change
-  // Spread current to preserve programStartDate and any future fields
   useEffect(() => {
     setFitnessSettings(current => ({
       ...current,
-      selectedProgramId,
+      selectedProgramId: 'hyrox',
       selectedFrequency,
       programAnchor,
-      // Re-anchor the start date to the current anchor week when anchor changes
       programStartDate: toDateKey(alignDateToAnchor(now, programAnchor)),
     }));
-  }, [selectedProgramId, selectedFrequency, programAnchor]);
+  }, [selectedFrequency, programAnchor]);
 
   useEffect(() => {
     setCheckInDraft({
@@ -1928,32 +1817,17 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 
   const todayKey = toDateKey(now);
-  const activeProgramId = activeWorkout ? getWorkoutProgramKey(activeWorkout) : selectedProgramId;
-  const activeProgram = FITNESS_PROGRAMS[activeProgramId] || FITNESS_PROGRAMS.strength;
-  const weeklyStats = useMemo(() => getWorkoutStats(workouts, now, selectedProgramId), [workouts, now, selectedProgramId]);
   const programWeek = Math.max(1, Math.floor((startOfDay(now).getTime() - programStartDate.getTime()) / 86_400_000 / 7) + 1);
-  const programPhase = getProgramPhase(programWeek);
-  const programGoalDate = useMemo(() => {
-    if (activeProgramId === 'hyrox') return addDays(programStartDate, 42);
-    if (activeProgramId === 'running') return addDays(programStartDate, 28);
-    return null;
-  }, [activeProgramId, programStartDate]);
+  const programPhase = getPhaseForWeek(programWeek).name;
+  const activeProgram = useMemo(() => buildHyroxProgramForWeek(programWeek), [programWeek]);
+  const weeklyStats = useMemo(() => getWorkoutStats(workouts, now, 'hyrox'), [workouts, now]);
+  const programGoalDate = useMemo(() => addDays(programStartDate, 224), [programStartDate]);
   const programCountdown = programGoalDate ? formatCountdown(programGoalDate, now) : null;
   const weeklySchedule = useMemo(
     () => buildWeeklySchedule(activeProgram, selectedFrequency, programAnchor, now),
     [activeProgram, now, programAnchor, selectedFrequency],
   );
-  const programOptions = useMemo(
-    () => FITNESS_PROGRAM_ORDER.map(programId => FITNESS_PROGRAMS[programId]).filter(Boolean),
-    [],
-  );
-  const programLibrary = useMemo(
-    () => FITNESS_PROGRAM_ORDER.map(programId => ({
-      program: FITNESS_PROGRAMS[programId],
-      workouts: workouts.filter(workout => getWorkoutProgramKey(workout) === programId),
-    })),
-    [workouts],
-  );
+  const stationList = useMemo(() => Object.values(ALL_STATIONS), []);
   const workoutLogs = useMemo(() => workouts.filter(workout => workout.status !== 'completed' || sameDay(workout.createdAt, now)), [workouts, now]);
   const runLogs = useMemo(() => workouts.filter(workout => getWorkoutProgramKey(workout) === 'running'), [workouts]);
   const strengthLogs = useMemo(() => workouts.filter(workout => getWorkoutProgramKey(workout) === 'strength' || getWorkoutProgramKey(workout) === 'hyrox'), [workouts]);
@@ -1979,14 +1853,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const currentWorkout = useMemo(() => {
     if (activeWorkout) return activeWorkout;
     const scheduledToday = workouts.find(
-      w => w.scheduledDate === todayKey && w.programId === selectedProgramId && w.status !== 'completed',
+      w => w.scheduledDate === todayKey && w.programId === 'hyrox' && w.status !== 'completed',
     );
     if (scheduledToday) return scheduledToday;
-    return workouts.find(w => getWorkoutProgramKey(w) === selectedProgramId && w.status !== 'completed')
+    return workouts.find(w => getWorkoutProgramKey(w) === 'hyrox' && w.status !== 'completed')
       ?? workouts.find(w => w.status !== 'completed')
       ?? workouts[0]
       ?? null;
-  }, [activeWorkout, workouts, selectedProgramId, todayKey]);
+  }, [activeWorkout, workouts, todayKey]);
 
   // Sessions from this week that are overdue with no completed workout
   const missedSessions = useMemo(
@@ -1994,8 +1868,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     [activeProgram, selectedFrequency, programAnchor, workouts, now],
   );
   const unacknowledgedMisses = useMemo(
-    () => missedSessions.filter(s => !acknowledgedMisses.has(`${selectedProgramId}-${toDateKey(s.date)}`)),
-    [missedSessions, acknowledgedMisses, selectedProgramId],
+    () => missedSessions.filter(s => !acknowledgedMisses.has(`hyrox-${toDateKey(s.date)}`)),
+    [missedSessions, acknowledgedMisses],
   );
 
   // Set of scheduledDate strings with a completed workout (for marking the plan view)
@@ -2011,8 +1885,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   function startWorkout(workoutId) {
     const workout = workouts.find(item => item.id === workoutId);
     if (workout) {
-      const workoutProgramId = getWorkoutProgramKey(workout);
-      setSelectedProgramId(workoutProgramId);
       setSelectedFrequency(workout.frequency === '5-day' ? '5-day' : '4-day');
       if (FITNESS_ANCHORS.includes(workout.anchorDay)) {
         setProgramAnchor(workout.anchorDay);
@@ -2027,7 +1899,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             status: 'active',
             type: getWorkoutProgramKey(workout),
             programId: getWorkoutProgramKey(workout),
-            programName: FITNESS_PROGRAMS[getWorkoutProgramKey(workout)]?.name || workout.programName,
+            programName: workout.programName || 'HYROX',
           }
         : workout.status === 'active'
           ? { ...workout, status: 'planned' }
@@ -2076,15 +1948,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }
 
   function acceptRecoverySuggestion() {
-    setSelectedProgramId('recovery');
     setAcceptedRecovery(true);
     upsertNotification('Recovery accepted', 'Today is now recovery-first.');
-  }
-
-  function cycleProgram(direction = 1) {
-    const currentIndex = FITNESS_PROGRAM_ORDER.indexOf(selectedProgramId);
-    const nextIndex = (currentIndex + direction + FITNESS_PROGRAM_ORDER.length) % FITNESS_PROGRAM_ORDER.length;
-    setSelectedProgramId(FITNESS_PROGRAM_ORDER[nextIndex]);
   }
 
   // Creates a workout instance from today's scheduled session and starts it
@@ -2092,9 +1957,9 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     if (!todaySession) return;
     const newWorkout = createWorkout({
       name: todaySession.title,
-      programId: selectedProgramId,
-      programName: activeProgram.name,
-      type: selectedProgramId,
+      programId: 'hyrox',
+      programName: 'HYROX',
+      type: 'hyrox',
       scheduledDate: todayKey,
       sessionOffset: todaySession.offset,
       frequency: selectedFrequency,
@@ -2118,9 +1983,9 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     }
     const newWorkout = createWorkout({
       name: session.title,
-      programId: selectedProgramId,
-      programName: activeProgram.name,
-      type: selectedProgramId,
+      programId: 'hyrox',
+      programName: 'HYROX',
+      type: 'hyrox',
       scheduledDate: nextDate,
       sessionOffset: session.offset,
       frequency: selectedFrequency,
@@ -2132,13 +1997,13 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       ],
     });
     setWorkouts(current => [newWorkout, ...current]);
-    setAcknowledgedMisses(prev => new Set([...prev, `${selectedProgramId}-${toDateKey(session.date)}`]));
+    setAcknowledgedMisses(prev => new Set([...prev, `hyrox-${toDateKey(session.date)}`]));
     upsertNotification('Session rescheduled', `${session.title} moved to ${nextDate}`);
   }
 
   // Dismisses a missed session without rescheduling
   function skipMissedSession(session) {
-    setAcknowledgedMisses(prev => new Set([...prev, `${selectedProgramId}-${toDateKey(session.date)}`]));
+    setAcknowledgedMisses(prev => new Set([...prev, `hyrox-${toDateKey(session.date)}`]));
     upsertNotification('Session skipped', session.title);
   }
 
@@ -2152,11 +2017,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         <div className="task-card-header">
           <div>
             <p className="eyebrow">Fitness</p>
-            <h2>{activeProgram.name} program</h2>
+            <h2>HYROX program</h2>
           </div>
-          <button type="button" className="ghost-button compact-ghost" onClick={() => cycleProgram(1)}>
-            Change
-          </button>
         </div>
 
         <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness sections">
@@ -2299,7 +2161,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             ) : currentWorkout ? (
               <article className="feed-card">
                 <strong>{currentWorkout.name}</strong>
-                <p>{FITNESS_PROGRAMS[getWorkoutProgramKey(currentWorkout)]?.name || currentWorkout.programName || 'Workout'} · {currentWorkout.duration} min · {currentWorkout.status}</p>
+                <p>{currentWorkout.programName || 'HYROX'} · {currentWorkout.duration} min · {currentWorkout.status}</p>
                 <p>Week {programWeek} · {programPhase}</p>
                 <button type="button" className="secondary-button" onClick={() => startWorkout(currentWorkout.id)}>
                   {activeWorkout ? 'Continue Workout' : 'Start Workout'}
@@ -2331,11 +2193,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'plan' && (
         <>
           <section className="task-card">
-            <SectionHeader
-              eyebrow="Active program"
-              title={activeProgram.name}
-              action={<button type="button" className="ghost-button compact-ghost" onClick={() => cycleProgram(1)}>Change</button>}
-            />
+            <SectionHeader eyebrow="Active program" title={activeProgram.name} />
             <p className="empty-message">{activeProgram.description}</p>
             <div className="tag-row">
               {activeProgram.tags.map(tag => (
@@ -2345,6 +2203,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             <div className="ui-metrics-row">
               <MetricBlock value={programWeek} label="Current week" />
               <MetricBlock value={programPhase} label="Current phase" />
+              <MetricBlock value={`Week ${activeProgram.weekType}`} label="Week type" />
               <MetricBlock value={selectedFrequency} label="Frequency" />
             </div>
           </section>
@@ -2408,18 +2267,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </button>
               ))}
             </div>
-            <div className="tag-row">
-              {programOptions.map(program => (
-                <button
-                  key={program.id}
-                  type="button"
-                  className={`status-chip ${selectedProgramId === program.id ? 'is-active' : ''}`}
-                  onClick={() => setSelectedProgramId(program.id)}
-                >
-                  {program.name}
-                </button>
-              ))}
-            </div>
           </section>
 
           <section className="task-card">
@@ -2446,42 +2293,35 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'library' && (
         <>
           <section className="task-card">
-            <SectionHeader eyebrow="Workout library" title="Program-first templates" />
+            <SectionHeader eyebrow="HYROX stations" title="Race station overview" />
             <div className="subtle-feed">
-              {programLibrary.map(({ program, workouts: programWorkouts }) => (
+              {stationList.map(station => (
                 <ListRow
-                  key={program.id}
+                  key={station.key}
                   variant="card"
-                  label={program.name}
-                  sub={`${program.description} · ${programWorkouts.length} saved`}
+                  label={station.name}
+                  sub={`${station.raceDistance} ${station.unit} · ${station.category}`}
                 />
               ))}
             </div>
           </section>
 
           <section className="task-card">
-            <SectionHeader eyebrow="Saved workouts" title="Templates and finishes" />
+            <SectionHeader eyebrow="Saved workouts" title="Completed sessions" />
             <div className="subtle-feed">
-              {programLibrary.some(entry => entry.workouts.length > 0) ? (
-                programLibrary.map(({ program, workouts: programWorkouts }) => (
-                  programWorkouts.length === 0 ? null : (
-                    <ListRow
-                      key={`${program.id}-saved`}
-                      variant="card"
-                      label={program.name}
-                      sub={programWorkouts.map(w => w.name).join(' · ')}
-                      trailing={
-                        <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedProgramId(program.id)}>
-                          View
-                        </button>
-                      }
-                    />
-                  )
+              {workoutLogs.filter(w => w.status === 'completed').length > 0 ? (
+                workoutLogs.filter(w => w.status === 'completed').slice(0, 5).map(workout => (
+                  <ListRow
+                    key={workout.id}
+                    variant="card"
+                    label={workout.name}
+                    sub={`${workout.programName || 'HYROX'} · ${workout.duration} min`}
+                  />
                 ))
               ) : (
                 <EmptyState
-                  title="No saved workouts yet"
-                  description="Program templates will show up here as workouts are captured."
+                  title="No completed workouts yet"
+                  description="Finished sessions will appear here as you log them."
                 />
               )}
             </div>
@@ -2565,10 +2405,7 @@ function MoreScreen({ now }) {
   const monthStart = useMemo(() => startOfMonth(now), [now]);
   const nextMonthStart = useMemo(() => startOfMonth(new Date(now.getFullYear(), now.getMonth() + 1, 1)), [now]);
   const unreadCount = notifications.filter(notification => !notification.read).length;
-  const activeWorkout = workouts.find(workout => workout.status === 'active') ?? null;
-  const latestWorkout = workouts[0] ?? null;
-  const activeProgramId = activeWorkout ? getWorkoutProgramKey(activeWorkout) : getWorkoutProgramKey(latestWorkout);
-  const activeProgram = FITNESS_PROGRAMS[activeProgramId] || FITNESS_PROGRAMS.strength;
+  const activeProgram = { name: 'HYROX', description: '32-week race preparation with stations, running, and hybrid sessions.' };
 
   const weeklyInsights = useMemo(() => {
     const weekTasks = tasks.filter(task => isWithinRange(task.createdAt, weekStart, nextWeekStart));
@@ -2597,7 +2434,7 @@ function MoreScreen({ now }) {
     };
   }, [meals, nextWeekStart, previousWeekStart, tasks, weekStart, workouts]);
 
-  const fitnessSummary = useMemo(() => getWorkoutStats(workouts, now, activeProgramId), [activeProgramId, now, workouts]);
+  const fitnessSummary = useMemo(() => getWorkoutStats(workouts, now, 'hyrox'), [now, workouts]);
   const dailyTaskSummary = useMemo(() => {
     const active = tasks.filter(task => task.status === 'active');
     const planned = tasks.filter(task => task.status === 'planned');
@@ -2929,11 +2766,13 @@ function AppShell() {
 
 function App() {
   return (
-    <TaskProvider>
-      <AppProvider>
-        <AppShell />
-      </AppProvider>
-    </TaskProvider>
+    <ProfileProvider>
+      <TaskProvider>
+        <AppProvider>
+          <AppShell />
+        </AppProvider>
+      </TaskProvider>
+    </ProfileProvider>
   );
 }
 
