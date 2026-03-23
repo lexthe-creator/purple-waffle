@@ -275,7 +275,7 @@ p {
 
 .tab-stack {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .nutrition-stack {
@@ -317,7 +317,7 @@ p {
 
 .task-card {
   border-radius: 22px;
-  padding: 12px;
+  padding: 14px;
   display: grid;
   gap: 10px;
 }
@@ -1185,13 +1185,12 @@ p {
   width: 100%;
   z-index: 50;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding: 10px max(10px, calc((100% - var(--content-max-width)) / 2 + 10px)) calc(env(safe-area-inset-bottom) + 12px);
   background: var(--nav-bg);
   border-top: 1px solid var(--border-nav);
   backdrop-filter: blur(16px);
-  box-shadow: var(--shadow-nav);
+  box-shadow: 0 -12px 32px rgba(31, 41, 51, 0.09);
 }
 
 .bottom-nav-button {
@@ -1380,7 +1379,7 @@ p {
 .dashboard-cards {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 @media (max-width: 480px) {
@@ -1392,8 +1391,8 @@ p {
 .dashboard-summary-card {
   background: var(--card);
   border: 1.5px solid var(--border);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: 18px;
+  padding: 14px;
   text-align: left;
   cursor: pointer;
   transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
@@ -1401,7 +1400,7 @@ p {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 110px;
+  min-height: 124px;
 }
 
 .dashboard-summary-card:hover {
@@ -1468,9 +1467,16 @@ p {
   line-height: 1.35;
   flex: 1;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.today-hero {
+  border-color: var(--primary-alpha-md);
+  background:
+    linear-gradient(180deg, rgba(47, 62, 92, 0.06), rgba(255, 255, 255, 0.92)),
+    var(--card);
 }
 
 .dsc-body-active {
