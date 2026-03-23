@@ -256,36 +256,15 @@ export function getPhaseForWeek(weekNumber) {
 export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
   const type = weekType ?? (weekNumber % 2 === 1 ? 'A' : 'B');
   if (!WEEKLY_TEMPLATES[type]?.[trainingDays]) {
-    console.warn('Invalid trainingDays or weekType', { trainingDays, type });
+    throw new Error(`Invalid HYROX config: ${type}, ${trainingDays}`);
   }
-  const sessions = WEEKLY_TEMPLATES[type]?.[trainingDays] ?? WEEKLY_TEMPLATES.A['4-day'];
+  const sessions = WEEKLY_TEMPLATES[type][trainingDays];
   return sessions.map(session => ({
     ...session,
     stations: session.stations.map(key => ALL_STATIONS[key]).filter(Boolean),
   }));
 }
 
-/**
- * Returns the session array for a given week with concrete Date objects attached.
- * startDate is the program's Week 1 Day 0 anchor (e.g. new Date('2026-01-05')).
- * Each returned session includes all fields from getWeeklyTemplate plus `date`.
- */
-export function buildWeeklySchedule({
-  trainingDays,
-  weekNumber,
-  startDate,
-}) {
-  const template = getWeeklyTemplate({ trainingDays, weekNumber });
-  const start = new Date(startDate);
-  return template.map(session => {
-    const date = new Date(start);
-    date.setDate(date.getDate() + session.offset + (weekNumber - 1) * 7);
-    return {
-      ...session,
-      date,
-    };
-  });
-}
 
 /**
  * Returns the current 1-based week number (1–32) relative to the program start date.
@@ -294,6 +273,16 @@ export function getCurrentWeek({ startDate, today = new Date() }) {
   const start = new Date(startDate);
   const diff = Math.floor((today - start) / (1000 * 60 * 60 * 24));
   return Math.max(1, Math.min(32, Math.floor(diff / 7) + 1));
+}
+
+/**
+ * Returns a summary of plan state for a given week and training frequency.
+ */
+export function getPlanState({ trainingDays, weekNumber }) {
+  const phase = getPhaseForWeek(weekNumber);
+  const sessions = getWeeklyTemplate({ trainingDays, weekNumber });
+  const label = `Week ${weekNumber} · ${phase.name}`;
+  return { week: weekNumber, phase, sessions, label };
 }
 
 /**
