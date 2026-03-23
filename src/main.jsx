@@ -4,7 +4,6 @@ import AppFrame from './components/AppFrame.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
-import WeeklyPreview from './components/WeeklyPreview.jsx';
 import InboxView from './views/InboxView.jsx';
 import FinanceScreen from './views/FinanceScreen.jsx';
 import MorningCheckinModal from './components/MorningCheckinModal.jsx';
@@ -41,7 +40,7 @@ const NUTRITION_SLOTS = [
 const ROOT_TABS = [
   {
     id: 'home',
-    label: 'Home',
+    label: 'Plan',
     iconPath: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><polyline points="9 21 9 12 15 12 15 21"/>',
   },
   {
@@ -63,11 +62,6 @@ const ROOT_TABS = [
     id: 'finance',
     label: 'Finance',
     iconPath: '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>',
-  },
-  {
-    id: 'more',
-    label: 'More',
-    iconPath: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
   },
 ];
 
@@ -845,33 +839,15 @@ function SettingsSheet({ isOpen, onClose }) {
   );
 }
 
-function daysUntilDue(lastDone, intervalDays) {
-  if (!lastDone) return -intervalDays;
-  const last = new Date(lastDone);
-  const due = new Date(last.getTime() + intervalDays * 24 * 60 * 60 * 1000);
-  const now = new Date();
-  return Math.round((due - now) / (24 * 60 * 60 * 1000));
-}
+function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToFitness, weeklyItems }) {
+  const { tasks, setTasks, notes, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
+  const { energyState, setQuickAddOpen, fitnessSettings } = useAppContext();
 
-function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onSwitchToCalendar, onSwitchToFitness, weeklyItems }) {
-  const { tasks, setTasks, meals, notes, workouts, createTask, createSubtask, habits, setHabits } = useTaskContext();
-  const { morningChecklist, setMorningChecklist, energyState, setQuickAddOpen, setShowMorningCheckin } = useAppContext();
-  const { profile, setProfile } = useProfileContext();
-  const { groceryList, maintenanceHistory } = profile;
-
-  const [homeSubTab, setHomeSubTab] = useState('today');
   const [executionExpanded, setExecutionExpanded] = useState(true);
-  const [priorityExpanded, setPriorityExpanded] = useState(false);
   const [agendaExpanded, setAgendaExpanded] = useState(false);
   const [priorityMode, setPriorityMode] = useState(true);
   const [showCompleteAllConfirm, setShowCompleteAllConfirm] = useState(false);
-  const [checklistHidden, setChecklistHidden] = useState(false);
   const [draggingTaskId, setDraggingTaskId] = useState(null);
-  const [groceryInput, setGroceryInput] = useState('');
-  const [maintOpen, setMaintOpen] = useState(false);
-  const [maintLabel, setMaintLabel] = useState('');
-  const [maintInterval, setMaintInterval] = useState('30');
-  const checklistRef = useRef(null);
   const dragStateRef = useRef({
     taskId: null,
     pointerId: null,
@@ -889,31 +865,25 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
     return [...tasks].sort((a, b) => rank[a.status] - rank[b.status]);
   }, [tasks]);
 
-  const activeTasks = useMemo(() => orderedTasks.filter(t => t.status !== 'done'), [orderedTasks]);
-
-  const todaysMeals = useMemo(
-    () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
-    [meals, todayKey],
-  );
-
   const activeWorkout = useMemo(() => {
     if (!activeWorkoutId) return null;
     return workouts.find(w => w.id === activeWorkoutId) ?? null;
   }, [activeWorkoutId, workouts]);
-
-  const nextWorkout = useMemo(() => {
-    if (activeWorkout) return activeWorkout;
-    return workouts.find(w => w.status !== 'completed') ?? workouts[0] ?? null;
-  }, [activeWorkout, workouts]);
 
   const todayHabits = useMemo(
     () => habits.filter(h => h.frequency === 'daily' || h.frequency === 'weekly'),
     [habits],
   );
 
-  const MAX_PRIORITIES = 5;
-  const visiblePriorities = priorityExpanded ? activeTasks : activeTasks.slice(0, MAX_PRIORITIES);
-  const priorityOverflow = Math.max(0, activeTasks.length - visiblePriorities.length);
+  const planState = useMemo(
+    () => getPlanState({ startDate: fitnessSettings.programStartDate, trainingDays: fitnessSettings.trainingDays }),
+    [fitnessSettings.programStartDate, fitnessSettings.trainingDays],
+  );
+
+  const todaySession = useMemo(
+    () => planState.sessions.find(s => toDateKey(s.date) === todayKey) ?? null,
+    [planState.sessions, todayKey],
+  );
 
   const visibleExecutionTasks = executionExpanded ? orderedTasks : orderedTasks.slice(0, 3);
   const executionOverflowCount = Math.max(0, orderedTasks.length - visibleExecutionTasks.length);
@@ -962,12 +932,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
       }
     };
   }, []);
-
-  function toggleChecklistItem(id) {
-    setMorningChecklist(prev =>
-      prev.map(item => (item.id === id ? { ...item, done: !item.done } : item)),
-    );
-  }
 
   function preserveScroll(runUpdate) {
     const container = document.querySelector('.app-content');
@@ -1034,20 +998,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
     }));
   }
 
-  function moveTask(taskId, direction) {
-    preserveScroll(() => {
-      setTasks(current => {
-        const index = current.findIndex(t => t.id === taskId);
-        const nextIndex = index + direction;
-        if (index < 0 || nextIndex < 0 || nextIndex >= current.length) return current;
-        const next = [...current];
-        const [item] = next.splice(index, 1);
-        next.splice(nextIndex, 0, item);
-        return next;
-      });
-    });
-  }
-
   function reorderTask(taskId, targetId, placement = 'before') {
     preserveScroll(() => {
       setTasks(current => {
@@ -1112,74 +1062,9 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
     setDraggingTaskId(current => (current === taskId ? null : current));
   }
 
-  // ── Grocery helpers ────────────────────────────────────────────────────────
-  function addGroceryItem() {
-    const label = groceryInput.trim();
-    if (!label) return;
-    setProfile(p => ({ ...p, groceryList: [...p.groceryList, { id: `gr-${Date.now()}`, label, done: false }] }));
-    setGroceryInput('');
-  }
-
-  function toggleGroceryItem(id) {
-    setProfile(p => ({ ...p, groceryList: p.groceryList.map(item => item.id === id ? { ...item, done: !item.done } : item) }));
-  }
-
-  function removeGroceryItem(id) {
-    setProfile(p => ({ ...p, groceryList: p.groceryList.filter(item => item.id !== id) }));
-  }
-
-  function clearChecked() {
-    setProfile(p => ({ ...p, groceryList: p.groceryList.filter(item => !item.done) }));
-  }
-
-  // ── Maintenance helpers ────────────────────────────────────────────────────
-  function addMaintenanceItem() {
-    const label = maintLabel.trim();
-    const intervalDays = Number.parseInt(maintInterval, 10);
-    if (!label || !Number.isFinite(intervalDays) || intervalDays <= 0) return;
-    const key = `mt-${Date.now()}`;
-    setProfile(p => ({ ...p, maintenanceHistory: { ...p.maintenanceHistory, [key]: { id: key, label, intervalDays, lastDone: null } } }));
-    setMaintLabel('');
-    setMaintInterval('30');
-    setMaintOpen(false);
-  }
-
-  function markMaintenanceDone(key) {
-    setProfile(p => ({ ...p, maintenanceHistory: { ...p.maintenanceHistory, [key]: { ...p.maintenanceHistory[key], lastDone: toDateKey(new Date()) } } }));
-  }
-
-  function removeMaintenanceItem(key) {
-    setProfile(p => { const next = { ...p.maintenanceHistory }; delete next[key]; return { ...p, maintenanceHistory: next }; });
-  }
-
-  const maintItems = useMemo(
-    () => Object.values(maintenanceHistory).sort((a, b) => daysUntilDue(a.lastDone, a.intervalDays) - daysUntilDue(b.lastDone, b.intervalDays)),
-    [maintenanceHistory],
-  );
-  const checkedGroceryCount = groceryList.filter(i => i.done).length;
-
-  // ── Sub-tab render ────────────────────────────────────────────────────────
   return (
     <div className="tab-stack">
-
-      {/* Sub-tab selector */}
-      <div className="segmented-control" style={{ marginBottom: 4 }}>
-        {[{ id: 'today', label: 'Today' }, { id: 'plan', label: 'Plan' }, { id: 'home', label: 'Home' }].map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            className={`status-chip ${homeSubTab === id ? 'is-active' : ''}`}
-            onClick={() => setHomeSubTab(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── TODAY ── */}
-      {homeSubTab === 'today' && (
-        <>
-          <section className="task-card today-surface">
+      <section className="task-card today-surface">
             {/* Date + greeting */}
             <div className="today-zone">
               <p className="eyebrow">{formatFullDate(now)}</p>
@@ -1233,18 +1118,27 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
                   <span>{activeWorkout.name} in progress</span>
                   <span className="active-workout-banner-cta">Tap to return →</span>
                 </button>
-              ) : nextWorkout ? (
+              ) : (
                 <article className="contextual-card">
                   <div className="contextual-card-header">
-                    <p className="contextual-card-eyebrow">Fitness</p>
-                    <button type="button" className="ghost-button compact-ghost" onClick={() => onStartWorkout(nextWorkout.id)}>
-                      Start
+                    <p className="contextual-card-eyebrow">Fitness · {planState.label}</p>
+                    <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToFitness}>
+                      Details
                     </button>
                   </div>
-                  <strong className="contextual-card-title">{nextWorkout.name}</strong>
-                  <p className="contextual-card-subtitle">{nextWorkout.duration} min</p>
+                  {todaySession ? (
+                    <>
+                      <strong className="contextual-card-title">{todaySession.title}</strong>
+                      <p className="contextual-card-subtitle">{todaySession.detail}</p>
+                      {todaySession.stations.length > 0 && (
+                        <p className="contextual-card-subtitle">{todaySession.stations.map(s => s.name).join(' · ')}</p>
+                      )}
+                    </>
+                  ) : (
+                    <strong className="contextual-card-title">Rest day</strong>
+                  )}
                 </article>
-              ) : null}
+              )}
             </div>
 
             {/* Top tasks execution list */}
@@ -1347,349 +1241,6 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onStartWorkout, onS
               Capture
             </button>
           </div>
-        </>
-      )}
-
-      {/* ── PLAN ── */}
-      {homeSubTab === 'plan' && (
-        <>
-          <section className="task-card today-surface">
-            {/* Header */}
-            <div className="today-zone" ref={checklistRef}>
-              <p className="eyebrow">{formatFullDate(now)}</p>
-              <h2 style={{ margin: '2px 0 0' }}>{getGreeting(now)}</h2>
-            </div>
-
-            {/* Get to first value checklist */}
-            <div className="today-zone">
-              <div className="gtfv-card">
-                <div className="gtfv-header">
-                  <p className="eyebrow" style={{ margin: 0 }}>Get to first value</p>
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => setChecklistHidden(h => !h)}>
-                    {checklistHidden ? 'Show' : 'Hide'}
-                  </button>
-                </div>
-                {!checklistHidden && (
-                  <>
-                    <p className="gtfv-subtitle">Finish the setup loop once, then let the day run itself.</p>
-                    <ul className="gtfv-list">
-                      {morningChecklist.map(item => (
-                        <li
-                          key={item.id}
-                          className={`gtfv-item${item.done ? ' is-done' : ''}`}
-                          onClick={() => toggleChecklistItem(item.id)}
-                        >
-                          <span className={`gtfv-indicator${item.done ? ' is-checked' : ''}`}>
-                            {item.done ? (
-                              <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                                <polyline points="1,6 4,10 11,2" />
-                              </svg>
-                            ) : '•'}
-                          </span>
-                          <span className="checklist-label">{item.label}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Daily execution zone */}
-            <div className="today-zone">
-              <div className="daily-exec-header">
-                <p className="eyebrow" style={{ margin: 0 }}>Daily Execution</p>
-              </div>
-              <div className="daily-exec-title-row">
-                <h2 className="daily-exec-heading">Plan first, execute once the list is real</h2>
-                <button type="button" className="ghost-button compact-ghost" style={{ flexShrink: 0 }} onClick={() => setQuickAddOpen(true)}>
-                  Quick Capture
-                </button>
-              </div>
-              <p className="planning-subtext">{formatFullDate(now)} · selected date</p>
-              <p className="planning-subtext" style={{ marginTop: 0 }}>Editable priorities with reorder and cleanup.</p>
-              <div className="ui-metrics-row" style={{ marginBottom: 12 }}>
-                <MetricBlock value={energyState.value != null ? `${energyState.value}/5` : '—'} label="Energy" />
-                <MetricBlock value={energyState.sleepHours != null ? `${energyState.sleepHours}h` : '—'} label="Sleep" />
-                <MetricBlock value={inboxCount} label="Inbox" />
-              </div>
-              {activeTasks.length === 0 ? (
-                <EmptyState title="No priorities yet" description="Add the tasks that define the day." />
-              ) : (
-                visiblePriorities.map(task => (
-                  <ExecutionTaskItem
-                    key={task.id}
-                    task={task}
-                    onUpdateTask={updateTask}
-                    onDeleteTask={deleteTask}
-                    onToggleDone={toggleTaskDone}
-                    onToggleSubtask={toggleSubtask}
-                    onAddSubtask={addSubtask}
-                    onSetStatus={setTaskStatus}
-                    onMoveUp={() => moveTask(task.id, -1)}
-                    onMoveDown={() => moveTask(task.id, 1)}
-                    onStartDrag={startTaskDrag}
-                    onMoveDrag={moveTaskDrag}
-                    onEndDrag={endTaskDrag}
-                    isDragging={draggingTaskId === task.id}
-                    mode="planning"
-                  />
-                ))
-              )}
-              <InlineTaskComposer defaultPriority={priorityMode} onSubmit={addInlineTask} />
-            </div>
-
-            {/* Next meal */}
-            <div className="today-zone">
-              <article className="contextual-card">
-                <div className="contextual-card-header">
-                  <p className="contextual-card-eyebrow">Next meal</p>
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
-                    {todaysMeals.length === 0 ? 'Plan meal' : 'Add another'}
-                  </button>
-                </div>
-                {todaysMeals.length === 0 ? (
-                  <>
-                    <strong className="contextual-card-title">Breakfast still open</strong>
-                    <p className="contextual-card-subtitle">Use templates or quick logging</p>
-                  </>
-                ) : (
-                  <>
-                    <strong className="contextual-card-title">{todaysMeals[0].name}</strong>
-                    {todaysMeals[0].tags.length > 0 && (
-                      <p className="contextual-card-subtitle">{todaysMeals[0].tags.join(' · ')}</p>
-                    )}
-                  </>
-                )}
-              </article>
-            </div>
-
-            {/* Today's workout */}
-            <div className="today-zone">
-              <article className="contextual-card">
-                <div className="contextual-card-header">
-                  <p className="contextual-card-eyebrow">Today&apos;s workout</p>
-                  {nextWorkout ? (
-                    <button type="button" className="ghost-button compact-ghost" onClick={() => onStartWorkout(nextWorkout.id)}>
-                      Start
-                    </button>
-                  ) : (
-                    <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>Add workout</button>
-                  )}
-                </div>
-                {nextWorkout ? (
-                  <>
-                    <strong className="contextual-card-title">{nextWorkout.name}</strong>
-                    <p className="contextual-card-subtitle">{nextWorkout.duration} min</p>
-                  </>
-                ) : (
-                  <strong className="contextual-card-title">No workout planned</strong>
-                )}
-              </article>
-            </div>
-
-            {/* Task flow */}
-            <div className="today-zone">
-              <article className="contextual-card">
-                <div className="contextual-card-header">
-                  <p className="contextual-card-eyebrow">Task flow</p>
-                </div>
-                {activeTasks.length > 0 ? (
-                  <strong className="contextual-card-title">{activeTasks.length} queued</strong>
-                ) : (
-                  <>
-                    <strong className="contextual-card-title">Nothing queued</strong>
-                    <p className="contextual-card-subtitle">Capture or schedule a task</p>
-                  </>
-                )}
-              </article>
-            </div>
-
-            {/* Habits */}
-            <div className="today-zone">
-              <article className="contextual-card">
-                <div className="contextual-card-header">
-                  <p className="contextual-card-eyebrow">Habits</p>
-                </div>
-                {todayHabits.length === 0 ? (
-                  <strong className="contextual-card-title">No habits set up yet</strong>
-                ) : (
-                  <ul className="gtfv-list">
-                    {todayHabits.map(habit => {
-                      const doneToday = habit.completedDates.includes(todayStr);
-                      return (
-                        <li
-                          key={habit.id}
-                          className={`gtfv-item${doneToday ? ' is-done' : ''}`}
-                          onClick={() => toggleHabit(habit.id)}
-                        >
-                          <span className={`gtfv-indicator${doneToday ? ' is-checked' : ''}`}>
-                            {doneToday ? (
-                              <svg viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                                <polyline points="1,6 4,10 11,2" />
-                              </svg>
-                            ) : '•'}
-                          </span>
-                          <span className="checklist-label">{habit.title}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </article>
-            </div>
-          </section>
-
-          {/* Plan toolbar */}
-          <div className="dashboard-toolbar">
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setShowMorningCheckin(true)}>
-              Morning check-in
-            </button>
-            <button type="button" className="ghost-button compact-ghost" onClick={() => setQuickAddOpen(true)}>
-              Brain Dump
-            </button>
-            <button type="button" className="ghost-button compact-ghost" onClick={onSwitchToCalendar}>
-              Open Calendar
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* ── HOME ── */}
-      {homeSubTab === 'home' && (
-        <div className="screen-content">
-          {/* Grocery list */}
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Shopping</p>
-                <h2>Grocery list</h2>
-              </div>
-              {checkedGroceryCount > 0 && (
-                <button type="button" className="ghost-button compact-ghost" onClick={clearChecked}>
-                  Clear checked
-                </button>
-              )}
-            </div>
-            <div className="quick-entry-row" style={{ marginBottom: '12px' }}>
-              <input
-                className="brain-dump-input"
-                placeholder="Add item…"
-                value={groceryInput}
-                onChange={e => setGroceryInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addGroceryItem(); } }}
-                style={{ flex: 1 }}
-              />
-              <button type="button" className="secondary-button" onClick={addGroceryItem}>Add</button>
-            </div>
-            {groceryList.length === 0 ? (
-              <p className="empty-hint">Your grocery list is empty.</p>
-            ) : (
-              <ul className="plain-list">
-                {groceryList.map(item => (
-                  <li key={item.id} className="list-row" style={{ alignItems: 'center' }}>
-                    <button
-                      type="button"
-                      className={`status-chip ${item.done ? 'is-active' : ''}`}
-                      style={{ minWidth: '20px', height: '20px', borderRadius: '4px', padding: '0 6px', fontSize: '12px' }}
-                      onClick={() => toggleGroceryItem(item.id)}
-                      aria-label={item.done ? `Uncheck ${item.label}` : `Check ${item.label}`}
-                    >
-                      {item.done ? '✓' : ''}
-                    </button>
-                    <span
-                      className="list-row-label"
-                      style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? 'var(--muted)' : 'inherit' }}
-                    >
-                      {item.label}
-                    </span>
-                    <button
-                      type="button"
-                      className="icon-button"
-                      style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--muted)' }}
-                      onClick={() => removeGroceryItem(item.id)}
-                      aria-label={`Remove ${item.label}`}
-                    >
-                      ×
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Maintenance tracker */}
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Upkeep</p>
-                <h2>Maintenance tracker</h2>
-              </div>
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setMaintOpen(o => !o)}>
-                {maintOpen ? 'Cancel' : '+ Add'}
-              </button>
-            </div>
-            {maintOpen && (
-              <div className="inline-collapse" style={{ marginBottom: '12px' }}>
-                <input
-                  className="brain-dump-input"
-                  placeholder="Task (e.g. Change air filter)"
-                  value={maintLabel}
-                  onChange={e => setMaintLabel(e.target.value)}
-                />
-                <input
-                  className="brain-dump-input"
-                  type="number"
-                  min="1"
-                  placeholder="Repeat every N days"
-                  value={maintInterval}
-                  onChange={e => setMaintInterval(e.target.value)}
-                />
-                <button type="button" className="primary-button full-width" onClick={addMaintenanceItem}>
-                  Save task
-                </button>
-              </div>
-            )}
-            {maintItems.length === 0 ? (
-              <p className="empty-hint">No maintenance tasks yet. Add recurring home tasks above.</p>
-            ) : (
-              <ul className="plain-list">
-                {maintItems.map(item => {
-                  const days = daysUntilDue(item.lastDone, item.intervalDays);
-                  const isOverdue = days < 0;
-                  const isDueSoon = days >= 0 && days <= 7;
-                  return (
-                    <li key={item.id} className="list-row" style={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: '4px' }}>
-                      <div style={{ flex: 1 }}>
-                        <span className="list-row-label">{item.label}</span>
-                        <span className="list-row-meta" style={{ display: 'block', fontSize: '12px', color: 'var(--muted)' }}>
-                          Every {item.intervalDays} days
-                          {item.lastDone ? ` · last done ${item.lastDone}` : ' · never done'}
-                        </span>
-                      </div>
-                      <span className={`status-pill ${isOverdue ? 'pill-danger' : isDueSoon ? 'pill-warning' : 'pill-ok'}`}>
-                        {isOverdue ? `${Math.abs(days)}d overdue` : days === 0 ? 'due today' : `${days}d`}
-                      </span>
-                      <button type="button" className="ghost-button compact-ghost" onClick={() => markMaintenanceDone(item.id)}>
-                        Done
-                      </button>
-                      <button
-                        type="button"
-                        className="icon-button"
-                        style={{ fontSize: '12px', color: 'var(--muted)' }}
-                        onClick={() => removeMaintenanceItem(item.id)}
-                        aria-label={`Remove ${item.label}`}
-                      >
-                        ×
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        </div>
-      )}
 
     </div>
   );
@@ -2350,9 +1901,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     () => getPlanState({ startDate: programStartDate, trainingDays: fitnessSettings.trainingDays }),
     [programStartDate, fitnessSettings.trainingDays],
   );
-  const { week: programWeek, phase, sessions: weeklySchedule, label: programLabel } = planState;
+  const { week: programWeek, phase, sessions: weeklySchedule } = planState;
   const programPhase = phase.name;
-  const weekType = programWeek % 2 === 1 ? 'A' : 'B';
   const weeklyStats = useMemo(() => getWorkoutStats(workouts, now, 'hyrox'), [workouts, now]);
   const programGoalDate = useMemo(() => {
     if (fitnessSettings.raceDate) return new Date(`${fitnessSettings.raceDate}T00:00:00`);
@@ -2693,6 +2243,9 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 <strong>{todaySession.title}</strong>
                 <p>HYROX · {todaySession.detail}</p>
                 <p>Week {programWeek} · {programPhase} · {fitnessSettings.trainingDays}</p>
+                {todaySession.stations.length > 0 && (
+                  <p className="empty-message">{todaySession.stations.map(s => s.name).join(' · ')}</p>
+                )}
                 <button type="button" className="secondary-button" onClick={startTodaysWorkout}>
                   Start Today&apos;s Workout
                 </button>
@@ -2742,7 +2295,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             <div className="ui-metrics-row">
               <MetricBlock value={programWeek} label="Current week" />
               <MetricBlock value={programPhase} label="Current phase" />
-              <MetricBlock value={`Week ${weekType}`} label="Week type" />
               <MetricBlock value={fitnessSettings.trainingDays} label="Frequency" />
             </div>
           </section>
@@ -2803,12 +2355,13 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 const sessionKey = toDateKey(session.date);
                 const isDone = completedScheduledDates.has(sessionKey);
                 const isToday = sessionKey === todayKey;
+                const stationNames = session.stations.length > 0 ? ` · ${session.stations.map(s => s.name).join(', ')}` : '';
                 return (
                   <ListRow
                     key={`${session.title}-${session.offset}`}
                     variant="card"
                     label={`${isDone ? '✓ ' : isToday ? '→ ' : ''}${session.dayLabel} · ${session.title}`}
-                    sub={`${session.dateLabel} · ${session.detail}`}
+                    sub={`${session.dateLabel} · ${session.detail}${stationNames}`}
                   />
                 );
               })}
@@ -2919,231 +2472,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           </section>
         </>
       )}
-    </div>
-  );
-}
-
-function MoreScreen({ now }) {
-  const { tasks, meals, notes, workouts, notifications } = useTaskContext();
-  const { energyState } = useAppContext();
-  const weekStart = useMemo(() => alignDateToAnchor(now, 'Monday'), [now]);
-  const nextWeekStart = useMemo(() => addDays(weekStart, 7), [weekStart]);
-  const previousWeekStart = useMemo(() => addDays(weekStart, -7), [weekStart]);
-  const monthStart = useMemo(() => startOfMonth(now), [now]);
-  const nextMonthStart = useMemo(() => startOfMonth(new Date(now.getFullYear(), now.getMonth() + 1, 1)), [now]);
-  const unreadCount = notifications.filter(notification => !notification.read).length;
-  const activeProgram = { name: 'HYROX', description: '32-week race preparation with stations, running, and hybrid sessions.' };
-
-  const weeklyInsights = useMemo(() => {
-    const weekTasks = tasks.filter(task => isWithinRange(task.createdAt, weekStart, nextWeekStart));
-    const previousWeekTasks = tasks.filter(task => isWithinRange(task.createdAt, previousWeekStart, weekStart));
-    const weekWorkouts = workouts.filter(workout => isWithinRange(workout.createdAt, weekStart, nextWeekStart));
-    const previousWeekWorkouts = workouts.filter(workout => isWithinRange(workout.createdAt, previousWeekStart, weekStart));
-    const weekMeals = meals.filter(meal => isWithinRange(meal.loggedAt, weekStart, nextWeekStart));
-    const previousWeekMeals = meals.filter(meal => isWithinRange(meal.loggedAt, previousWeekStart, weekStart));
-
-    const completedTasks = weekTasks.filter(task => task.status === 'done').length;
-    const completedWorkouts = weekWorkouts.filter(workout => workout.status === 'completed').length;
-    const mealsLogged = weekMeals.length;
-    const hydrationCount = weekMeals.filter(isHydrationMeal).length;
-    const hydrationTrend = hydrationCount - previousWeekMeals.filter(isHydrationMeal).length;
-    const taskTrend = completedTasks - previousWeekTasks.filter(task => task.status === 'done').length;
-    const workoutTrend = completedWorkouts - previousWeekWorkouts.filter(workout => workout.status === 'completed').length;
-
-    return {
-      completedTasks,
-      completedWorkouts,
-      mealsLogged,
-      hydrationCount,
-      hydrationTrend,
-      taskTrend,
-      workoutTrend,
-    };
-  }, [meals, nextWeekStart, previousWeekStart, tasks, weekStart, workouts]);
-
-  const fitnessSummary = useMemo(() => getWorkoutStats(workouts, now, 'hyrox'), [now, workouts]);
-  const dailyTaskSummary = useMemo(() => {
-    const active = tasks.filter(task => task.status === 'active');
-    const planned = tasks.filter(task => task.status === 'planned');
-    const completedToday = tasks.filter(task => task.status === 'done' && sameDay(task.createdAt, now));
-
-    return {
-      active,
-      planned,
-      completedToday,
-    };
-  }, [now, tasks]);
-
-  const monthlyTaskSummary = useMemo(() => {
-    const monthTasks = tasks.filter(task => isWithinRange(task.createdAt, monthStart, nextMonthStart));
-    return {
-      total: monthTasks.length,
-      active: monthTasks.filter(task => task.status === 'active').length,
-      planned: monthTasks.filter(task => task.status === 'planned').length,
-      done: monthTasks.filter(task => task.status === 'done').length,
-      preview: monthTasks.slice(0, 2),
-    };
-  }, [monthStart, nextMonthStart, tasks]);
-
-  const noteSummary = useMemo(() => {
-    const monthNotes = notes.filter(note => isWithinRange(note.createdAt, monthStart, nextMonthStart));
-    return {
-      latest: notes[0] ?? null,
-      monthCount: monthNotes.length,
-      preview: notes.slice(0, 2),
-    };
-  }, [monthStart, nextMonthStart, notes]);
-
-  const systemSummary = useMemo(() => {
-    const source =
-      energyState.sleepSource === 'integrated'
-        ? 'Integrated'
-        : energyState.sleepSource === 'manual'
-          ? 'Manual'
-          : energyState.sleepSource === 'last known'
-            ? 'Last known'
-            : 'Baseline';
-
-    return {
-      energy: Number.isFinite(energyState.value) ? energyState.value : 3,
-      sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
-      source,
-      lastCheckIn: energyState.lastCheckIn ? formatShortMonthDay(energyState.lastCheckIn) : 'No check-in yet',
-    };
-  }, [energyState.lastCheckIn, energyState.sleepHours, energyState.sleepSource, energyState.value]);
-
-  return (
-    <div className="tab-stack">
-      <Card>
-        <SectionHeader eyebrow="More" title="Summary and insights" />
-        <div className="ui-metrics-row">
-          <MetricBlock
-            value={weeklyInsights.completedTasks}
-            label="Tasks done"
-            trend={weeklyInsights.taskTrend !== 0 ? `${weeklyInsights.taskTrend >= 0 ? '+' : ''}${weeklyInsights.taskTrend} vs last wk` : undefined}
-            trendDir={weeklyInsights.taskTrend < 0 ? 'down' : 'up'}
-          />
-          <MetricBlock
-            value={weeklyInsights.completedWorkouts}
-            label="Workouts"
-            trend={weeklyInsights.workoutTrend !== 0 ? `${weeklyInsights.workoutTrend >= 0 ? '+' : ''}${weeklyInsights.workoutTrend}` : undefined}
-            trendDir={weeklyInsights.workoutTrend < 0 ? 'down' : 'up'}
-          />
-          <MetricBlock value={weeklyInsights.mealsLogged} label="Meals" />
-          <MetricBlock
-            value={weeklyInsights.hydrationCount}
-            label="Hydration"
-            trend={weeklyInsights.hydrationTrend !== 0 ? `${weeklyInsights.hydrationTrend >= 0 ? '+' : ''}${weeklyInsights.hydrationTrend}` : undefined}
-            trendDir={weeklyInsights.hydrationTrend < 0 ? 'down' : 'up'}
-          />
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="Fitness summary" title="Current program rollup" />
-        <div className="ui-metrics-row">
-          <MetricBlock value={activeProgram.name} label="Program" />
-          <MetricBlock value={fitnessSummary.workoutsCompleted} label="Workouts" />
-          <MetricBlock value={fitnessSummary.milesCompleted.toFixed(1)} label="Miles" />
-          <MetricBlock value={fitnessSummary.recoverySessions} label="Recovery" />
-        </div>
-        <p className="empty-message">Program focus: {activeProgram.description}</p>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="Daily tasks" title="Current task state" />
-        <div className="ui-metrics-row">
-          <MetricBlock value={dailyTaskSummary.active.length} label="Active" />
-          <MetricBlock value={dailyTaskSummary.planned.length} label="Planned" />
-          <MetricBlock value={dailyTaskSummary.completedToday.length} label="Done today" />
-        </div>
-        <div className="subtle-feed">
-          {dailyTaskSummary.active.length === 0 && dailyTaskSummary.planned.length === 0 ? (
-            <EmptyState
-              title="No tasks in motion"
-              description="Capture one from the top bar or keep this as a clean slate."
-            />
-          ) : (
-            [...dailyTaskSummary.active, ...dailyTaskSummary.planned].slice(0, 2).map(task => (
-              <ListRow
-                key={task.id}
-                variant="card"
-                label={task.title || 'Untitled task'}
-                sub={`${task.status} · ${task.subtasks.filter(st => st.done === false).length} open subtasks`}
-              />
-            ))
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="Monthly tasks" title="Lightweight month rollup" />
-        <div className="ui-metrics-row">
-          <MetricBlock value={monthlyTaskSummary.total} label="This month" />
-          <MetricBlock value={monthlyTaskSummary.active} label="Active" />
-          <MetricBlock value={monthlyTaskSummary.done} label="Done" />
-        </div>
-        <div className="subtle-feed">
-          {monthlyTaskSummary.preview.length === 0 ? (
-            <EmptyState
-              title="No month-level task data yet"
-              description="New tasks will start filling this rollup automatically."
-            />
-          ) : (
-            monthlyTaskSummary.preview.map(task => (
-              <ListRow
-                key={task.id}
-                variant="card"
-                label={task.title || 'Untitled task'}
-                sub={`${task.status} · created ${formatShortMonthDay(task.createdAt)}`}
-              />
-            ))
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="Notes rollup" title="Preview only" />
-        <div className="ui-metrics-row">
-          <MetricBlock value={notes.length} label="Notes" />
-          <MetricBlock value={noteSummary.monthCount} label="This month" />
-          <MetricBlock value={unreadCount} label="Unread" />
-        </div>
-        <div className="subtle-feed">
-          {noteSummary.preview.length > 0 ? (
-            noteSummary.preview.map(note => (
-              <ListRow
-                key={note.id}
-                variant="card"
-                label={note.content}
-                sub={formatShortMonthDay(note.createdAt)}
-              />
-            ))
-          ) : (
-            <EmptyState
-              title="No notes captured yet"
-              description="Notes roll up here once they exist; nothing else is managed here."
-            />
-          )}
-          {noteSummary.latest && (
-            <p className="empty-message">
-              Latest: {noteSummary.latest.content.slice(0, 60)}
-            </p>
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="System summary" title="Quick state check" />
-        <div className="ui-metrics-row">
-          <MetricBlock value={`${systemSummary.energy}/5`} label="Energy" />
-          <MetricBlock value={`${systemSummary.sleepHours}h`} label="Sleep" />
-          <MetricBlock value={unreadCount} label="Inbox" />
-        </div>
-        <p className="empty-message">
-          Source: {systemSummary.source} · last check-in {systemSummary.lastCheckIn}
-        </p>
-      </Card>
     </div>
   );
 }
@@ -3265,15 +2593,10 @@ function AppShell() {
           now={now}
           activeWorkoutId={activeWorkoutId}
           onStartWorkout={setActiveWorkoutId}
-          onSwitchToCalendar={() => setActiveTab('calendar')}
           onSwitchToFitness={() => setActiveTab('fitness')}
           weeklyItems={weeklyItems}
         />
       );
-    }
-
-    if (activeTab === 'more') {
-      return <MoreScreen now={now} />;
     }
 
     return null;
