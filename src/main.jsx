@@ -58,10 +58,10 @@ const ROOT_TABS = [
     label: 'Inbox',
     iconPath: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/>',
   },
-  {
-    id: 'home-screen',
-    label: 'Home',
-    iconPath: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 16 15 16 15 22"/>',
+ {
+    id: 'nutrition',
+    label: 'Nutrition',
+    iconPath: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>',
   },
 ];
 
@@ -362,8 +362,7 @@ function SettingsSheet({ isOpen, onClose }) {
     });
   }
 
-  const stationList = Object.values(ALL_STATIONS);
-  const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
+const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];  const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
 
   function handleExportData() {
     const exportKeys = [
@@ -923,6 +922,9 @@ function DashboardScreen({ inboxCount, now, activeWorkoutId, onSwitchToFitness, 
         </button>
 
       </div>
+
+      {/* Home content — grocery list and maintenance tracker */}
+      <HomeScreen />
     </div>
   );
 }
@@ -1697,8 +1699,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       mood: checkInDraft.mood,
       lastCheckIn: new Date().toISOString(),
     }));
-    upsertNotification('Fitness check-in saved', `${checkInDraft.mood} · ${checkInDraft.energy}/10`);
-    setAcceptedRecovery(false);
+upsertNotification('Fitness check-in saved', `${checkInDraft.mood} · ${checkInDraft.energy}/10`);    setAcceptedRecovery(false);
   }
 
   function skipCheckIn() {
@@ -2240,9 +2241,6 @@ function AppShell() {
       );
     }
 
-    if (activeTab === 'home-screen') {
-      return <HomeScreen />;
-    }
 
     return null;
   }, [activeTab, activeWorkoutId, now, setWeeklyItems, unreadNotifications.length, weeklyItems]);
