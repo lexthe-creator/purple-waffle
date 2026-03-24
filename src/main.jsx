@@ -87,17 +87,17 @@ const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
 const AVAILABLE_PROGRAMS = [
   {
     id: 'hyrox',
-    label: 'HYROX 32-week plan',
+    label: 'HYROX Plan',
     description: 'Current generator and plan views are fully wired for HYROX.',
   },
   {
     id: '5k',
-    label: '5K run builder',
+    label: '5K Run Builder',
     description: 'Available for program selection; full downstream UI is still being phased in.',
   },
   {
     id: 'strength',
-    label: 'Strength block',
+    label: 'Strength Block',
     description: 'Placeholder slot for upcoming multi-program planning support.',
   },
 ];
@@ -181,7 +181,8 @@ function inferWorkoutProgram(workout) {
   const rawType = typeof workout?.type === 'string' ? workout.type.toLowerCase() : '';
   const rawName = `${workout?.programName || workout?.name || ''}`.toLowerCase();
 
-  if (['hyrox', 'strength', 'running', 'pilates', 'recovery', 'hybrid', 'run'].includes(rawType)) return rawType;
+  if (rawType === 'run') return 'running';
+  if (['hyrox', 'strength', 'running', 'pilates', 'recovery', 'hybrid'].includes(rawType)) return rawType;
   if (rawName.includes('hyrox')) return 'hyrox';
   if (rawName.includes('pilates')) return 'pilates';
   if (rawName.includes('recover') || rawName.includes('mobility') || rawName.includes('stretch')) return 'recovery';
@@ -602,16 +603,16 @@ function SettingsScreen() {
           <ExpandablePanel header={<strong>Athlete Profile</strong>}>
             <div className="field-stack">
               <label className="field-stack compact-field">
-                <span>Fitness level</span>
+                <span>Training days per week</span>
                 <div className="segmented-control">
-                  {FITNESS_LEVELS.map(level => (
+                  {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
                     <button
-                      key={level}
+                      key={freq}
                       type="button"
-                      className={`status-chip ${draft.fitnessLevel === level ? 'is-active' : ''}`}
-                      onClick={() => patch('fitnessLevel', level)}
+                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                      onClick={() => patch('trainingDays', freq)}
                     >
-                      {level}
+                      {freq}
                     </button>
                   ))}
                 </div>
