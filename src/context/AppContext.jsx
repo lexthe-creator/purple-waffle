@@ -35,11 +35,20 @@ const DEFAULT_FITNESS_SETTINGS = {
 function migrateFitnessSettings(raw) {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_FITNESS_SETTINGS };
 
-  const trainingDays =
-    raw.trainingDays === '5-day' || raw.selectedFrequency === '5-day' ? '5-day' : '4-day';
+  const programType = ['hyrox', '5k', 'strength'].includes(raw.programType) ? raw.programType : DEFAULT_FITNESS_SETTINGS.programType;
+  const trainingDays = (() => {
+    const source = raw.trainingDays || raw.selectedFrequency;
+    if (programType === '5k') {
+      if (source === '3-day') return '3-day';
+      if (source === '5-day') return '5-day';
+      return '4-day';
+    }
+    return source === '5-day' ? '5-day' : '4-day';
+  })();
 
   return {
     ...DEFAULT_FITNESS_SETTINGS,
+    programType,
     programStartDate:
       typeof raw.programStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.programStartDate)
         ? raw.programStartDate
