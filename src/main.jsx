@@ -33,6 +33,7 @@ import {
   generateWorkout,
   hydrateWorkoutSession,
   getSwapCandidates,
+  getRecoveryAwareWorkoutSuggestions,
   resolveWeeklyTrainingPlan,
 } from './data/hubData.js';
 import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, ExpandablePanel } from './components/ui/index.js';
@@ -768,13 +769,27 @@ function TodayScreen({
   const { profile } = useProfileContext();
 
   const todayKey = toDateKey(now);
+  const athleteDefaults = profile?.athlete || {};
+  const workoutHistory = useMemo(
+    () => workouts.map(workout => ({
+      ...workout,
+      plannedDate: workout.plannedDate || workout.scheduledDate || null,
+    })),
+    [workouts],
+  );
   const planState = useMemo(
-    () => getPlanState({ startDate: fitnessSettings.programStartDate, trainingDays: fitnessSettings.trainingDays, today: now }),
-    [fitnessSettings.programStartDate, fitnessSettings.trainingDays, now],
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      today: now,
+      history: workoutHistory,
+      athleteDefaults,
+    }),
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.trainingDays, now, workoutHistory],
   );
 
   const todaysWorkout = useMemo(
-    () => planState.sessions.find(session => toDateKey(session.date) === todayKey) ?? null,
+    () => planState.sessions.find(session => session.status === 'today' || (session.status === 'moved' && session.movedToDate === todayKey)) ?? null,
     [planState.sessions, todayKey],
   );
 
@@ -790,6 +805,9 @@ function TodayScreen({
   );
   const hydrationCount = todaysMeals.filter(meal => Array.isArray(meal.tags) && meal.tags.includes('water')).length;
   const readiness = computeRecoveryState({ energyScore: energyState.value, sleepHours: energyState.sleepHours }, energyState.value, energyState.sleepHours);
+  const daysToRace = fitnessSettings.raceDate
+    ? Math.max(0, Math.round((startOfDay(`${fitnessSettings.raceDate}T00:00:00`) - startOfDay(now)) / 86_400_000))
+    : null;
   const planWorkout = useMemo(() => {
     if (!todaysWorkout) return null;
     const sessionName = todaysWorkout.label || todaysWorkout.title || 'Today\'s workout';
@@ -817,6 +835,19 @@ function TodayScreen({
     : todaysWorkout
       ? `${planState.phase.name} phase · ${planState.label}`
       : 'Use a recovery session to keep momentum on non-training days.';
+  const todaySuggestions = useMemo(
+    () => getRecoveryAwareWorkoutSuggestions(todaysWorkout, readiness, athleteDefaults),
+    [athleteDefaults, readiness, todaysWorkout],
+  );
+  const weeklyStrip = useMemo(
+    () => planState.sessions.map(session => ({
+      id: session.id || `${session.dateKey}-${session.label}`,
+      day: session.dayLabel,
+      label: session.label,
+      status: session.status,
+    })),
+    [planState.sessions],
+  );
 
   const workoutLaunch = () => {
     if (onStartWorkout && (todaysWorkout || planWorkout)) {
@@ -869,9 +900,67 @@ function TodayScreen({
             View plan
           </button>
         </div>
+        <div className="execution-summary-grid" style={{ marginTop: '12px' }}>
+          <div className="summary-tile">
+            <span>Race countdown</span>
+            <strong>{daysToRace === null ? 'Not set' : `${daysToRace}d`}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Readiness</span>
+            <strong>{readiness.level}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Week</span>
+            <strong>{planState.week}</strong>
+          </div>
+        </div>
+      </section>
+
+      {todaysWorkout?.winTheDayTargets?.length > 0 && (
+        <section className="task-card">
+          <SectionHeader eyebrow="Win the day" title="Do this now" />
+          <div className="subtle-feed">
+            {todaysWorkout.winTheDayTargets.map(target => (
+              <ListRow key={target} variant="card" label={target} sub={todaysWorkout.label} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="task-card">
+        <SectionHeader eyebrow="Weekly strip" title="Planned vs done" />
+        <div className="tag-row">
+          {weeklyStrip.map(day => (
+            <span
+              key={day.id}
+              className={`status-chip ${day.status === 'completed' ? 'is-active' : ''}`}
+              title={`${day.label} · ${day.status}`}
+            >
+              {day.day} {day.status === 'today' ? '•' : day.status === 'completed' ? '✓' : day.status === 'moved' ? '→' : day.status === 'missed' ? '!' : ''}
+            </span>
+          ))}
+        </div>
       </section>
 
       <div className="execution-stack">
+        <section className="task-card execution-summary-card">
+          <div className="task-card-header">
+            <div>
+              <p className="eyebrow">Workout suggestions</p>
+              <h2>Recovery-aware options</h2>
+            </div>
+          </div>
+          {todaySuggestions.length > 0 ? (
+            <div className="subtle-feed">
+              {todaySuggestions.map(item => (
+                <ListRow key={item.id} variant="card" label={item.title} sub={item.detail} />
+              ))}
+            </div>
+          ) : (
+            <p className="empty-message">No suggestions. Start with the planned workout.</p>
+          )}
+        </section>
+
         <section className="task-card execution-summary-card">
           <div className="task-card-header">
             <div>
@@ -1695,9 +1784,20 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 
   const todayKey = toDateKey(now);
+  const athleteDefaults = profile?.athlete || {};
+  const normalizedWorkoutHistory = useMemo(
+    () => workouts.map(workout => ({ ...workout, plannedDate: workout.plannedDate || workout.scheduledDate || null })),
+    [workouts],
+  );
   const planState = useMemo(
-    () => getPlanState({ startDate: fitnessSettings.programStartDate, trainingDays: fitnessSettings.trainingDays, today: now }),
-    [fitnessSettings.programStartDate, fitnessSettings.trainingDays, now],
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      today: now,
+      history: normalizedWorkoutHistory,
+      athleteDefaults,
+    }),
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.trainingDays, normalizedWorkoutHistory, now],
   );
   const weeklySchedule = planState.sessions;
   const programWeek = planState.week;
