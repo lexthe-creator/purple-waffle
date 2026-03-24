@@ -87,17 +87,17 @@ const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
 const AVAILABLE_PROGRAMS = [
   {
     id: 'hyrox',
-    label: 'HYROX 32-week plan',
+    label: 'HYROX Plan',
     description: 'Current generator and plan views are fully wired for HYROX.',
   },
   {
     id: '5k',
-    label: '5K run builder',
+    label: '5K Run Builder',
     description: 'Available for program selection; full downstream UI is still being phased in.',
   },
   {
     id: 'strength',
-    label: 'Strength block',
+    label: 'Strength Block',
     description: 'Placeholder slot for upcoming multi-program planning support.',
   },
 ];
@@ -181,7 +181,8 @@ function inferWorkoutProgram(workout) {
   const rawType = typeof workout?.type === 'string' ? workout.type.toLowerCase() : '';
   const rawName = `${workout?.programName || workout?.name || ''}`.toLowerCase();
 
-  if (['hyrox', 'strength', 'running', 'pilates', 'recovery', 'hybrid', 'run'].includes(rawType)) return rawType;
+  if (rawType === 'run') return 'running';
+  if (['hyrox', 'strength', 'running', 'pilates', 'recovery', 'hybrid'].includes(rawType)) return rawType;
   if (rawName.includes('hyrox')) return 'hyrox';
   if (rawName.includes('pilates')) return 'pilates';
   if (rawName.includes('recover') || rawName.includes('mobility') || rawName.includes('stretch')) return 'recovery';
@@ -505,168 +506,113 @@ function SettingsScreen() {
               </button>
             ))}
           </div>
-        </label>
-        <label className="field-stack compact-field">
-          <span>Equipment preferences</span>
-          <div className="segmented-control">
-            {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-              <button
-                key={eq}
-                type="button"
-                className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                onClick={() => patch('equipmentAccess', eq)}
-              >
-                {eq}
-              </button>
-            ))}
-          </div>
-        </label>
-      </div>
-    ),
-    athleteProfile: (
-      <div className="field-stack">
-        <label className="field-stack compact-field">
-          <span>Fitness level</span>
-          <div className="segmented-control">
-            {FITNESS_LEVELS.map(level => (
-              <button
-                key={level}
-                type="button"
-                className={`status-chip ${athleteDraft.fitnessLevel === level ? 'is-active' : ''}`}
-                onClick={() => patchAthlete('fitnessLevel', level)}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="field-stack compact-field">
-          <span>Weak stations</span>
-          <div className="tag-row">
-            {ALL_STATIONS.map(station => (
-              <button
-                key={station}
-                type="button"
-                className={`status-chip ${weakStations.includes(station) ? 'is-active' : ''}`}
-                onClick={() => toggleStation(station)}
-              >
-                {station}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="field-stack compact-field">
-          <span>Injuries or limitations</span>
-          <textarea
-            className="task-title-input"
-            rows={3}
-            value={draft.injuriesOrLimitations ?? ''}
-            onChange={e => patch('injuriesOrLimitations', e.target.value)}
-          />
-        </label>
-      </div>
-    ),
-    workCalendar: (
-      <div className="field-stack">
-        <label className="field-stack compact-field">
-          <span>Planning order</span>
-          <div className="segmented-control">
-            {['priority', 'time'].map(opt => (
-              <button
-                key={opt}
-                type="button"
-                className={`status-chip ${workCalendarPrefs.planningOrder === opt ? 'is-active' : ''}`}
-                onClick={() => setWorkCalendarPrefs(p => ({ ...p, planningOrder: opt }))}
-              >
-                {opt === 'priority' ? 'Priority first' : 'Chronological'}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="field-stack compact-field">
-          <span>Busy-block behavior</span>
-          <div className="segmented-control">
-            {['hard', 'soft'].map(opt => (
-              <button
-                key={opt}
-                type="button"
-                className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
-                onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
-              >
-                {opt === 'hard' ? 'Hard block' : 'Soft block'}
-              </button>
-            ))}
-          </div>
-        </label>
-      </div>
-    ),
-    nutrition: (
-      <div className="field-stack">
-        <label className="field-stack compact-field">
-          <span>Hydration goal (cups)</span>
-          <input
-            type="number"
-            min="1"
-            max="20"
-            className="task-title-input"
-            value={mealPrefs.hydrationGoal}
-            onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
-          />
-        </label>
-        <label className="field-stack compact-field">
-          <span>Dietary notes</span>
-          <textarea
-            className="task-title-input"
-            rows={3}
-            value={mealPrefs.dietaryNotes}
-            onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
-          />
-        </label>
-      </div>
-    ),
-    recoveryCalendar: (
-      <div className="field-stack">
-        <label className="field-stack compact-field">
-          <span>Preferred recovery session</span>
-          <div className="segmented-control">
-            {RECOVERY_SESSIONS.map(session => (
-              <button
-                key={session.id}
-                type="button"
-                className={`status-chip ${recoveryInputs.preferredSession === session.id ? 'is-active' : ''}`}
-                onClick={() => setRecoveryInputs(current => ({ ...current, preferredSession: session.id }))}
-              >
-                {session.name}
-              </button>
-            ))}
-          </div>
-        </label>
-        <p className="empty-message">
-          Saved patterns: {calendarPatterns.length}. Work-calendar block behavior is managed in the Work Calendar section.
-        </p>
-      </div>
-    ),
-    notifications: (
-      <div className="field-stack">
-        <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>Morning reminder</span>
-          <input
-            type="checkbox"
-            checked={notificationPrefs.morningReminder}
-            onChange={e => setNotificationPrefs(p => ({ ...p, morningReminder: e.target.checked }))}
-          />
-        </label>
-        <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>Workout reminder</span>
-          <input
-            type="checkbox"
-            checked={notificationPrefs.workoutReminder}
-            onChange={e => setNotificationPrefs(p => ({ ...p, workoutReminder: e.target.checked }))}
-          />
-        </label>
-      </div>
-    ),
-  };
+        </ExpandablePanel>
+
+        <div className="settings-section-divider" aria-hidden="true" />
+
+          <ExpandablePanel header={<strong>Athlete Profile</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Training days per week</span>
+                <div className="segmented-control">
+                  {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
+                    <button
+                      key={freq}
+                      type="button"
+                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                      onClick={() => patch('trainingDays', freq)}
+                    >
+                      {freq}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Weak stations</span>
+                <div className="tag-row">
+                  {ALL_STATIONS.map(station => (
+                    <button
+                      key={station}
+                      type="button"
+                      className={`status-chip ${weakStations.includes(station) ? 'is-active' : ''}`}
+                      onClick={() => toggleStation(station)}
+                    >
+                      {station}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Injuries or limitations</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  value={draft.injuriesOrLimitations ?? ''}
+                  onChange={e => patch('injuriesOrLimitations', e.target.value)}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          <ExpandablePanel header={<strong>Work Calendar</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Planning order</span>
+                <div className="segmented-control">
+                  {['priority', 'time'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      className={`status-chip ${workCalendarPrefs.planningOrder === opt ? 'is-active' : ''}`}
+                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, planningOrder: opt }))}
+                    >
+                      {opt === 'priority' ? 'Priority first' : 'Chronological'}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Busy-block behavior</span>
+                <div className="segmented-control">
+                  {['hard', 'soft'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
+                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
+                    >
+                      {opt === 'hard' ? 'Hard block' : 'Soft block'}
+                    </button>
+                  ))}
+                </div>
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          <ExpandablePanel header={<strong>Nutrition</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Hydration goal (cups)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  className="task-title-input"
+                  value={mealPrefs.hydrationGoal}
+                  onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Dietary notes</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  value={mealPrefs.dietaryNotes}
+                  onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
 
   return (
     <div className="tab-stack settings-page">
