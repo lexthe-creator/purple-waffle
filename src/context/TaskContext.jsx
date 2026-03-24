@@ -76,6 +76,7 @@ function createWorkout(overrides = {}) {
     type: 'hyrox',
     status: 'planned',
     scheduledDate: null,
+    plannedDate: null,
     sessionOffset: null,
     duration: 30,
     distanceMiles: 0,
@@ -88,6 +89,9 @@ function createWorkout(overrides = {}) {
       createExercise({ name: 'Main set', detail: '3 rounds' }),
       createExercise({ name: 'Cooldown', detail: 'Stretch + breathe' }),
     ],
+    workoutLog: null,
+    startedAt: null,
+    completedAt: null,
     createdAt: Date.now(),
     ...overrides,
   };
@@ -214,6 +218,11 @@ function normalizeWorkout(workout, index) {
     typeof rawScheduledDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawScheduledDate)
       ? rawScheduledDate
       : null;
+  const rawPlannedDate = workout?.plannedDate;
+  const plannedDate =
+    typeof rawPlannedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawPlannedDate)
+      ? rawPlannedDate
+      : null;
 
   return {
     id: workout?.id || generateId('workout'),
@@ -221,8 +230,9 @@ function normalizeWorkout(workout, index) {
     programId,
     programName: typeof workout?.programName === 'string' && workout.programName ? workout.programName : defaultProgramName,
     type: programId,
-    status: ['planned', 'active', 'completed'].includes(workout?.status) ? workout.status : 'planned',
+    status: ['planned', 'active', 'completed', 'skipped'].includes(workout?.status) ? workout.status : 'planned',
     scheduledDate,
+    plannedDate,
     sessionOffset: Number.isFinite(workout?.sessionOffset) ? workout.sessionOffset : null,
     duration: Number.isFinite(workout?.duration) ? workout.duration : 30,
     distanceMiles: Number.isFinite(workout?.distanceMiles) ? workout.distanceMiles : 0,
@@ -233,6 +243,9 @@ function normalizeWorkout(workout, index) {
     exercises: Array.isArray(workout?.exercises)
       ? workout.exercises.map(normalizeExercise)
       : [],
+    workoutLog: workout?.workoutLog && typeof workout.workoutLog === 'object' ? workout.workoutLog : null,
+    startedAt: Number.isFinite(workout?.startedAt) ? workout.startedAt : null,
+    completedAt: Number.isFinite(workout?.completedAt) ? workout.completedAt : null,
     createdAt: Number.isFinite(workout?.createdAt) ? workout.createdAt : Date.now() + index,
   };
 }

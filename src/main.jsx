@@ -231,23 +231,33 @@ function getCurrentWorkoutType(workout) {
 
 function createWorkoutFromSession({ createWorkout, createExercise, session, settings, todayKey }) {
   const sessionType = session?.type || 'hyrox';
+  const prescribedExercises = Array.isArray(session?.ex) && session.ex.length > 0
+    ? session.ex.map(item => createExercise({
+      name: item.n || 'Exercise',
+      detail: `${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`.trim(),
+      sets: Number.parseInt(item.s, 10) || null,
+      reps: typeof item.r === 'string' ? item.r : null,
+    }))
+    : [
+      createExercise({ name: 'Warm-up', detail: '5-10 min easy movement' }),
+      createExercise({ name: session.title || session.label || 'Main set', detail: session.detail || session.label || 'Training session', sets: 3 }),
+      createExercise({ name: 'Cooldown', detail: '5 min mobility' }),
+    ];
+  const scheduledDate = session?.dateKey || todayKey;
   const workout = createWorkout({
     name: session.label || session.title || 'HYROX Session',
     programId: 'hyrox',
     programName: 'HYROX 32-week plan',
     type: sessionType.includes('run') ? 'run' : sessionType.includes('hyrox') ? 'hyrox' : 'strength',
     status: 'planned',
-    scheduledDate: todayKey,
+    scheduledDate,
+    plannedDate: scheduledDate,
     sessionOffset: session.offset ?? null,
     trainingDays: settings.trainingDays,
     phase: session.phase || '',
     week: session.week || null,
     duration: session.duration || 45,
-    exercises: [
-      createExercise({ name: 'Warm-up', detail: '5-10 min easy movement' }),
-      createExercise({ name: session.title || session.label || 'Main set', detail: session.detail || session.label || 'Training session', sets: 3 }),
-      createExercise({ name: 'Cooldown', detail: '5 min mobility' }),
-    ],
+    exercises: prescribedExercises,
   });
 
   return {
@@ -817,7 +827,7 @@ function TodayScreen({
       title: todaysWorkout.title || sessionName,
       type: todaysWorkout.type || 'hyrox',
       duration: todaysWorkout.duration || 45,
-      ex: [],
+      ex: todaysWorkout.ex || [],
     }, readiness);
   }, [readiness, todayKey, todaysWorkout]);
 
@@ -868,6 +878,16 @@ function TodayScreen({
   const habitList = Array.isArray(profile.habits) ? profile.habits : [];
   const completedHabits = habitList.filter(habit => Array.isArray(habit.completedDates) && habit.completedDates.includes(todayKey));
   const habitPreview = habitList.slice(0, 2);
+  const todayWorkoutDone = workouts.some(workout => workout.scheduledDate === todayKey && workout.status === 'completed');
+  const proteinGoalMet = todaysMeals.reduce((total, meal) => total + (Number.isFinite(meal.protein) ? meal.protein : 0), 0) >= (mealPrefs.proteinGoal || 150);
+  const hydrationGoalMet = hydrationCount >= mealPrefs.hydrationGoal;
+  const recoveryDone = Number.isFinite(energyState.sleepHours) && energyState.sleepHours >= 7;
+  const winTheDayChecklist = [
+    { id: 'workout', label: 'Workout', done: todayWorkoutDone },
+    { id: 'protein', label: 'Protein goal', done: proteinGoalMet },
+    { id: 'hydration', label: 'Hydration', done: hydrationGoalMet },
+    { id: 'recovery', label: 'Recovery', done: recoveryDone },
+  ];
 
   return (
     <div className="tab-stack execution-home-stack">
@@ -914,13 +934,29 @@ function TodayScreen({
             <strong>{planState.week}</strong>
           </div>
         </div>
+
+        {todaysWorkout?.ex?.length > 0 && (
+          <div className="subtle-feed" style={{ marginTop: '12px' }}>
+            {todaysWorkout.ex.map((item, index) => (
+              <ListRow
+                key={`${item.n}-${index}`}
+                variant="card"
+                label={item.n}
+                sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
-      {todaysWorkout?.winTheDayTargets?.length > 0 && (
+      {(todaysWorkout?.winTheDayTargets?.length > 0 || winTheDayChecklist.length > 0) && (
         <section className="task-card">
           <SectionHeader eyebrow="Win the day" title="Do this now" />
           <div className="subtle-feed">
-            {todaysWorkout.winTheDayTargets.map(target => (
+            {winTheDayChecklist.map(item => (
+              <ListRow key={item.id} variant="card" label={`${item.done ? '✓' : '○'} ${item.label}`} />
+            ))}
+            {(todaysWorkout?.winTheDayTargets || []).map(target => (
               <ListRow key={target} variant="card" label={target} sub={todaysWorkout.label} />
             ))}
           </div>
@@ -1820,6 +1856,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     () => computeWeeklyAnalytics(workoutHistory, weekStartKey),
     [weekStartKey, workoutHistory],
   );
+  const weeklyCompletionSummary = useMemo(() => {
+    const completed = weeklySchedule.filter(session => session.status === 'completed').length;
+    const missed = weeklySchedule.filter(session => session.status === 'missed' || session.status === 'skipped').length;
+    const trainingMinutes = workouts
+      .filter(workout => workout.scheduledDate && weeklySchedule.some(session => session.dateKey === workout.scheduledDate) && workout.status === 'completed')
+      .reduce((total, workout) => total + (Number.isFinite(workout.duration) ? workout.duration : 0), 0);
+    return { completed, missed, trainingMinutes };
+  }, [weeklySchedule, workouts]);
 
   const recoveryState = useMemo(
     () => computeRecoveryState({ energyScore: checkInDraft.energy, sleepHours: checkInDraft.sleepHours }, checkInDraft.energy, checkInDraft.sleepHours),
@@ -1870,11 +1914,13 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
   function startWorkout(workoutId) {
     onStartWorkout(workoutId);
+    const startedAt = Date.now();
     setWorkouts(current => current.map(workout => (
       workout.id === workoutId
         ? {
             ...workout,
             status: 'active',
+            startedAt,
             type: getCurrentWorkoutType(workout),
             programId: 'hyrox',
             programName: workout.programName || 'HYROX 32-week plan',
@@ -1891,9 +1937,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     onStartWorkout(null);
   }
 
-  function completeWorkout() {
+  function completeWorkout(workoutLog) {
     if (!activeWorkoutId) return;
-    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'completed' } : workout)));
+    const completedAt = Date.now();
+    setWorkouts(current => current.map(workout => (
+      workout.id === activeWorkoutId
+        ? { ...workout, status: 'completed', completedAt, workoutLog: workoutLog || null }
+        : workout
+    )));
     upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
     onStartWorkout(null);
   }
@@ -1928,7 +1979,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       createExercise,
       session: todaySession,
       settings: fitnessSettings,
-      todayKey,
+      todayKey: todaySession.dateKey || todayKey,
     });
     setWorkouts(current => [sessionWorkout, ...current]);
     startWorkout(sessionWorkout.id);
@@ -1944,15 +1995,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       type: session.type,
       status: 'planned',
       scheduledDate: nextDate,
+      plannedDate: session.dateKey,
       sessionOffset: session.offset,
       trainingDays: fitnessSettings.trainingDays,
       phase: session.phase || '',
       week: programWeek,
-      exercises: [
-        createExercise({ name: 'Warm-up', detail: '5-10 min easy movement' }),
-        createExercise({ name: session.label || session.title, detail: session.detail || session.title, sets: 3 }),
-        createExercise({ name: 'Cooldown', detail: '5 min mobility' }),
-      ],
+      exercises: (session.ex || []).map(item => createExercise({
+        name: item.n || 'Exercise',
+        detail: `${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`.trim(),
+      })),
     });
     setWorkouts(current => [movedWorkout, ...current]);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
@@ -1960,8 +2011,55 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }
 
   function skipMissedSession(session) {
+    const skippedWorkout = createWorkout({
+      name: session.label || session.title,
+      programId: 'hyrox',
+      programName: 'HYROX 32-week plan',
+      type: session.type,
+      status: 'skipped',
+      scheduledDate: session.dateKey,
+      plannedDate: session.dateKey,
+      sessionOffset: session.offset,
+      trainingDays: fitnessSettings.trainingDays,
+      phase: session.phase || '',
+      week: programWeek,
+      duration: session.duration || 0,
+      exercises: [],
+    });
+    setWorkouts(current => [skippedWorkout, ...current]);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
     upsertNotification('Session skipped', session.label || session.title);
+  }
+
+  function updateWeeklySessionStatus(session, nextStatus) {
+    if (nextStatus === 'completed') {
+      const completedWorkout = createWorkoutFromSession({
+        createWorkout,
+        createExercise,
+        session,
+        settings: fitnessSettings,
+        todayKey: session.dateKey,
+      });
+      setWorkouts(current => [{ ...completedWorkout, status: 'completed', completedAt: Date.now() }, ...current]);
+      return;
+    }
+    if (nextStatus === 'skipped') {
+      skipMissedSession(session);
+    }
+  }
+
+  function moveWeeklySession(session, nextDate) {
+    const movedWorkout = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...session, dateKey: nextDate },
+      settings: fitnessSettings,
+      todayKey: nextDate,
+    });
+    setWorkouts(current => [
+      { ...movedWorkout, status: 'planned', plannedDate: session.dateKey, scheduledDate: nextDate },
+      ...current,
+    ]);
   }
 
   const selectedTrainingDays = getWeeklyTemplate({ trainingDays: fitnessSettings.trainingDays, weekNumber: programWeek }).length;
@@ -2118,6 +2216,18 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 <strong>{todaySession.label || todaySession.title}</strong>
                 <p>HYROX · {todaySession.detail || todaySession.title}</p>
                 <p>Week {programWeek} · {programPhase} · {fitnessSettings.trainingDays}</p>
+                {Array.isArray(todaySession.ex) && todaySession.ex.length > 0 && (
+                  <div className="subtle-feed" style={{ marginTop: '8px' }}>
+                    {todaySession.ex.map((item, index) => (
+                      <ListRow
+                        key={`${item.n}-${index}`}
+                        variant="card"
+                        label={item.n}
+                        sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
+                      />
+                    ))}
+                  </div>
+                )}
                 {getSessionStations(todaySession).length > 0 && (
                   <p className="empty-message">{getSessionStations(todaySession).map(station => station.name).join(' · ')}</p>
                 )}
@@ -2149,9 +2259,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             <SectionHeader eyebrow="Weekly stats" title="Training progress and trend" />
             <div className="ui-metrics-row">
               <MetricBlock value={weeklyAnalytics.sessionsLogged} label="Sessions" />
+              <MetricBlock value={weeklyCompletionSummary.completed} label="Completed" />
+              <MetricBlock value={weeklyCompletionSummary.missed} label="Missed" />
+              <MetricBlock value={weeklyCompletionSummary.trainingMinutes} label="Minutes" />
               <MetricBlock value={weeklyAnalytics.runMiles} label="Run mi" />
-              <MetricBlock value={weeklyAnalytics.strengthSessions} label="Strength" />
-              <MetricBlock value={weeklyAnalytics.hyroxSessions} label="HYROX" />
             </div>
             <p className="empty-message">
               Trend: {weeklyAnalytics.sessionsLogged >= 0 ? '+' : ''}{weeklyAnalytics.sessionsLogged} sessions this week.
@@ -2201,15 +2312,42 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             <div className="subtle-feed">
               {weeklySchedule.map(session => {
                 const stationNames = getSessionStations(session).map(station => station.name).join(', ');
-                const isToday = session.dateKey === todayKey;
-                const isDone = workouts.some(workout => workout.scheduledDate === session.dateKey && workout.status === 'completed');
+                const statusLabel = session.status === 'completed'
+                  ? 'Completed'
+                  : session.status === 'moved'
+                    ? `Moved → ${session.movedToDate}`
+                    : session.status === 'skipped'
+                      ? 'Skipped'
+                      : session.status === 'missed'
+                        ? 'Missed'
+                        : session.status === 'today'
+                          ? 'Today'
+                          : 'Planned';
                 return (
-                  <ListRow
-                    key={`${session.title}-${session.dateKey}`}
-                    variant="card"
-                    label={`${isDone ? '✓ ' : isToday ? '→ ' : ''}${session.dayLabel} · ${session.label || session.title}`}
-                    sub={`${session.dateLabel} · ${session.detail || session.title}${stationNames ? ` · ${stationNames}` : ''}`}
-                  />
+                  <article key={`${session.title}-${session.dateKey}`} className="feed-card">
+                    <strong>{session.dayLabel} · {session.label || session.title}</strong>
+                    <p>{session.dateLabel} · {session.detail || session.title}{stationNames ? ` · ${stationNames}` : ''}</p>
+                    <div className="tag-row" style={{ marginTop: '8px' }}>
+                      <span className="status-pill">{statusLabel}</span>
+                      {['planned', 'today', 'missed'].includes(session.status) && (
+                        <>
+                          <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'completed')}>
+                            Mark done
+                          </button>
+                          <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'skipped')}>
+                            Skip
+                          </button>
+                          <button
+                            type="button"
+                            className="status-chip"
+                            onClick={() => moveWeeklySession(session, toDateKey(addDays(new Date(`${session.dateKey}T00:00:00`), 1)))}
+                          >
+                            Move +1d
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </article>
                 );
               })}
             </div>
@@ -2580,11 +2718,12 @@ function AppShell() {
   }
 
   function startTodayWorkout(session) {
-    const existingTodayWorkout = workouts.find(workout => workout.scheduledDate === toDateKey(now) && workout.status !== 'completed');
+    const existingTodayWorkout = workouts.find(workout => workout.scheduledDate === toDateKey(now) && !['completed', 'skipped'].includes(workout.status));
     if (existingTodayWorkout) {
+      const startedAt = Date.now();
       setWorkouts(current => current.map(workout => (
         workout.id === existingTodayWorkout.id
-          ? { ...workout, status: 'active' }
+          ? { ...workout, status: 'active', startedAt }
           : workout.status === 'active'
             ? { ...workout, status: 'planned' }
             : workout
@@ -2608,7 +2747,7 @@ function AppShell() {
     });
 
     setWorkouts(current => [
-      { ...sessionWorkout, status: 'active' },
+      { ...sessionWorkout, status: 'active', startedAt: Date.now() },
       ...current.map(workout => (workout.status === 'active' ? { ...workout, status: 'planned' } : workout)),
     ]);
     setActiveWorkoutId(sessionWorkout.id);
