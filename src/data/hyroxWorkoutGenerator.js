@@ -59,7 +59,19 @@ const HYROX_PHASE_SESSION_SLOT_PATTERNS = {
       '5-day': ['hyrox_functional', 'hyrox_simulation', 'hyrox_functional', 'hyrox_simulation', 'hyrox_functional'],
     },
   },
+  taper: {
+    A: {
+      '4-day': ['hyrox_functional', 'hyrox_simulation', 'hyrox_functional', 'hyrox_functional'],
+      '5-day': ['hyrox_functional', 'hyrox_simulation', 'hyrox_functional', 'hyrox_functional', 'hyrox_simulation'],
+    },
+    B: {
+      '4-day': ['hyrox_functional', 'hyrox_functional', 'hyrox_simulation', 'hyrox_functional'],
+      '5-day': ['hyrox_functional', 'hyrox_functional', 'hyrox_simulation', 'hyrox_functional', 'hyrox_simulation'],
+    },
+  },
 };
+
+const HYROX_ANTI_REPEAT_LOOKBACK_WEEKS = 2;
 
 function normalizeTrainingDays(trainingDays) {
   return trainingDays === '5-day' ? '5-day' : '4-day';
@@ -120,21 +132,95 @@ export function getHyroxSessionSlotPattern({ phaseType, schedulePhase, weekType,
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
   const window = getPhaseWindow(schedulePhase, weekNumber);
   const libraryPhase = resolveLibraryPhase({ phaseType, schedulePhase }) || window.libraryPhase || 'foundation';
-  return HYROX_PHASE_SESSION_SLOT_PATTERNS[libraryPhase]?.[normalizedWeekType]?.[normalizedDays] || [];
+  const patternPhase = (schedulePhase || window.schedulePhase) === 'Taper' ? 'taper' : libraryPhase;
+  return HYROX_PHASE_SESSION_SLOT_PATTERNS[patternPhase]?.[normalizedWeekType]?.[normalizedDays]
+    || HYROX_PHASE_SESSION_SLOT_PATTERNS[libraryPhase]?.[normalizedWeekType]?.[normalizedDays]
+    || [];
 }
 
 export function getHyroxWorkoutPoolsByPhase(phaseType, schedulePhase, weekNumber) {
   const window = getPhaseWindow(schedulePhase, weekNumber);
-  const libraryPhase = resolveLibraryPhase({ phaseType, schedulePhase }) || window.libraryPhase || 'foundation';
-  const workouts = HYROX_WORKOUT_LIBRARY[libraryPhase] || [];
+  const resolvedSchedulePhase = schedulePhase || window.schedulePhase || null;
+  const libraryPhase = resolveLibraryPhase({ phaseType, schedulePhase: resolvedSchedulePhase }) || window.libraryPhase || 'foundation';
+  const workouts = resolvedSchedulePhase === 'Taper'
+    ? [...(HYROX_WORKOUT_LIBRARY.base || []), ...(HYROX_WORKOUT_LIBRARY.peak || [])]
+    : (HYROX_WORKOUT_LIBRARY[libraryPhase] || []);
   const pools = {
     libraryPhase,
-    schedulePhase: schedulePhase || window.schedulePhase || getHyroxSchedulePhaseForLibraryPhase(libraryPhase),
+    schedulePhase: resolvedSchedulePhase || getHyroxSchedulePhaseForLibraryPhase(libraryPhase),
     hyrox_functional: sortWorkoutPool(workouts.filter(workout => workout.sessionType === 'hyrox_functional')),
     hyrox_simulation: sortWorkoutPool(workouts.filter(workout => workout.sessionType === 'hyrox_simulation')),
   };
 
   return pools;
+}
+
+function resolveWorkoutPoolCap({ schedulePhase, pool, minUniqueNeeded = 1 }) {
+  if (schedulePhase !== 'Taper') return pool.length;
+  const taperCap = Math.max(minUniqueNeeded, Math.ceil(pool.length * 0.45));
+  return Math.min(pool.length, Math.max(1, taperCap));
+}
+
+function getRecentWorkoutIds({
+  phaseType,
+  schedulePhase,
+  weekType,
+  trainingDays,
+  weekNumber,
+  lookbackWeeks = HYROX_ANTI_REPEAT_LOOKBACK_WEEKS,
+}) {
+  if (!Number.isFinite(weekNumber) || weekNumber <= 1 || lookbackWeeks <= 0) {
+    return new Set();
+  }
+
+  const recentIds = new Set();
+  const normalizedDays = normalizeTrainingDays(trainingDays);
+  const slotCount = HYROX_TRAINING_DAY_SLOT_COUNTS[normalizedDays];
+
+  for (let offset = 1; offset <= lookbackWeeks; offset += 1) {
+    const priorWeekNumber = weekNumber - offset;
+    if (priorWeekNumber < 1) break;
+
+    const effectivePriorSchedulePhase = schedulePhase && schedulePhase !== 'Taper'
+      ? schedulePhase
+      : getPhaseWindow(null, priorWeekNumber).schedulePhase;
+    const priorWeekType = normalizeWeekType(weekType, priorWeekNumber);
+    const priorPools = getHyroxWorkoutPoolsByPhase(phaseType, effectivePriorSchedulePhase, priorWeekNumber);
+    const priorSlotPattern = getHyroxSessionSlotPattern({
+      phaseType: priorPools.libraryPhase,
+      schedulePhase: effectivePriorSchedulePhase || priorPools.schedulePhase,
+      weekType: priorWeekType,
+      trainingDays: normalizedDays,
+      weekNumber: priorWeekNumber,
+    });
+    const priorWindow = getPhaseWindow(effectivePriorSchedulePhase || priorPools.schedulePhase, priorWeekNumber);
+
+    for (let priorSlotIndex = 0; priorSlotIndex < slotCount; priorSlotIndex += 1) {
+      const priorSessionType = priorSlotPattern[priorSlotIndex] || 'hyrox_functional';
+      const priorPool = priorPools[priorSessionType] || [];
+      if (priorPool.length === 0) continue;
+
+      const priorPoolCap = resolveWorkoutPoolCap({
+        schedulePhase: effectivePriorSchedulePhase || priorWindow.schedulePhase || priorPools.schedulePhase,
+        pool: priorPool,
+        minUniqueNeeded: 1,
+      });
+      const priorPhaseWeekIndex = Math.max(0, priorWeekNumber - priorWindow.startWeek);
+      const priorSchedulePhase = effectivePriorSchedulePhase || priorWindow.schedulePhase || priorPools.schedulePhase;
+      const priorPhaseSeed = priorSchedulePhase === 'Taper'
+        ? 0
+        : priorPhaseWeekIndex * 2;
+      const priorSlotSeed = priorSlotIndex * 2;
+      const priorWeekTypeSeed = priorWeekType === 'B' ? 1 : 0;
+      const priorRotationIndex = (priorPhaseSeed + priorSlotSeed + priorWeekTypeSeed) % priorPoolCap;
+      const priorWorkout = priorPool[priorRotationIndex];
+      if (priorWorkout?.workoutId) {
+        recentIds.add(priorWorkout.workoutId);
+      }
+    }
+  }
+
+  return recentIds;
 }
 
 export function selectHyroxWorkoutForSlot({
@@ -144,6 +230,7 @@ export function selectHyroxWorkoutForSlot({
   trainingDays,
   weekNumber,
   slotIndex,
+  excludedWorkoutIds = null,
 }) {
   const pools = getHyroxWorkoutPoolsByPhase(phaseType, schedulePhase, weekNumber);
   const slotPattern = getHyroxSessionSlotPattern({
@@ -163,9 +250,40 @@ export function selectHyroxWorkoutForSlot({
   const phaseWeekIndex = Number.isFinite(weekNumber)
     ? Math.max(0, weekNumber - phaseWindow.startWeek)
     : 0;
-  const rotationIndex = (phaseWeekIndex + slotIndex + (normalizedWeekType === 'B' ? 1 : 0)) % pool.length;
-  const workout = pool[rotationIndex];
+  const requiredUniqueInWeek = slotPattern.filter(type => (type || 'hyrox_functional') === sessionType).length || 1;
   const resolvedSchedulePhase = schedulePhase || phaseWindow.schedulePhase || pools.schedulePhase;
+  const poolCap = resolveWorkoutPoolCap({
+    schedulePhase: resolvedSchedulePhase,
+    pool,
+    minUniqueNeeded: requiredUniqueInWeek,
+  });
+  const phaseSeed = resolvedSchedulePhase === 'Taper'
+    ? 0
+    : phaseWeekIndex * 2;
+  const slotSeed = slotIndex * 2;
+  const weekTypeSeed = normalizedWeekType === 'B' ? 1 : 0;
+  const baseRotationIndex = (phaseSeed + slotSeed + weekTypeSeed) % poolCap;
+  const recentIds = getRecentWorkoutIds({
+    phaseType,
+    schedulePhase: resolvedSchedulePhase,
+    weekType: normalizedWeekType,
+    trainingDays: normalizedDays,
+    weekNumber,
+  });
+  const candidateIndexes = Array.from({ length: poolCap }, (_, idx) => (baseRotationIndex + idx) % poolCap);
+  const chosenIndex = candidateIndexes.find((index) => {
+    const workoutId = pool[index]?.workoutId;
+    if (!workoutId) return false;
+    if (recentIds.has(workoutId)) return false;
+    if (excludedWorkoutIds?.has(workoutId)) return false;
+    return true;
+  })
+    ?? candidateIndexes.find((index) => {
+      const workoutId = pool[index]?.workoutId;
+      return Boolean(workoutId) && !excludedWorkoutIds?.has(workoutId);
+    })
+    ?? baseRotationIndex;
+  const workout = pool[chosenIndex];
 
   return {
     ...workout,
@@ -176,7 +294,7 @@ export function selectHyroxWorkoutForSlot({
     weekType: normalizedWeekType,
     weekNumber: Number.isFinite(weekNumber) ? weekNumber : null,
     slotIndex,
-    rotationIndex,
+    rotationIndex: chosenIndex,
   };
 }
 
@@ -197,6 +315,7 @@ export function generateHyroxWeeklyWorkoutSelection({
     trainingDays: normalizedDays,
     weekNumber,
   });
+  const weekUsedWorkoutIds = new Set();
 
   return Array.from({ length: slotCount }, (_, slotIndex) => {
     const workout = selectHyroxWorkoutForSlot({
@@ -206,7 +325,11 @@ export function generateHyroxWeeklyWorkoutSelection({
       trainingDays: normalizedDays,
       weekNumber,
       slotIndex,
+      excludedWorkoutIds: weekUsedWorkoutIds,
     });
+    if (workout?.workoutId) {
+      weekUsedWorkoutIds.add(workout.workoutId);
+    }
 
     return workout ? {
       ...workout,

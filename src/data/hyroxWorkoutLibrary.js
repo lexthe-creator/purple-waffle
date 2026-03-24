@@ -711,6 +711,44 @@ const PEAK_WORKOUTS = [
       block('b3', 'Finish', 29, '3 rounds: 20m carry + 8 sandbag lunges at race rhythm.', ['Farmers Carry', 'Sandbag Lunges']),
     ],
   }),
+  workout({
+    workoutId: 'peak-07',
+    phaseType: 'peak',
+    sessionType: 'hyrox_functional',
+    durationMinutes: 53,
+    intensity: 'hard',
+    warmupTemplateId: 'hyrox_functional_warmup',
+    cooldownTemplateId: 'hyrox_functional_cooldown',
+    tags: ['peak', 'transition', 'efficiency'],
+    loadLevel: 'moderate',
+    impactLevel: 'moderate',
+    hyroxStationsUsed: ['SkiErg', 'Farmers Carry', 'Wall Ball'],
+    progressionLevel: 4,
+    structure: [
+      block('b1', 'Primer', 10, 'Stride build-ups and SkiErg pacing rehearsal.'),
+      block('b2', 'Main set', 20, '4 rounds: 400m run + 500m SkiErg + 30m farmers carry.', ['SkiErg', 'Farmers Carry']),
+      block('b3', 'Finish', 23, '3 rounds: 10 wall balls + 200m run, smooth transitions.', ['Wall Ball']),
+    ],
+  }),
+  workout({
+    workoutId: 'peak-08',
+    phaseType: 'peak',
+    sessionType: 'hyrox_simulation',
+    durationMinutes: 55,
+    intensity: 'hard',
+    warmupTemplateId: 'hyrox_simulation_warmup',
+    cooldownTemplateId: 'hyrox_simulation_cooldown',
+    tags: ['peak', 'simulation', 'race_rhythm'],
+    loadLevel: 'moderate',
+    impactLevel: 'high',
+    hyroxStationsUsed: ['Sled Push', 'Sled Pull', 'Burpee Broad Jump', 'Sandbag Lunges'],
+    progressionLevel: 4,
+    structure: [
+      block('b1', 'Primer', 10, 'Transition rehearsal with race-pace breathing control.'),
+      block('b2', 'Main set', 21, '3 rounds: 500m run + 15m sled push + 15m sled pull.', ['Sled Push', 'Sled Pull']),
+      block('b3', 'Finish', 24, '3 rounds: 6 burpee broad jumps + 10 sandbag lunges at controlled race rhythm.', ['Burpee Broad Jump', 'Sandbag Lunges']),
+    ],
+  }),
 ];
 
 export const HYROX_WORKOUT_LIBRARY = {
@@ -726,20 +764,52 @@ export const HYROX_WORKOUT_COUNTS = Object.fromEntries(
 
 export const HYROX_WORKOUTS = Object.values(HYROX_WORKOUT_LIBRARY).flat();
 
-export function validateHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
+export const HYROX_LIBRARY_PHASE_TYPES = Object.freeze(Object.keys(PHASE_LABELS));
+export const HYROX_LIBRARY_SESSION_TYPES = Object.freeze(['hyrox_functional', 'hyrox_simulation', 'functional', 'simulation']);
+export const HYROX_LIBRARY_INTENSITIES = Object.freeze(['easy', 'moderate', 'hard', 'race']);
+export const HYROX_LIBRARY_REQUIRED_FIELDS = Object.freeze([
+  'workoutId',
+  'programType',
+  'phaseType',
+  'sessionType',
+  'durationMinutes',
+  'intensity',
+  'structure',
+  'warmupTemplateId',
+  'cooldownTemplateId',
+  'tags',
+  'loadLevel',
+  'impactLevel',
+  'hyroxStationsUsed',
+  'progressionLevel',
+  'shortVersionRule',
+]);
+
+export function auditHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
   const issues = [];
   const seenIds = new Set();
   const seenIdsByPhase = new Map();
 
   for (const [phaseType, workouts] of Object.entries(library)) {
-    if (!PHASE_LABELS[phaseType]) {
+    if (!HYROX_LIBRARY_PHASE_TYPES.includes(phaseType)) {
       issues.push(`Unknown phaseType: ${phaseType}`);
+      continue;
+    }
+
+    if (!Array.isArray(workouts)) {
+      issues.push(`Invalid workout bucket for phaseType: ${phaseType}`);
       continue;
     }
 
     seenIdsByPhase.set(phaseType, workouts.length);
 
     for (const workoutItem of workouts) {
+      for (const field of HYROX_LIBRARY_REQUIRED_FIELDS) {
+        if (!(field in workoutItem) || workoutItem[field] == null) {
+          issues.push(`Missing required field "${field}" on ${workoutItem.workoutId || '(unknown workout)'}`);
+        }
+      }
+
       if (seenIds.has(workoutItem.workoutId)) {
         issues.push(`Duplicate workoutId: ${workoutItem.workoutId}`);
       }
@@ -751,7 +821,7 @@ export function validateHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
       if (workoutItem.phaseType !== phaseType) {
         issues.push(`phaseType mismatch on ${workoutItem.workoutId}`);
       }
-      if (!isCompatibleHyroxSessionType(workoutItem.sessionType)) {
+      if (!HYROX_LIBRARY_SESSION_TYPES.includes(workoutItem.sessionType) || !isCompatibleHyroxSessionType(workoutItem.sessionType)) {
         issues.push(`Invalid sessionType on ${workoutItem.workoutId}`);
       }
       if (!HYROX_CANONICAL_SESSION_TYPES.includes(workoutItem.sessionTypeCanonical)) {
@@ -759,6 +829,9 @@ export function validateHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
       }
       if (!HYROX_LEGACY_SESSION_TYPES.includes(workoutItem.sessionTypeLegacy)) {
         issues.push(`Invalid legacy sessionType on ${workoutItem.workoutId}`);
+      }
+      if (!HYROX_LIBRARY_INTENSITIES.includes(workoutItem.intensity)) {
+        issues.push(`Invalid intensity on ${workoutItem.workoutId}`);
       }
       if (!HYROX_WARMUP_TEMPLATES[workoutItem.warmupTemplateId]) {
         issues.push(`Missing warmup template on ${workoutItem.workoutId}`);
@@ -792,4 +865,8 @@ export function validateHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
     issues,
     counts: Object.fromEntries(seenIdsByPhase.entries()),
   };
+}
+
+export function validateHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
+  return auditHyroxWorkoutLibrary(library);
 }
