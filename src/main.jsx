@@ -492,7 +492,7 @@ function SettingsScreen() {
             <label className="field-stack compact-field">
               <span>Training days per week</span>
               <div className="segmented-control">
-                {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
+                {['4-day', '5-day'].map(freq => (
                   <button
                     key={freq}
                     type="button"
