@@ -215,9 +215,14 @@ function mapHyroxWorkoutStructureToExercises(workout) {
     n: block.name || `Block ${index + 1}`,
     s: String(block.durationMinutes ?? 1),
     r: block.details || '',
-    note: Array.isArray(block.stationsUsed) && block.stationsUsed.length > 0
-      ? `Stations: ${block.stationsUsed.join(', ')}`
-      : '',
+    note: [
+      Array.isArray(block.stationsUsed) && block.stationsUsed.length > 0
+        ? `Stations: ${block.stationsUsed.join(', ')}`
+        : null,
+      block.selectedMovement?.displayName
+        ? `Selected movement: ${block.selectedMovement.displayName}`
+        : null,
+    ].filter(Boolean).join(' · '),
   }));
 }
 

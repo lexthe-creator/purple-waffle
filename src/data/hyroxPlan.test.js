@@ -60,6 +60,40 @@ test('generator emits the expected workout count for each training day mode', ()
   assert.equal(fiveDay.length, 5);
 });
 
+test('movement option blocks resolve deterministically and strip raw option arrays from output', () => {
+  const first = generateHyroxWeeklyWorkoutSelection({
+    trainingDays: '4-day',
+    weekNumber: 10,
+    weekType: 'A',
+    schedulePhase: 'Build',
+  });
+  const second = generateHyroxWeeklyWorkoutSelection({
+    trainingDays: '4-day',
+    weekNumber: 10,
+    weekType: 'A',
+    schedulePhase: 'Build',
+  });
+
+  assert.deepEqual(first.map(workout => workout.workoutId), second.map(workout => workout.workoutId));
+  const blocksWithSelections = first.flatMap(workout => workout.structure.filter(block => block.selectedMovementId));
+  assert.ok(blocksWithSelections.length > 0);
+  assert.ok(blocksWithSelections.every(block => !('movementOptions' in block)));
+  assert.ok(blocksWithSelections.every(block => typeof block.selectedMovementId === 'string' && block.selectedMovementId.length > 0));
+});
+
+test('movement options honor limited equipment profiles', () => {
+  const limited = generateHyroxWeeklyWorkoutSelection({
+    trainingDays: '4-day',
+    weekNumber: 24,
+    weekType: 'A',
+    schedulePhase: 'Peak',
+    equipmentProfile: 'limited_gym',
+  });
+  const limitedSelections = limited.flatMap(workout => workout.structure).filter(block => block.selectedMovement);
+  assert.ok(limitedSelections.length > 0);
+  assert.ok(limitedSelections.every((block) => ['dumbbell', 'bodyweight'].includes(block.selectedMovement.equipmentType)));
+});
+
 test('phase mapping is explicit and stable', () => {
   assert.equal(HYROX_SCHEDULE_PHASE_MAP.Base, 'foundation');
   assert.equal(HYROX_SCHEDULE_PHASE_MAP.Build, 'base');

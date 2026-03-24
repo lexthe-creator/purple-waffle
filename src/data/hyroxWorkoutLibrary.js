@@ -18,14 +18,29 @@ const PHASE_LABELS = {
 
 const SHORT_VERSION_RULE = 'Reduce total duration by about 25%, remove one round from the main set, and keep the same station order and intent.';
 
-function block(blockId, name, durationMinutes, details, stationsUsed = []) {
+function block(blockId, name, durationMinutes, details, stationsUsed = [], movementConfig = null) {
   return {
     blockId,
     name,
     durationMinutes,
     details,
     stationsUsed,
+    ...(movementConfig ? { ...movementConfig } : {}),
   };
+}
+
+function normalizeSubstitutionsByProfile(profileSubstitutions) {
+  return Object.fromEntries(
+    Object.entries(profileSubstitutions).map(([movementId, value]) => {
+      if (Array.isArray(value)) {
+        return [movementId, { preferredAlternatives: [...value], requiredFallbacks: [] }];
+      }
+      return [movementId, {
+        preferredAlternatives: [...(value?.preferredAlternatives || [])],
+        requiredFallbacks: [...(value?.requiredFallbacks || [])],
+      }];
+    }),
+  );
 }
 
 function workout(definition) {
@@ -40,7 +55,13 @@ function workout(definition) {
     sessionTypeLegacy: toLegacyHyroxSessionType(definition.sessionType),
     durationMinutes: definition.durationMinutes,
     intensity: definition.intensity,
-    structure: definition.structure.map(item => ({ ...item, stationsUsed: [...(item.stationsUsed || [])] })),
+    structure: definition.structure.map((item) => ({
+      ...item,
+      stationsUsed: [...(item.stationsUsed || [])],
+      movementOptions: item.movementOptions
+        ? item.movementOptions.map(option => ({ ...option, tags: [...(option.tags || [])] }))
+        : undefined,
+    })),
     warmupTemplateId: definition.warmupTemplateId,
     cooldownTemplateId: definition.cooldownTemplateId,
     tags: [...definition.tags],
@@ -99,7 +120,7 @@ export const HYROX_COOLDOWN_TEMPLATES = {
 };
 
 export const HYROX_SUBSTITUTIONS = {
-  full_gym: {
+  full_gym: normalizeSubstitutionsByProfile({
     'SkiErg': ['Row 1000m', 'Assault bike 45 calories'],
     'Sled Push': ['Heavy prowler push', 'Plate-loaded turf push'],
     'Sled Pull': ['Rope sled drag', 'Cable drag walk'],
@@ -108,8 +129,8 @@ export const HYROX_SUBSTITUTIONS = {
     'Farmers Carry': ['Heavy kettlebell carry', 'Trap bar carry'],
     'Sandbag Lunges': ['Front rack lunge', 'Goblet walking lunge'],
     'Wall Ball': ['Dumbbell thruster', 'Med ball squat throw'],
-  },
-  limited_gym: {
+  }),
+  limited_gym: normalizeSubstitutionsByProfile({
     'SkiErg': ['Row 1000m', 'Incline treadmill run 8 min'],
     'Sled Push': ['Treadmill push-off drive', 'Heavy walking lunge march'],
     'Sled Pull': ['Band row march', 'Backward treadmill walk'],
@@ -118,8 +139,8 @@ export const HYROX_SUBSTITUTIONS = {
     'Farmers Carry': ['Dumbbell suitcase carry', 'Front rack plate carry'],
     'Sandbag Lunges': ['Reverse lunges', 'Split squat tempo reps'],
     'Wall Ball': ['DB thruster', 'Air squat to reach'],
-  },
-  bodyweight: {
+  }),
+  bodyweight: normalizeSubstitutionsByProfile({
     'SkiErg': ['High knees', 'Mountain climbers'],
     'Sled Push': ['Wall drive march', 'Hill sprint'],
     'Sled Pull': ['Bear crawl drag', 'Prone towel row isometric'],
@@ -128,7 +149,7 @@ export const HYROX_SUBSTITUTIONS = {
     'Farmers Carry': ['Backpack bear hug march', 'March in place with brace'],
     'Sandbag Lunges': ['Walking lunges', 'Split squat isometric holds'],
     'Wall Ball': ['Tempo air squats', 'Squat to overhead reach'],
-  },
+  }),
 };
 
 const FOUNDATION_WORKOUTS = [
@@ -321,7 +342,15 @@ const BASE_WORKOUTS = [
     progressionLevel: 3,
     structure: [
       block('b1', 'Primer', 8, 'Row and squat prep.'),
-      block('b2', 'Main set', 18, '4 rounds: 500m row + 12 sandbag lunges + 10 wall balls.', ['Row', 'Sandbag Lunges', 'Wall Ball']),
+      block('b2', 'Main set', 18, '4 rounds: 500m row + 12 sandbag lunges + 10 wall balls.', ['Row', 'Sandbag Lunges', 'Wall Ball'], {
+        movementCategory: 'lunge',
+        movementOptions: [
+          { movementId: 'Sandbag Lunges', displayName: 'Sandbag Walking Lunge', equipmentType: 'bodyweight', tags: ['hyrox_station', 'unilateral'] },
+          { movementId: 'Front Rack Lunge', displayName: 'Front Rack Walking Lunge', equipmentType: 'barbell', tags: ['strength'] },
+          { movementId: 'Goblet Walking Lunge', displayName: 'Goblet Walking Lunge', equipmentType: 'dumbbell', tags: ['strength'] },
+        ],
+        defaultMovementId: 'Sandbag Lunges',
+      }),
       block('b3', 'Finish', 28, '2 x 9 min alternating row and wall ball with lunge insertions.', ['Row', 'Sandbag Lunges', 'Wall Ball']),
     ],
   }),
@@ -378,7 +407,15 @@ const BASE_WORKOUTS = [
     progressionLevel: 3,
     structure: [
       block('b1', 'Primer', 10, 'Run preparation and squat/press activation.'),
-      block('b2', 'Race block', 20, '4 rounds: 600m run + 12 wall balls + 10 sandbag lunges.', ['Wall Ball', 'Sandbag Lunges']),
+      block('b2', 'Race block', 20, '4 rounds: 600m run + 12 wall balls + 10 sandbag lunges.', ['Wall Ball', 'Sandbag Lunges'], {
+        movementCategory: 'wall_ball',
+        movementOptions: [
+          { movementId: 'Wall Ball', displayName: 'Wall Ball', equipmentType: 'bodyweight', tags: ['hyrox_station', 'squat', 'push'] },
+          { movementId: 'Dumbbell Thruster', displayName: 'Dumbbell Thruster', equipmentType: 'dumbbell', tags: ['squat', 'push'] },
+          { movementId: 'Barbell Thruster', displayName: 'Barbell Thruster', equipmentType: 'barbell', tags: ['squat', 'push'] },
+        ],
+        defaultMovementId: 'Wall Ball',
+      }),
       block('b3', 'Finish', 28, '2 x 10 min simulation block with a sled push insertion.', ['Sled Push', 'Wall Ball', 'Sandbag Lunges']),
     ],
   }),
@@ -397,7 +434,15 @@ const BASE_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 8, 'Brace, hinge, and squat prep.'),
-      block('b2', 'Main set', 18, '4 rounds: 15m sled push + 20m farmers carry + 8 lunges + 8 wall balls.', ['Sled Push', 'Farmers Carry', 'Sandbag Lunges', 'Wall Ball']),
+      block('b2', 'Main set', 18, '4 rounds: 15m sled push + 20m farmers carry + 8 lunges + 8 wall balls.', ['Sled Push', 'Farmers Carry', 'Sandbag Lunges', 'Wall Ball'], {
+        movementCategory: 'squat',
+        movementOptions: [
+          { movementId: 'Back Squat', displayName: 'Back Squat', equipmentType: 'barbell', tags: ['strength'] },
+          { movementId: 'Hack Squat', displayName: 'Hack Squat', equipmentType: 'machine', tags: ['strength'] },
+          { movementId: 'Goblet Squat', displayName: 'Goblet Squat', equipmentType: 'dumbbell', tags: ['strength'] },
+        ],
+        defaultMovementId: 'Back Squat',
+      }),
       block('b3', 'Finish', 31, '2 x 10 min mixed station flow with reduced rest.', ['Sled Push', 'Farmers Carry', 'Sandbag Lunges', 'Wall Ball']),
     ],
   }),
@@ -438,7 +483,15 @@ const BUILD_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 10, 'Race prep and sled rhythm.'),
-      block('b2', 'Simulation block', 22, '3 rounds: 500m run + 20m sled push + 20m sled pull.', ['Sled Push', 'Sled Pull']),
+      block('b2', 'Simulation block', 22, '3 rounds: 500m run + 20m sled push + 20m sled pull.', ['Sled Push', 'Sled Pull'], {
+        movementCategory: 'push',
+        movementOptions: [
+          { movementId: 'Sled Push', displayName: 'Sled Push', equipmentType: 'machine', tags: ['hyrox_station'] },
+          { movementId: 'Prowler Push', displayName: 'Prowler Push', equipmentType: 'machine', tags: ['strength'] },
+          { movementId: 'Heavy Walking Lunge March', displayName: 'Heavy Walking Lunge March', equipmentType: 'dumbbell', tags: ['strength', 'lunge'] },
+        ],
+        defaultMovementId: 'Sled Push',
+      }),
       block('b3', 'Finish', 28, '2 x 10 min burpee and sled density with shorter transitions.', ['Sled Push', 'Sled Pull', 'Burpee Broad Jump']),
     ],
   }),
@@ -457,7 +510,15 @@ const BUILD_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 8, 'Grip, gait, and squat prep.'),
-      block('b2', 'Main set', 20, '4 rounds: 40m carry + 16 sandbag lunges + 12 wall balls.', ['Farmers Carry', 'Sandbag Lunges', 'Wall Ball']),
+      block('b2', 'Main set', 20, '4 rounds: 40m carry + 16 sandbag lunges + 12 wall balls.', ['Farmers Carry', 'Sandbag Lunges', 'Wall Ball'], {
+        movementCategory: 'lunge',
+        movementOptions: [
+          { movementId: 'Sandbag Lunges', displayName: 'Sandbag Walking Lunge', equipmentType: 'bodyweight', tags: ['hyrox_station', 'unilateral'] },
+          { movementId: 'Reverse Lunge', displayName: 'Reverse Lunge', equipmentType: 'bodyweight', tags: ['unilateral'] },
+          { movementId: 'Front Rack Lunge', displayName: 'Front Rack Lunge', equipmentType: 'barbell', tags: ['strength'] },
+        ],
+        defaultMovementId: 'Sandbag Lunges',
+      }),
       block('b3', 'Finish', 33, '2 x 11 min carry/lunge/wall-ball flow.', ['Farmers Carry', 'Sandbag Lunges', 'Wall Ball']),
     ],
   }),
@@ -476,7 +537,15 @@ const BUILD_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 10, 'Run prep and squat-to-press rhythm.'),
-      block('b2', 'Main set', 22, '3 rounds: 800m run + 600m row + 15 wall balls.', ['Row', 'Wall Ball']),
+      block('b2', 'Main set', 22, '3 rounds: 800m run + 600m row + 15 wall balls.', ['Row', 'Wall Ball'], {
+        movementCategory: 'wall_ball',
+        movementOptions: [
+          { movementId: 'Wall Ball', displayName: 'Wall Ball', equipmentType: 'bodyweight', tags: ['hyrox_station', 'squat', 'push'] },
+          { movementId: 'Med Ball Squat Throw', displayName: 'Med Ball Squat Throw', equipmentType: 'bodyweight', tags: ['power'] },
+          { movementId: 'Dumbbell Thruster', displayName: 'Dumbbell Thruster', equipmentType: 'dumbbell', tags: ['squat', 'push'] },
+        ],
+        defaultMovementId: 'Wall Ball',
+      }),
       block('b3', 'Finish', 30, '2 x 10 min burpee, row, and wall-ball blend.', ['Row', 'Wall Ball', 'Burpee Broad Jump']),
     ],
   }),
@@ -533,7 +602,15 @@ const BUILD_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 8, 'Lower-body and grip prep.'),
-      block('b2', 'Main set', 22, '4 rounds: 30m carry + 12 lunges + 12 wall balls + 10m sled pull.', ['Farmers Carry', 'Sandbag Lunges', 'Wall Ball', 'Sled Pull']),
+      block('b2', 'Main set', 22, '4 rounds: 30m carry + 12 lunges + 12 wall balls + 10m sled pull.', ['Farmers Carry', 'Sandbag Lunges', 'Wall Ball', 'Sled Pull'], {
+        movementCategory: 'pull',
+        movementOptions: [
+          { movementId: 'Sled Pull', displayName: 'Sled Pull', equipmentType: 'machine', tags: ['hyrox_station'] },
+          { movementId: 'Rope Sled Drag', displayName: 'Rope Sled Drag', equipmentType: 'machine', tags: ['strength'] },
+          { movementId: 'Cable Drag Walk', displayName: 'Cable Drag Walk', equipmentType: 'machine', tags: ['strength'] },
+        ],
+        defaultMovementId: 'Sled Pull',
+      }),
       block('b3', 'Finish', 35, '2 x 12 min blended station flow with short recoveries.', ['Farmers Carry', 'Sandbag Lunges', 'Wall Ball', 'Sled Pull']),
     ],
   }),
@@ -650,7 +727,15 @@ const PEAK_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 10, 'Race prep and squat/press patterning.'),
-      block('b2', 'Main set', 18, '3 rounds: 600m row + 15 wall balls + 10 sandbag lunges.', ['Row', 'Wall Ball', 'Sandbag Lunges']),
+      block('b2', 'Main set', 18, '3 rounds: 600m row + 15 wall balls + 10 sandbag lunges.', ['Row', 'Wall Ball', 'Sandbag Lunges'], {
+        movementCategory: 'wall_ball',
+        movementOptions: [
+          { movementId: 'Wall Ball', displayName: 'Wall Ball', equipmentType: 'bodyweight', tags: ['hyrox_station', 'squat', 'push'] },
+          { movementId: 'Dumbbell Thruster', displayName: 'Dumbbell Thruster', equipmentType: 'dumbbell', tags: ['squat', 'push'] },
+          { movementId: 'Barbell Thruster', displayName: 'Barbell Thruster', equipmentType: 'barbell', tags: ['squat', 'push'] },
+        ],
+        defaultMovementId: 'Wall Ball',
+      }),
       block('b3', 'Finish', 29, '2 x 10 min wall-ball finish with lunge insertions.', ['Wall Ball', 'Sandbag Lunges']),
     ],
   }),
@@ -708,7 +793,15 @@ const PEAK_WORKOUTS = [
     structure: [
       block('b1', 'Primer', 10, 'Race prep and lower-body activation.'),
       block('b2', 'Main set', 20, '3 rounds: 500m run + 15m sled push + 6 burpee broad jumps.', ['Sled Push', 'Burpee Broad Jump']),
-      block('b3', 'Finish', 29, '3 rounds: 20m carry + 8 sandbag lunges at race rhythm.', ['Farmers Carry', 'Sandbag Lunges']),
+      block('b3', 'Finish', 29, '3 rounds: 20m carry + 8 sandbag lunges at race rhythm.', ['Farmers Carry', 'Sandbag Lunges'], {
+        movementCategory: 'lunge',
+        movementOptions: [
+          { movementId: 'Sandbag Lunges', displayName: 'Sandbag Walking Lunge', equipmentType: 'bodyweight', tags: ['hyrox_station'] },
+          { movementId: 'Split Squat Tempo', displayName: 'Split Squat Tempo Reps', equipmentType: 'bodyweight', tags: ['unilateral'] },
+          { movementId: 'Front Rack Lunge', displayName: 'Front Rack Lunge', equipmentType: 'barbell', tags: ['strength'] },
+        ],
+        defaultMovementId: 'Sandbag Lunges',
+      }),
     ],
   }),
   workout({
@@ -745,7 +838,15 @@ const PEAK_WORKOUTS = [
     progressionLevel: 4,
     structure: [
       block('b1', 'Primer', 10, 'Transition rehearsal with race-pace breathing control.'),
-      block('b2', 'Main set', 21, '3 rounds: 500m run + 15m sled push + 15m sled pull.', ['Sled Push', 'Sled Pull']),
+      block('b2', 'Main set', 21, '3 rounds: 500m run + 15m sled push + 15m sled pull.', ['Sled Push', 'Sled Pull'], {
+        movementCategory: 'push',
+        movementOptions: [
+          { movementId: 'Sled Push', displayName: 'Sled Push', equipmentType: 'machine', tags: ['hyrox_station'] },
+          { movementId: 'Prowler Push', displayName: 'Prowler Push', equipmentType: 'machine', tags: ['strength'] },
+          { movementId: 'Treadmill Push-Off Drive', displayName: 'Treadmill Push-Off Drive', equipmentType: 'bodyweight', tags: ['fallback'] },
+        ],
+        defaultMovementId: 'Sled Push',
+      }),
       block('b3', 'Finish', 24, '3 rounds: 6 burpee broad jumps + 10 sandbag lunges at controlled race rhythm.', ['Burpee Broad Jump', 'Sandbag Lunges']),
     ],
   }),
@@ -851,6 +952,31 @@ export function auditHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
       if (!Array.isArray(workoutItem.structure) || workoutItem.structure.length === 0) {
         issues.push(`Missing structure on ${workoutItem.workoutId}`);
       }
+      for (const structureBlock of (workoutItem.structure || [])) {
+        if (!Array.isArray(structureBlock.movementOptions) && structureBlock.movementOptions != null) {
+          issues.push(`movementOptions must be an array on ${workoutItem.workoutId}:${structureBlock.blockId}`);
+          continue;
+        }
+        if (!structureBlock.movementOptions) continue;
+        if (!structureBlock.movementCategory || typeof structureBlock.movementCategory !== 'string') {
+          issues.push(`movementCategory missing on ${workoutItem.workoutId}:${structureBlock.blockId}`);
+        }
+        if (structureBlock.movementOptions.length === 0) {
+          issues.push(`movementOptions empty on ${workoutItem.workoutId}:${structureBlock.blockId}`);
+          continue;
+        }
+        const optionIds = new Set();
+        for (const option of structureBlock.movementOptions) {
+          if (!option?.movementId || !option?.displayName || !option?.equipmentType) {
+            issues.push(`Invalid movement option on ${workoutItem.workoutId}:${structureBlock.blockId}`);
+            continue;
+          }
+          optionIds.add(option.movementId);
+        }
+        if (!structureBlock.defaultMovementId || !optionIds.has(structureBlock.defaultMovementId)) {
+          issues.push(`defaultMovementId missing from movementOptions on ${workoutItem.workoutId}:${structureBlock.blockId}`);
+        }
+      }
       if (typeof workoutItem.shortVersionRule !== 'string' || workoutItem.shortVersionRule.length === 0) {
         issues.push(`Missing shortVersionRule on ${workoutItem.workoutId}`);
       }
@@ -862,8 +988,13 @@ export function auditHyroxWorkoutLibrary(library = HYROX_WORKOUT_LIBRARY) {
 
   return {
     ok: issues.length === 0,
+    valid: issues.length === 0,
     issues,
+    errors: issues,
     counts: Object.fromEntries(seenIdsByPhase.entries()),
+    workoutCount: Array.from(seenIdsByPhase.values()).reduce((sum, count) => sum + count, 0),
+    warmupCount: Object.keys(HYROX_WARMUP_TEMPLATES).length,
+    cooldownCount: Object.keys(HYROX_COOLDOWN_TEMPLATES).length,
   };
 }
 
