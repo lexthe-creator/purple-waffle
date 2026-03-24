@@ -1,4 +1,11 @@
+<<<<<<< Updated upstream
 import { phaseRules, sessionTypes, weeklyTemplates } from './workoutSystemSchema.js';
+=======
+import {
+  generateHyroxWorkoutSchedule,
+  generateHyroxWeeklyWorkoutSelection,
+} from './hyroxWorkoutGenerator.js';
+>>>>>>> Stashed changes
 
 const STATION_META = {
   SkiErg: { key: 'skierg', name: 'SkiErg', unit: 'm', raceDistance: 1000, category: 'cardio' },
@@ -26,6 +33,7 @@ export const PHASES = Object.values(phaseRules).map(toLegacyPhaseShape);
 
 export const ALL_STATIONS = Object.keys(STATION_META);
 
+<<<<<<< Updated upstream
 const SESSION_TYPE_COMPATIBILITY_ALIASES = {
   // Temporary aliases to preserve existing caller keys while schema uses normalized names.
   run_quality: 'run_intervals',
@@ -38,6 +46,24 @@ const SESSION_TYPE_COMPATIBILITY_ALIASES = {
 
 const SESSION_TYPE_DETAILS = {
   run_intervals: {
+=======
+export const HYROX_SCHEDULE_PHASE_MAP = {
+  Base: 'foundation',
+  Build: 'base',
+  Specificity: 'build',
+  Peak: 'peak',
+  Taper: 'peak',
+};
+
+export const WKS_WORKOUT_DB = {
+  run_quality: {
+    id: 'run_quality',
+    label: 'Run quality',
+    type: 'run',
+    duration: 48,
+    objective: 'Raise threshold pace and race repeatability.',
+    winTheDayTargets: ['Warm-up completed', 'Hit quality paces', 'Cooldown + notes logged'],
+>>>>>>> Stashed changes
     ex: [
       { n: 'Warm-up jog', s: '1', r: '10 min easy + drills' },
       { n: 'Threshold reps', s: '5', r: '3 min hard / 2 min easy' },
@@ -99,6 +125,7 @@ const SESSION_TYPE_DETAILS = {
   },
 };
 
+<<<<<<< Updated upstream
 function toLegacyWorkoutShape(sessionType) {
   if (!sessionType) return null;
   const details = SESSION_TYPE_DETAILS[sessionType.sessionTypeId];
@@ -157,9 +184,16 @@ function resolveWeeklyTemplatePattern({ trainingDays, weekType, weekNumber }) {
 
 export const WEEKLY_TEMPLATES = weeklyTemplates;
 
+=======
+>>>>>>> Stashed changes
 const PROGRAM_DAY_OFFSETS = {
   '4-day': [1, 3, 5, 6],
   '5-day': [1, 2, 3, 4, 6],
+};
+
+const HYROX_SESSION_LABELS = {
+  hyrox_functional: 'Functional',
+  hyrox_simulation: 'Simulation',
 };
 
 function normalizeTrainingDays(trainingDays) {
@@ -224,14 +258,92 @@ function personalizeWorkout(workout, athlete = {}) {
   };
 }
 
+function formatHyroxSessionLabel(workout) {
+  const phaseLabel = workout?.phaseLabel || String(workout?.phaseType || '').trim() || 'HYROX';
+  const sessionLabel = HYROX_SESSION_LABELS[workout?.sessionType] || workout?.sessionTypeCanonical || 'Workout';
+  return `${phaseLabel} ${sessionLabel}`.trim();
+}
+
+function mapHyroxWorkoutStructureToExercises(workout) {
+  return (workout?.structure || []).map((block, index) => ({
+    n: block.name || `Block ${index + 1}`,
+    s: String(block.durationMinutes ?? 1),
+    r: block.details || '',
+    note: Array.isArray(block.stationsUsed) && block.stationsUsed.length > 0
+      ? `Stations: ${block.stationsUsed.join(', ')}`
+      : '',
+  }));
+}
+
+function hydrateHyroxWorkoutSession(workout, {
+  weekNumber,
+  weekType,
+  trainingDays,
+  dateKey = null,
+  date = null,
+  offset = null,
+  dayLabel = null,
+  dateLabel = null,
+} = {}) {
+  if (!workout) return null;
+
+  const sessionType = workout.sessionType || 'hyrox_functional';
+  const phase = workout.schedulePhaseType || HYROX_SCHEDULE_PHASE_MAP[workout.phaseType] || getPhaseForWeek(weekNumber).name;
+  const label = formatHyroxSessionLabel(workout);
+  const detailStations = Array.isArray(workout.hyroxStationsUsed) && workout.hyroxStationsUsed.length > 0
+    ? workout.hyroxStationsUsed.slice(0, 3).join(', ')
+    : 'HYROX stations';
+
+  return {
+    ...workout,
+    id: workout.workoutId,
+    workoutKey: workout.workoutId,
+    label,
+    title: workout.workoutId,
+    detail: `${workout.durationMinutes} min · ${workout.intensity} · ${detailStations}`,
+    objective: workout.shortVersionRule,
+    type: 'hyrox',
+    duration: workout.durationMinutes,
+    ex: mapHyroxWorkoutStructureToExercises(workout),
+    stations: Array.isArray(workout.hyroxStationsUsed) ? [...workout.hyroxStationsUsed] : [],
+    phase,
+    week: Number.isFinite(weekNumber) ? weekNumber : null,
+    weekType: weekType || null,
+    trainingDays,
+    date,
+    dateKey,
+    offset,
+    dayLabel,
+    dateLabel,
+    sessionType,
+    schedulePhaseType: phase,
+  };
+}
+
+function generateHyroxWeekSessions({ trainingDays, weekType, weekNumber, schedulePhase }) {
+  return generateHyroxWeeklyWorkoutSelection({
+    trainingDays,
+    weekType,
+    weekNumber,
+    schedulePhase,
+  }).map(workout => hydrateHyroxWorkoutSession(workout, {
+    trainingDays,
+    weekType,
+    weekNumber,
+  }));
+}
+
 export function getWksWorkout(workoutKey, athleteDefaults) {
   const baseWorkout = WKS_WORKOUT_DB[workoutKey] || null;
   return personalizeWorkout(baseWorkout, athleteDefaults);
 }
 
 export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
+  // Compatibility adapter: callers still receive a hydrated weekly array, but
+  // the sessions now come from the generator instead of a static template map.
   const normalizedDays = normalizeTrainingDays(trainingDays);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
+<<<<<<< Updated upstream
   const dayPattern = resolveWeeklyTemplatePattern({
     trainingDays: normalizedDays,
     weekType: normalizedWeekType,
@@ -248,34 +360,63 @@ export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
       title: workout?.label,
       detail: workout?.objective,
     };
+=======
+  return generateHyroxWeekSessions({
+    trainingDays: normalizedDays,
+    weekType: normalizedWeekType,
+    weekNumber,
+    schedulePhase: getPhaseForWeek(weekNumber).name,
+>>>>>>> Stashed changes
   });
 }
 
 export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekType, athleteDefaults }) {
-  const sessions = getWeeklyTemplate({ trainingDays, weekType, weekNumber });
+  const normalizedDays = normalizeTrainingDays(trainingDays);
+  const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
+  const schedulePhase = getPhaseForWeek(weekNumber).name;
+  const sessions = generateHyroxWorkoutSchedule({
+    trainingDays: normalizedDays,
+    weekType: normalizedWeekType,
+    weekNumber,
+    schedulePhase,
+  }).map(session => hydrateHyroxWorkoutSession(session, {
+    trainingDays: normalizedDays,
+    weekType: normalizedWeekType,
+    weekNumber,
+  }));
   const weekStart = assertValidStartDate(startDate);
   weekStart.setHours(0, 0, 0, 0);
   weekStart.setDate(weekStart.getDate() + ((weekNumber - 1) * 7));
-  const dayOffsets = PROGRAM_DAY_OFFSETS[normalizeTrainingDays(trainingDays)];
+  const dayOffsets = PROGRAM_DAY_OFFSETS[normalizedDays];
 
   return sessions.map((session, index) => {
     const date = new Date(weekStart);
     const offset = dayOffsets[index] ?? index;
     date.setDate(date.getDate() + offset);
-    const personalized = personalizeWorkout(session, athleteDefaults);
+    const hydrated = hydrateHyroxWorkoutSession(session, {
+      trainingDays: normalizedDays,
+      weekType: normalizedWeekType,
+      weekNumber,
+      date,
+      dateKey: toDateKey(date),
+      offset,
+      dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    });
+    const personalized = personalizeWorkout(hydrated, athleteDefaults);
 
     return {
       ...personalized,
       offset,
       week: weekNumber,
-      phase: getPhaseForWeek(weekNumber).name,
+      phase: schedulePhase,
       date,
       dateKey: toDateKey(date),
       dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       stations: stationListForWorkout(personalized),
       title: personalized?.label,
-      detail: personalized?.objective,
+      detail: personalized?.detail,
     };
   });
 }

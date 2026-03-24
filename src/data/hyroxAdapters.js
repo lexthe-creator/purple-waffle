@@ -1,13 +1,9 @@
-export const HYROX_PHASE_TO_LIBRARY_PHASE = {
+export const HYROX_SCHEDULE_PHASE_TO_LIBRARY_PHASE = {
   Base: 'foundation',
   Build: 'base',
   Specificity: 'build',
   Peak: 'peak',
   Taper: 'peak',
-  foundation: 'foundation',
-  base: 'base',
-  build: 'build',
-  peak: 'peak',
 };
 
 export const HYROX_LIBRARY_PHASE_TO_SCHEDULE_PHASE = {
@@ -15,6 +11,14 @@ export const HYROX_LIBRARY_PHASE_TO_SCHEDULE_PHASE = {
   base: 'Build',
   build: 'Specificity',
   peak: 'Peak',
+};
+
+export const HYROX_PHASE_TO_LIBRARY_PHASE = {
+  ...HYROX_SCHEDULE_PHASE_TO_LIBRARY_PHASE,
+  foundation: 'foundation',
+  base: 'base',
+  build: 'build',
+  peak: 'peak',
 };
 
 export const HYROX_SESSION_TYPE_COMPATIBILITY = {

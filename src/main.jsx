@@ -15,10 +15,8 @@ import { ProfileProvider, useProfileContext } from './context/ProfileContext.jsx
 import {
   ALL_STATIONS,
   PHASES,
-  buildWeeklySchedule,
   getCurrentWeek,
   getPlanState,
-  getWeeklyTemplate,
   getStationMeta,
 } from './data/hyroxPlan.js';
 import {
@@ -2062,7 +2060,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     ]);
   }
 
-  const selectedTrainingDays = getWeeklyTemplate({ trainingDays: fitnessSettings.trainingDays, weekNumber: programWeek }).length;
+  const selectedTrainingDays = weeklySchedule.length;
 
   return (
     <div className="tab-stack fitness-stack">
