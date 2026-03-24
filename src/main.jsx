@@ -84,6 +84,23 @@ const MORE_SECTIONS = [
 
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
 const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
+const AVAILABLE_PROGRAMS = [
+  {
+    id: 'hyrox',
+    label: 'HYROX 32-week plan',
+    description: 'Current generator and plan views are fully wired for HYROX.',
+  },
+  {
+    id: '5k',
+    label: '5K run builder',
+    description: 'Available for program selection; full downstream UI is still being phased in.',
+  },
+  {
+    id: 'strength',
+    label: 'Strength block',
+    description: 'Placeholder slot for upcoming multi-program planning support.',
+  },
+];
 const WEEKDAY_INDEX = {
   Sunday: 0,
   Monday: 1,
@@ -357,7 +374,7 @@ function formatSignedNumber(value) {
   return `${rounded >= 0 ? '+' : '-'}${Math.abs(rounded)}`;
 }
 
-function SettingsSheet({ isOpen, onClose }) {
+function SettingsScreen() {
   const {
     fitnessSettings,
     setFitnessSettings,
@@ -378,13 +395,9 @@ function SettingsSheet({ isOpen, onClose }) {
   const [athleteDraft, setAthleteDraft] = useState(() => ({ ...profile.athlete }));
 
   useEffect(() => {
-    if (isOpen) {
-      setDraft({ ...fitnessSettings });
-      setAthleteDraft({ ...profile.athlete });
-    }
-  }, [isOpen, fitnessSettings, profile.athlete]);
-
-  if (!isOpen) return null;
+    setDraft({ ...fitnessSettings });
+    setAthleteDraft({ ...profile.athlete });
+  }, [fitnessSettings, profile.athlete]);
 
   const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
 
@@ -409,23 +422,97 @@ function SettingsSheet({ isOpen, onClose }) {
   function save() {
     setFitnessSettings(current => ({ ...current, ...draft }));
     updateAthlete(athleteDraft);
-    onClose();
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="modal-card settings-sheet" onClick={event => event.stopPropagation()}>
-        <div className="modal-header">
-          <div>
-            <p className="eyebrow">Settings</p>
-            <h2>Configuration</h2>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings">
-            ×
-          </button>
-        </div>
+    <div className="tab-stack settings-page">
+      <Card>
+        <SectionHeader eyebrow="Settings" title="Configuration" />
+        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
+      </Card>
 
-        <div className="settings-stack">
+      <div className="settings-stack">
+        <ExpandablePanel header={<strong>Program Selection</strong>} defaultOpen>
+          <div className="field-stack">
+            <label className="field-stack compact-field">
+              <span>Active program</span>
+              <div className="segmented-control">
+                {AVAILABLE_PROGRAMS.map(program => (
+                  <button
+                    key={program.id}
+                    type="button"
+                    className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
+                    onClick={() => patch('programType', program.id)}
+                  >
+                    {program.label}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <div className="field-stack compact-field">
+              <span>Available programs</span>
+              <div className="subtle-feed">
+                {AVAILABLE_PROGRAMS.map(program => (
+                  <ListRow
+                    key={program.id}
+                    variant="card"
+                    label={program.label}
+                    sub={program.description}
+                    action={(
+                      <button
+                        type="button"
+                        className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
+                        onClick={() => patch('programType', program.id)}
+                      >
+                        {draft.programType === program.id ? 'Active' : 'Select'}
+                      </button>
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+            <label className="field-stack compact-field">
+              <span>Event date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.raceDate ?? ''}
+                onChange={e => patch('raceDate', e.target.value || null)}
+              />
+            </label>
+            <label className="field-stack compact-field">
+              <span>Training days per week</span>
+              <div className="segmented-control">
+                {['4-day', '5-day'].map(freq => (
+                  <button
+                    key={freq}
+                    type="button"
+                    className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                    onClick={() => patch('trainingDays', freq)}
+                  >
+                    {freq}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <label className="field-stack compact-field">
+              <span>Equipment preferences</span>
+              <div className="segmented-control">
+                {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
+                  <button
+                    key={eq}
+                    type="button"
+                    className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
+                    onClick={() => patch('equipmentAccess', eq)}
+                  >
+                    {eq}
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+        </ExpandablePanel>
+
           <ExpandablePanel header={<strong>Work Calendar</strong>}>
             <div className="field-stack">
               <label className="field-stack compact-field">
@@ -464,21 +551,6 @@ function SettingsSheet({ isOpen, onClose }) {
           <ExpandablePanel header={<strong>Fitness Profile</strong>}>
             <div className="field-stack">
               <label className="field-stack compact-field">
-                <span>Training days</span>
-                <div className="segmented-control">
-                  {['4-day', '5-day'].map(freq => (
-                    <button
-                      key={freq}
-                      type="button"
-                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                      onClick={() => patch('trainingDays', freq)}
-                    >
-                      {freq}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
                 <span>Program start date</span>
                 <input
                   type="date"
@@ -498,21 +570,6 @@ function SettingsSheet({ isOpen, onClose }) {
                       onClick={() => patch('fitnessLevel', level)}
                     >
                       {level}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Equipment access</span>
-                <div className="segmented-control">
-                  {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-                    <button
-                      key={eq}
-                      type="button"
-                      className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                      onClick={() => patch('equipmentAccess', eq)}
-                    >
-                      {eq}
                     </button>
                   ))}
                 </div>
@@ -625,17 +682,25 @@ function SettingsSheet({ isOpen, onClose }) {
               </label>
             </div>
           </ExpandablePanel>
-        </div>
+      </div>
 
-        <div className="inline-actions" style={{ padding: '1rem' }}>
+      <Card>
+        <div className="inline-actions">
           <button type="button" className="primary-button" onClick={save}>
             Save settings
           </button>
-          <button type="button" className="ghost-button" onClick={onClose}>
-            Cancel
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              setDraft({ ...fitnessSettings });
+              setAthleteDraft({ ...profile.athlete });
+            }}
+          >
+            Reset unsaved
           </button>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -2423,7 +2488,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 }
 
-function MoreScreen({ initialSection = 'tasks', onOpenSettings, onSwitchToTab, now }) {
+function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
   const { profile, setProfile } = useProfileContext();
   const { workouts, inboxItems, setInboxItems } = useTaskContext();
   const { energyState, recoveryInputs, setRecoveryInputs, hubInsights, setHubInsights } = useAppContext();
@@ -2580,13 +2645,7 @@ function MoreScreen({ initialSection = 'tasks', onOpenSettings, onSwitchToTab, n
         </Card>
       )}
       {activeSection === 'settings' && (
-        <Card>
-          <SectionHeader eyebrow="Settings" title="Configuration entry point" />
-          <p className="empty-message">Use the header settings button to open the full configuration sheet.</p>
-          <button type="button" className="secondary-button" onClick={onOpenSettings}>
-            Open settings
-          </button>
-        </Card>
+        <SettingsScreen />
       )}
       {activeSection === 'inbox' && (
         <Card>
@@ -2657,7 +2716,6 @@ function AppShell() {
     fitnessSettings,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState('today');
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [now, setNow] = useState(() => new Date());
   const [moreSection, setMoreSection] = useState('tasks');
@@ -2687,6 +2745,11 @@ function AppShell() {
 
   function openMoreSection(section) {
     setMoreSection(section);
+    setActiveTab('more');
+  }
+
+  function openSettingsPage() {
+    setMoreSection('settings');
     setActiveTab('more');
   }
 
@@ -2766,7 +2829,7 @@ function AppShell() {
     }
 
     if (activeTab === 'more') {
-      return <MoreScreen initialSection={moreSection} onOpenSettings={() => setSettingsOpen(true)} onSwitchToTab={setActiveTab} now={now} />;
+      return <MoreScreen initialSection={moreSection} onSwitchToTab={setActiveTab} now={now} />;
     }
 
     return (
@@ -2801,7 +2864,7 @@ function AppShell() {
         inboxCount={unreadNotifications.length}
         onOpenInbox={() => setNotificationCenterOpen(true)}
         onOpenQuickAdd={openQuickCapture}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettingsPage}
       >
         {primaryScreen}
       </AppFrame>
@@ -2818,8 +2881,6 @@ function AppShell() {
         onClose={() => setNotificationCenterOpen(false)}
         onMarkAllRead={markAllNotificationsRead}
       />
-
-      <SettingsSheet isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <MorningCheckinModal />
     </>
