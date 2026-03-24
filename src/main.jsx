@@ -246,6 +246,8 @@ function getCurrentWorkoutType(workout) {
 
 function createWorkoutFromSession({ createWorkout, createExercise, session, settings, todayKey }) {
   const sessionType = session?.type || 'hyrox';
+  const normalizedProgramType = session?.programType || settings?.programType || 'hyrox';
+  const programName = normalizedProgramType === '5k' ? '5K run builder' : 'HYROX 32-week plan';
   const prescribedExercises = Array.isArray(session?.ex) && session.ex.length > 0
     ? session.ex.map(item => createExercise({
       name: item.n || 'Exercise',
@@ -261,14 +263,21 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
   const scheduledDate = session?.dateKey || todayKey;
   const workout = createWorkout({
     name: session.label || session.title || 'HYROX Session',
-    programId: 'hyrox',
-    programName: 'HYROX 32-week plan',
-    type: sessionType.includes('run') ? 'run' : sessionType.includes('hyrox') ? 'hyrox' : 'strength',
+    programId: normalizedProgramType,
+    programName,
+    type: sessionType.includes('run')
+      ? 'run'
+      : sessionType.includes('hyrox')
+        ? 'hyrox'
+        : sessionType.includes('recovery')
+          ? 'recovery'
+          : 'strength',
     status: 'planned',
     scheduledDate,
     plannedDate: scheduledDate,
     sessionOffset: session.offset ?? null,
     trainingDays: settings.trainingDays,
+    programType: normalizedProgramType,
     phase: session.phase || '',
     week: session.week || null,
     duration: session.duration || 45,
@@ -854,11 +863,12 @@ function TodayScreen({
     () => getPlanState({
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
       today: now,
       history: workoutHistory,
       athleteDefaults,
     }),
-    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.trainingDays, now, workoutHistory],
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, now, workoutHistory],
   );
 
   const todaysWorkout = useMemo(
@@ -1181,8 +1191,12 @@ function CalendarScreen() {
   const { calendarPatterns, setCalendarPatterns, workCalendarPrefs } = useAppContext();
 
   const planState = useMemo(
-    () => getPlanState({ startDate: fitnessSettings.programStartDate, trainingDays: fitnessSettings.trainingDays }),
-    [fitnessSettings.programStartDate, fitnessSettings.trainingDays],
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
+    }),
+    [fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays],
   );
 
   const weekStart = useMemo(() => alignDateToAnchor(selectedDate, 'Monday'), [selectedDate]);
@@ -1213,7 +1227,7 @@ function CalendarScreen() {
         id: `plan-${session.dateKey}-${session.title}`,
         type: 'plan',
         title: session.label || session.title,
-        subtitle: `${session.dayLabel} · HYROX · ${session.detail || session.title}`,
+        subtitle: `${session.dayLabel} · ${planState.programLabel} · ${session.detail || session.title}`,
       }));
 
     const calendarDayItems = calendarItems
@@ -1892,11 +1906,12 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     () => getPlanState({
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
       today: now,
       history: normalizedWorkoutHistory,
       athleteDefaults,
     }),
-    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.trainingDays, normalizedWorkoutHistory, now],
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, normalizedWorkoutHistory, now],
   );
   const weeklySchedule = planState.sessions;
   const programWeek = planState.week;
@@ -1953,10 +1968,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     if (activeWorkout) return activeWorkout;
     const scheduledToday = workouts.find(workout => workout.scheduledDate === todayKey && workout.status !== 'completed');
     if (scheduledToday) return scheduledToday;
-    return workouts.find(workout => getCurrentWorkoutType(workout) === 'hyrox' && workout.status !== 'completed')
+    const preferredType = fitnessSettings.programType === '5k' ? 'running' : 'hyrox';
+    return workouts.find(workout => getCurrentWorkoutType(workout) === preferredType && workout.status !== 'completed')
       ?? workouts.find(workout => workout.status !== 'completed')
       ?? null;
-  }, [activeWorkout, todayKey, workouts]);
+  }, [activeWorkout, fitnessSettings.programType, todayKey, workouts]);
 
   const missedSessions = useMemo(
     () => weeklySchedule.filter(session => session.dateKey < todayKey && !workouts.some(workout => workout.scheduledDate === session.dateKey && workout.status === 'completed')),
@@ -1985,8 +2001,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             status: 'active',
             startedAt,
             type: getCurrentWorkoutType(workout),
-            programId: 'hyrox',
-            programName: workout.programName || 'HYROX 32-week plan',
+            programId: fitnessSettings.programType || 'hyrox',
+            programName: workout.programName || (fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan'),
           }
         : workout.status === 'active'
           ? { ...workout, status: 'planned' }
@@ -2053,8 +2069,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     const nextDate = laterThisWeek?.dateKey ?? toDateKey(addDays(new Date(`${session.dateKey}T00:00:00`), 7));
     const movedWorkout = createWorkout({
       name: session.label || session.title,
-      programId: 'hyrox',
-      programName: 'HYROX 32-week plan',
+      programId: fitnessSettings.programType || 'hyrox',
+      programName: fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan',
       type: session.type,
       status: 'planned',
       scheduledDate: nextDate,
@@ -2076,8 +2092,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   function skipMissedSession(session) {
     const skippedWorkout = createWorkout({
       name: session.label || session.title,
-      programId: 'hyrox',
-      programName: 'HYROX 32-week plan',
+      programId: fitnessSettings.programType || 'hyrox',
+      programName: fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan',
       type: session.type,
       status: 'skipped',
       scheduledDate: session.dateKey,
@@ -2337,7 +2353,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'plan' && (
         <>
           <section className="task-card">
-            <SectionHeader eyebrow="Active program" title="HYROX 32-week plan" />
+            <SectionHeader eyebrow="Active program" title={planState.programLabel || 'Training program'} />
             <p className="empty-message">{planState.phase.theme}</p>
             <div className="tag-row">
               <span className="status-chip is-active">{planState.weekType} week</span>
