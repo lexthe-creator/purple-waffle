@@ -593,6 +593,29 @@ function SettingsScreen() {
                   ))}
                 </div>
               </label>
+            </div>
+          </div>
+        </ExpandablePanel>
+
+        <div className="settings-section-divider" aria-hidden="true" />
+
+          <ExpandablePanel header={<strong>Athlete Profile</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Fitness level</span>
+                <div className="segmented-control">
+                  {FITNESS_LEVELS.map(level => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`status-chip ${draft.fitnessLevel === level ? 'is-active' : ''}`}
+                      onClick={() => patch('fitnessLevel', level)}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </label>
               <label className="field-stack compact-field">
                 <span>Weak stations</span>
                 <div className="tag-row">
@@ -697,22 +720,9 @@ function SettingsScreen() {
                   ))}
                 </div>
               </label>
-              <label className="field-stack compact-field">
-                <span>Busy-block behavior</span>
-                <div className="segmented-control">
-                  {['hard', 'soft'].map(opt => (
-                    <button
-                      key={opt}
-                      type="button"
-                      className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
-                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <p className="empty-message">Saved patterns: {calendarPatterns.length}. Recovery inputs and patterns are stored locally.</p>
+              <p className="empty-message">
+                Saved patterns: {calendarPatterns.length}. Work-calendar block behavior is managed in the Work Calendar section.
+              </p>
             </div>
           </ExpandablePanel>
 
