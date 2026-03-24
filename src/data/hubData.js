@@ -82,6 +82,15 @@ export const RECOVERY_SESSIONS = [
   },
 ];
 
+export const SUBS = {
+  run: ['Bike erg 4 min', 'Row 750m', 'SkiErg 600m'],
+  squat: ['Goblet squat', 'Leg press', 'Split squat'],
+  deadlift: ['Trap bar deadlift', 'RDL', 'Kettlebell deadlift'],
+  sled: ['Prowler push', 'Heavy incline walk', 'Leg drive march'],
+  wallball: ['Thruster', 'DB front squat + press', 'Med-ball squat throw'],
+  carry: ['Suitcase carry', 'Front rack carry', 'Sandbag carry'],
+};
+
 export const SAVED_MEALS = [
   { meal: 'Protein shake', cal: 150, pro: 30, carb: 8 },
   { meal: 'Chicken + rice bowl', cal: 560, pro: 55, carb: 65 },
@@ -319,6 +328,57 @@ export function getSwapCandidates(exercise) {
   if (/run/.test(title)) return ['Easy bike 3 min', 'Row 250m', 'SkiErg 250m'];
   if (/carry/.test(title)) return ['KB carry', 'DB carry', 'Suitcase carry'];
   return [];
+}
+
+export function getRecoveryAwareWorkoutSuggestions(todayWorkout, recoveryState, athlete = {}) {
+  if (!todayWorkout) return [];
+  const suggestions = [];
+  const weakStations = Array.isArray(athlete.weakStations) ? athlete.weakStations : [];
+
+  if (recoveryState?.level === 'Low') {
+    suggestions.push({
+      id: 'swap-recovery',
+      kind: 'recovery',
+      title: 'Swap to recovery session',
+      detail: 'Replace high load with mobility + breathing and short cardio.',
+    });
+  } else if (recoveryState?.level === 'Moderate') {
+    suggestions.push({
+      id: 'reduce-volume',
+      kind: 'volume',
+      title: 'Cut 20% volume',
+      detail: 'Drop one set per block and keep intensity controlled.',
+    });
+  } else {
+    suggestions.push({
+      id: 'planned-push',
+      kind: 'performance',
+      title: 'Execute planned session',
+      detail: 'Recovery markers support full plan execution today.',
+    });
+  }
+
+  if (weakStations.length > 0) {
+    suggestions.push({
+      id: 'weak-station-focus',
+      kind: 'personalization',
+      title: `Focus weak station: ${weakStations[0]}`,
+      detail: 'Add one technical primer set before the main session.',
+    });
+  }
+
+  const subs = getSwapCandidates({ n: todayWorkout.name || todayWorkout.label || '' });
+  if (subs.length > 0) {
+    suggestions.push({
+      id: 'substitutions',
+      kind: 'substitution',
+      title: 'Substitutions available',
+      detail: subs.slice(0, 2).join(' · '),
+      options: subs,
+    });
+  }
+
+  return suggestions;
 }
 
 export function generateWorkout(type, phaseCode, paces, athlete) {
@@ -591,4 +651,3 @@ export function workoutStationsForSession(session) {
   if (key === 'hyrox') return ALL_STATIONS.map(name => getStationMeta(name)).filter(Boolean);
   return [];
 }
-

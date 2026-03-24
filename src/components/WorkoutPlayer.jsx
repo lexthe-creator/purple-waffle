@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getSwapCandidates } from '../data/hubData.js';
 
 export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
   const [elapsed, setElapsed] = useState(0);
   const [completedExerciseIds, setCompletedExerciseIds] = useState([]);
+  const [selectedSubs, setSelectedSubs] = useState({});
 
   useEffect(() => {
     setElapsed(0);
@@ -28,6 +30,10 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
         ? current.filter(item => item !== exerciseId)
         : [...current, exerciseId]
     ));
+  }
+
+  function setSubstitution(exerciseId, option) {
+    setSelectedSubs(current => ({ ...current, [exerciseId]: option }));
   }
 
   if (!workout) return null;
@@ -63,9 +69,36 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
               <div>
                 <strong>{exercise.name}</strong>
                 <p>{exercise.detail}</p>
+                {selectedSubs[exercise.id] && (
+                  <p className="empty-message">Sub: {selectedSubs[exercise.id]}</p>
+                )}
               </div>
               <span>{done ? 'Done' : 'Tap to complete'}</span>
             </button>
+          );
+        })}
+      </div>
+
+      <div className="subtle-feed" style={{ marginTop: '8px' }}>
+        {workout.exercises.map(exercise => {
+          const options = getSwapCandidates({ n: exercise.name });
+          if (options.length === 0) return null;
+          return (
+            <div key={`${exercise.id}-subs`} className="feed-card">
+              <strong>{exercise.name} substitutions</strong>
+              <div className="tag-row">
+                {options.map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={`status-chip ${selectedSubs[exercise.id] === option ? 'is-active' : ''}`}
+                    onClick={() => setSubstitution(exercise.id, option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
           );
         })}
       </div>
