@@ -441,10 +441,89 @@ function SettingsScreen() {
       </Card>
 
       <div className="settings-stack">
-        <ExpandablePanel header={<strong>Program Setup</strong>} defaultOpen>
+        <ExpandablePanel header={<strong>Program Selection</strong>} defaultOpen>
           <div className="field-stack">
+            <label className="field-stack compact-field">
+              <span>Active program</span>
+              <div className="segmented-control">
+                {AVAILABLE_PROGRAMS.map(program => (
+                  <button
+                    key={program.id}
+                    type="button"
+                    className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
+                    onClick={() => patch('programType', program.id)}
+                  >
+                    {program.label}
+                  </button>
+                ))}
+              </div>
+            </label>
             <div className="field-stack compact-field">
-              <p className="eyebrow">Program</p>
+              <span>Available programs</span>
+              <div className="subtle-feed">
+                {AVAILABLE_PROGRAMS.map(program => (
+                  <ListRow
+                    key={program.id}
+                    variant="card"
+                    label={program.label}
+                    sub={program.description}
+                    action={(
+                      <button
+                        type="button"
+                        className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
+                        onClick={() => patch('programType', program.id)}
+                      >
+                        {draft.programType === program.id ? 'Active' : 'Select'}
+                      </button>
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+            <label className="field-stack compact-field">
+              <span>Event date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.raceDate ?? ''}
+                onChange={e => patch('raceDate', e.target.value || null)}
+              />
+            </label>
+            <label className="field-stack compact-field">
+              <span>Training days per week</span>
+              <div className="segmented-control">
+                {['4-day', '5-day'].map(freq => (
+                  <button
+                    key={freq}
+                    type="button"
+                    className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                    onClick={() => patch('trainingDays', freq)}
+                  >
+                    {freq}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <label className="field-stack compact-field">
+              <span>Equipment preferences</span>
+              <div className="segmented-control">
+                {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
+                  <button
+                    key={eq}
+                    type="button"
+                    className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
+                    onClick={() => patch('equipmentAccess', eq)}
+                  >
+                    {eq}
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+        </ExpandablePanel>
+
+          <ExpandablePanel header={<strong>Work Calendar</strong>}>
+            <div className="field-stack">
               <label className="field-stack compact-field">
                 <span>Active program</span>
                 <div className="segmented-control">
@@ -487,15 +566,6 @@ function SettingsScreen() {
             <div className="field-stack compact-field">
               <p className="eyebrow">Timeline</p>
               <label className="field-stack compact-field">
-                <span>Event date</span>
-                <input
-                  type="date"
-                  className="task-title-input"
-                  value={draft.raceDate ?? ''}
-                  onChange={e => patch('raceDate', e.target.value || null)}
-                />
-              </label>
-              <label className="field-stack compact-field">
                 <span>Program start date</span>
                 <input
                   type="date"
@@ -519,21 +589,6 @@ function SettingsScreen() {
                       onClick={() => patch('trainingDays', freq)}
                     >
                       {freq}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Equipment preferences</span>
-                <div className="segmented-control">
-                  {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-                    <button
-                      key={eq}
-                      type="button"
-                      className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                      onClick={() => patch('equipmentAccess', eq)}
-                    >
-                      {eq}
                     </button>
                   ))}
                 </div>

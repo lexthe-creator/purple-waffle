@@ -1,4 +1,8 @@
-import { HYROX_SUBSTITUTIONS, HYROX_WORKOUT_LIBRARY } from './hyroxWorkoutLibrary.js';
+import {
+  HYROX_MOVEMENT_SPECIFICITY_TYPES,
+  HYROX_SUBSTITUTIONS,
+  HYROX_WORKOUT_LIBRARY,
+} from './hyroxWorkoutLibrary.js';
 import {
   HYROX_LIBRARY_PHASE_TO_SCHEDULE_PHASE,
   HYROX_SCHEDULE_PHASE_TO_LIBRARY_PHASE,
@@ -72,10 +76,60 @@ const HYROX_PHASE_SESSION_SLOT_PATTERNS = {
 };
 
 const HYROX_ANTI_REPEAT_LOOKBACK_WEEKS = 2;
-const HYROX_AVAILABLE_EQUIPMENT_BY_PROFILE = {
-  full_gym: new Set(['barbell', 'machine', 'dumbbell', 'bodyweight']),
-  limited_gym: new Set(['dumbbell', 'bodyweight']),
-  bodyweight: new Set(['bodyweight']),
+const HYROX_EQUIPMENT_TYPE_LIST = Object.freeze([
+  'machine',
+  'dumbbell',
+  'barbell',
+  'dumbbells',
+  'kettlebells',
+  'cable_machine',
+  'smith_machine',
+  'leg_press',
+  'hack_squat_machine',
+  'hip_thrust_machine',
+  'plate_loaded_machines',
+  'selectorized_machines',
+  'adjustable_bench',
+  'sled_push',
+  'sled_pull',
+  'wall_ball',
+  'sandbag',
+  'farmer_carry_handles',
+  'battle_ropes',
+  'plyo_box',
+  'treadmill',
+  'outdoor_running',
+  'bike',
+  'rower',
+  'ski_erg',
+  'bodyweight',
+]);
+const HYROX_EQUIPMENT_MODE_DEFAULTS = {
+  full_gym: Object.fromEntries(HYROX_EQUIPMENT_TYPE_LIST.map(type => [type, true])),
+  limited_gym: {
+    bodyweight: true,
+    dumbbells: true,
+    kettlebells: true,
+    cable_machine: true,
+    adjustable_bench: true,
+    treadmill: true,
+    outdoor_running: true,
+    bike: true,
+    rower: true,
+  },
+  bodyweight: {
+    bodyweight: true,
+    outdoor_running: true,
+  },
+};
+const HYROX_PROFILE_TO_MODE = {
+  full_gym: 'full_gym',
+  limited_gym: 'limited_gym',
+  bodyweight: 'bodyweight',
+};
+const HYROX_EQUIPMENT_ALIASES = {
+  dumbbell: 'dumbbells',
+  machine: 'selectorized_machines',
 };
 
 function normalizeTrainingDays(trainingDays) {
@@ -124,8 +178,29 @@ function sortWorkoutPool(workouts) {
   ));
 }
 
-function resolveEquipmentProfile(equipmentProfile) {
-  return HYROX_AVAILABLE_EQUIPMENT_BY_PROFILE[equipmentProfile] ? equipmentProfile : 'full_gym';
+function resolveEquipmentContext(options = {}) {
+  const legacyProfile = options.equipmentProfile && HYROX_PROFILE_TO_MODE[options.equipmentProfile]
+    ? options.equipmentProfile
+    : null;
+  const requestedMode = options.equipmentMode && HYROX_PROFILE_TO_MODE[options.equipmentMode]
+    ? options.equipmentMode
+    : null;
+  const equipmentMode = requestedMode || legacyProfile || 'full_gym';
+  const defaults = { ...(HYROX_EQUIPMENT_MODE_DEFAULTS[equipmentMode] || HYROX_EQUIPMENT_MODE_DEFAULTS.full_gym) };
+  const explicitAvailability = options.equipmentAvailability || {};
+  const availability = { ...defaults };
+  for (const [key, enabled] of Object.entries(explicitAvailability)) {
+    const normalizedKey = HYROX_EQUIPMENT_ALIASES[key] || key;
+    availability[normalizedKey] = Boolean(enabled);
+  }
+
+  return {
+    equipmentMode,
+    availability,
+    preferredEquipmentTags: [...(options.preferredEquipmentTags || [])],
+    preferredRunMode: options.preferredRunMode || 'either',
+    preferredEngineModes: [...(options.preferredEngineModes || ['any'])],
+  };
 }
 
 function resolveSubstitutionsForMovement(movementId, equipmentProfile) {
@@ -134,22 +209,70 @@ function resolveSubstitutionsForMovement(movementId, equipmentProfile) {
     || null;
 }
 
-function resolveBlockMovement({ block, weekNumber, slotIndex, equipmentProfile }) {
+function isOptionAllowedForPhase(option, libraryPhase) {
+  const specificityType = option?.specificityType || 'analogous';
+  if (!HYROX_MOVEMENT_SPECIFICITY_TYPES.includes(specificityType)) return true;
+  if (libraryPhase === 'foundation' || libraryPhase === 'base') return true;
+  if (libraryPhase === 'build') return specificityType !== 'fallback';
+  if (libraryPhase === 'peak') return specificityType === 'exact' || specificityType === 'analogous';
+  return true;
+}
+
+function resolveOptionPreferenceScore(option, equipmentContext) {
+  let score = 0;
+  const optionTags = new Set(option.tags || []);
+  for (const preferredTag of equipmentContext.preferredEquipmentTags) {
+    if (optionTags.has(preferredTag)) score += 4;
+  }
+  if (option.movementId === 'Outdoor Run' || option.movementId === 'Treadmill Run') {
+    if (equipmentContext.preferredRunMode === 'outdoor' && option.equipmentType === 'outdoor_running') score += 8;
+    if (equipmentContext.preferredRunMode === 'treadmill' && option.equipmentType === 'treadmill') score += 8;
+  }
+  const preferredEngineModes = equipmentContext.preferredEngineModes || ['any'];
+  if (!preferredEngineModes.includes('any') && preferredEngineModes.includes(option.equipmentType)) {
+    score += 6;
+  }
+  if (option.specificityType === 'exact') score += 3;
+  if (option.specificityType === 'fallback') score -= 2;
+  return score;
+}
+
+function resolveBlockMovement({
+  block,
+  weekNumber,
+  slotIndex,
+  equipmentContext,
+  libraryPhase,
+  recentMovementIds = new Set(),
+}) {
   if (!Array.isArray(block?.movementOptions) || block.movementOptions.length === 0) {
     return { ...block };
   }
   const { movementOptions, ...blockWithoutOptions } = block;
 
-  const availableEquipment = HYROX_AVAILABLE_EQUIPMENT_BY_PROFILE[equipmentProfile] || HYROX_AVAILABLE_EQUIPMENT_BY_PROFILE.full_gym;
+  const availableEquipment = equipmentContext.availability || HYROX_EQUIPMENT_MODE_DEFAULTS.full_gym;
   const optionsById = new Map(block.movementOptions.map(option => [option.movementId, option]));
-  const optionsMatchingEquipment = block.movementOptions.filter(option => availableEquipment.has(option.equipmentType));
-  const selectionPool = optionsMatchingEquipment.length > 0 ? optionsMatchingEquipment : block.movementOptions;
+  const optionsMatchingEquipment = block.movementOptions.filter((option) => {
+    const normalizedEquipment = HYROX_EQUIPMENT_ALIASES[option.equipmentType] || option.equipmentType;
+    return normalizedEquipment === 'bodyweight' || availableEquipment[normalizedEquipment];
+  });
+  const equipmentFiltered = optionsMatchingEquipment.length > 0 ? optionsMatchingEquipment : block.movementOptions;
+  const phaseFiltered = equipmentFiltered.filter(option => isOptionAllowedForPhase(option, libraryPhase));
+  const specificityPool = phaseFiltered.length > 0 ? phaseFiltered : equipmentFiltered;
+  const preferenceSorted = [...specificityPool].sort((left, right) => (
+    resolveOptionPreferenceScore(right, equipmentContext) - resolveOptionPreferenceScore(left, equipmentContext)
+    || String(left.movementId).localeCompare(String(right.movementId))
+  ));
+  const antiRepeatPool = preferenceSorted.filter(option => !recentMovementIds.has(option.movementId));
+  const selectionPool = antiRepeatPool.length > 0
+    ? antiRepeatPool
+    : preferenceSorted;
   const startIndex = Math.max(0, (Number.isFinite(weekNumber) ? weekNumber : 1) - 1);
   const rotationIndex = (startIndex + slotIndex) % selectionPool.length;
   const rotatedOption = selectionPool[rotationIndex] || null;
   const defaultOption = optionsById.get(block.defaultMovementId) || null;
   const selectedOption = rotatedOption || defaultOption || block.movementOptions[0];
-  const substitution = selectedOption ? resolveSubstitutionsForMovement(selectedOption.movementId, equipmentProfile) : null;
+  const substitution = selectedOption ? resolveSubstitutionsForMovement(selectedOption.movementId, equipmentContext.equipmentMode) : null;
 
   return {
     ...blockWithoutOptions,
@@ -165,15 +288,24 @@ function resolveBlockMovement({ block, weekNumber, slotIndex, equipmentProfile }
   };
 }
 
-function resolveWorkoutMovementOptions({ workout, weekNumber, slotIndex, equipmentProfile }) {
+function resolveWorkoutMovementOptions({ workout, weekNumber, slotIndex, equipmentContext, libraryPhase, recentMovementIds }) {
+  const localRecentMovementIds = new Set(recentMovementIds || []);
   return {
     ...workout,
-    structure: (workout.structure || []).map((block, blockIndex) => resolveBlockMovement({
-      block,
-      weekNumber,
-      slotIndex: slotIndex + blockIndex,
-      equipmentProfile,
-    })),
+    structure: (workout.structure || []).map((block, blockIndex) => {
+      const resolved = resolveBlockMovement({
+        block,
+        weekNumber,
+        slotIndex: slotIndex + blockIndex,
+        equipmentContext,
+        libraryPhase,
+        recentMovementIds: localRecentMovementIds,
+      });
+      if (resolved.selectedMovementId) {
+        localRecentMovementIds.add(resolved.selectedMovementId);
+      }
+      return resolved;
+    }),
   };
 }
 
@@ -289,8 +421,22 @@ export function selectHyroxWorkoutForSlot({
   weekNumber,
   slotIndex,
   equipmentProfile = 'full_gym',
+  equipmentMode,
+  equipmentAvailability,
+  preferredEquipmentTags,
+  preferredRunMode,
+  preferredEngineModes,
   excludedWorkoutIds = null,
+  recentMovementIds = new Set(),
 }) {
+  const equipmentContext = resolveEquipmentContext({
+    equipmentProfile,
+    equipmentMode,
+    equipmentAvailability,
+    preferredEquipmentTags,
+    preferredRunMode,
+    preferredEngineModes,
+  });
   const pools = getHyroxWorkoutPoolsByPhase(phaseType, schedulePhase, weekNumber);
   const slotPattern = getHyroxSessionSlotPattern({
     phaseType: pools.libraryPhase,
@@ -346,7 +492,9 @@ export function selectHyroxWorkoutForSlot({
     workout: pool[chosenIndex],
     weekNumber,
     slotIndex,
-    equipmentProfile: resolveEquipmentProfile(equipmentProfile),
+    equipmentContext,
+    libraryPhase: pools.libraryPhase,
+    recentMovementIds,
   });
 
   return {
@@ -369,6 +517,11 @@ export function generateHyroxWeeklyWorkoutSelection({
   weekType,
   trainingDays,
   equipmentProfile = 'full_gym',
+  equipmentMode,
+  equipmentAvailability,
+  preferredEquipmentTags,
+  preferredRunMode,
+  preferredEngineModes,
 }) {
   const normalizedDays = normalizeTrainingDays(trainingDays);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
@@ -381,6 +534,7 @@ export function generateHyroxWeeklyWorkoutSelection({
     weekNumber,
   });
   const weekUsedWorkoutIds = new Set();
+  const recentMovementIds = new Set();
 
   return Array.from({ length: slotCount }, (_, slotIndex) => {
     const workout = selectHyroxWorkoutForSlot({
@@ -391,10 +545,19 @@ export function generateHyroxWeeklyWorkoutSelection({
       weekNumber,
       slotIndex,
       equipmentProfile,
+      equipmentMode,
+      equipmentAvailability,
+      preferredEquipmentTags,
+      preferredRunMode,
+      preferredEngineModes,
       excludedWorkoutIds: weekUsedWorkoutIds,
+      recentMovementIds,
     });
     if (workout?.workoutId) {
       weekUsedWorkoutIds.add(workout.workoutId);
+    }
+    for (const block of (workout?.structure || [])) {
+      if (block?.selectedMovementId) recentMovementIds.add(block.selectedMovementId);
     }
 
     return workout ? {
@@ -411,6 +574,11 @@ export function generateHyroxWorkoutSchedule({
   weekType,
   trainingDays,
   equipmentProfile = 'full_gym',
+  equipmentMode,
+  equipmentAvailability,
+  preferredEquipmentTags,
+  preferredRunMode,
+  preferredEngineModes,
 }) {
   const selections = generateHyroxWeeklyWorkoutSelection({
     phaseType,
@@ -419,6 +587,11 @@ export function generateHyroxWorkoutSchedule({
     weekType,
     trainingDays,
     equipmentProfile,
+    equipmentMode,
+    equipmentAvailability,
+    preferredEquipmentTags,
+    preferredRunMode,
+    preferredEngineModes,
   });
 
   return selections.map((workout, index) => ({
