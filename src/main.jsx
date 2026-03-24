@@ -2406,6 +2406,7 @@ function AppShell() {
     setTasks,
     setMeals,
     setNotes,
+    workouts,
     setWorkouts,
     inboxItems,
   } = useTaskContext();
