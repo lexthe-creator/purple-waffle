@@ -5,10 +5,14 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
   const [elapsed, setElapsed] = useState(0);
   const [completedExerciseIds, setCompletedExerciseIds] = useState([]);
   const [selectedSubs, setSelectedSubs] = useState({});
+  const [setLogs, setSetLogs] = useState({});
+  const [runMetrics, setRunMetrics] = useState({ distance: '', duration: '', effort: '' });
 
   useEffect(() => {
     setElapsed(0);
     setCompletedExerciseIds([]);
+    setSetLogs({});
+    setRunMetrics({ distance: '', duration: '', effort: '' });
   }, [workout?.id]);
 
   useEffect(() => {
@@ -34,6 +38,16 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
 
   function setSubstitution(exerciseId, option) {
     setSelectedSubs(current => ({ ...current, [exerciseId]: option }));
+  }
+
+  function updateSetLog(exerciseId, field, value) {
+    setSetLogs(current => ({
+      ...current,
+      [exerciseId]: {
+        ...(current[exerciseId] || {}),
+        [field]: value,
+      },
+    }));
   }
 
   if (!workout) return null;
@@ -72,6 +86,22 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
                 {selectedSubs[exercise.id] && (
                   <p className="empty-message">Sub: {selectedSubs[exercise.id]}</p>
                 )}
+                <div className="quick-entry-row" onClick={event => event.stopPropagation()}>
+                  <input
+                    type="number"
+                    className="task-title-input"
+                    placeholder="Reps"
+                    value={setLogs[exercise.id]?.reps || ''}
+                    onChange={event => updateSetLog(exercise.id, 'reps', event.target.value)}
+                  />
+                  <input
+                    type="number"
+                    className="task-title-input"
+                    placeholder="Load"
+                    value={setLogs[exercise.id]?.load || ''}
+                    onChange={event => updateSetLog(exercise.id, 'load', event.target.value)}
+                  />
+                </div>
               </div>
               <span>{done ? 'Done' : 'Tap to complete'}</span>
             </button>
@@ -103,11 +133,47 @@ export default function WorkoutPlayer({ workout, onCancel, onComplete }) {
         })}
       </div>
 
+      <div className="feed-card">
+        <strong>Run metrics</strong>
+        <div className="quick-entry-row">
+          <input
+            type="number"
+            className="task-title-input"
+            placeholder="Distance (mi)"
+            value={runMetrics.distance}
+            onChange={event => setRunMetrics(current => ({ ...current, distance: event.target.value }))}
+          />
+          <input
+            type="number"
+            className="task-title-input"
+            placeholder="Duration (min)"
+            value={runMetrics.duration}
+            onChange={event => setRunMetrics(current => ({ ...current, duration: event.target.value }))}
+          />
+          <input
+            className="task-title-input"
+            placeholder="Effort 1-10"
+            value={runMetrics.effort}
+            onChange={event => setRunMetrics(current => ({ ...current, effort: event.target.value }))}
+          />
+        </div>
+      </div>
+
       <div className="workout-controls">
         <button type="button" className="ghost-button compact-ghost" onClick={onCancel}>
           Cancel workout
         </button>
-        <button type="button" className="primary-button" onClick={onComplete}>
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => onComplete({
+            elapsedSeconds: elapsed,
+            completedExerciseIds,
+            substitutions: selectedSubs,
+            setLogs,
+            runMetrics,
+          })}
+        >
           Complete workout
         </button>
       </div>

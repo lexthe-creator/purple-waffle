@@ -278,10 +278,17 @@ export function resolveWeeklyPlanStatus({
 
   return scheduled.map((session, index) => {
     const completedLog = history.find(item => item.status === 'completed' && (item.scheduledDate === session.dateKey || item.plannedDate === session.dateKey));
-    const movedLog = history.find(item => item.status === 'completed' && item.scheduledDate !== session.dateKey && item.plannedDate === session.dateKey);
+    const skippedLog = history.find(item => item.status === 'skipped' && item.plannedDate === session.dateKey);
+    const movedLog = history.find(item => (
+      ['planned', 'active', 'completed'].includes(item.status)
+      && item.plannedDate === session.dateKey
+      && item.scheduledDate
+      && item.scheduledDate !== session.dateKey
+    ));
 
     let status = 'planned';
     if (completedLog) status = 'completed';
+    else if (skippedLog) status = 'skipped';
     else if (session.dateKey === todayKey) status = 'today';
     else if (session.dateKey < todayKey) status = 'missed';
 
@@ -292,7 +299,7 @@ export function resolveWeeklyPlanStatus({
       if (movedToDate) status = 'moved';
     }
 
-    if (movedLog) {
+    if (movedLog && !completedLog && !skippedLog) {
       status = 'moved';
       movedToDate = movedLog.scheduledDate;
     }
@@ -302,10 +309,12 @@ export function resolveWeeklyPlanStatus({
       status,
       completedLog: completedLog || null,
       movedToDate,
+      skippedLog: skippedLog || null,
       isToday: session.dateKey === todayKey,
       isPlanned: status === 'planned' || status === 'today',
       isMissed: status === 'missed',
       isMoved: status === 'moved',
+      isSkipped: status === 'skipped',
       isCompleted: status === 'completed',
     };
   });
