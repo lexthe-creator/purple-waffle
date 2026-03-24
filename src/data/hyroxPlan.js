@@ -130,9 +130,16 @@ export function getStationMeta(stationKey) {
   return Object.values(STATION_META).find(station => station.key === stationKey || station.name === stationKey) ?? null;
 }
 
+function assertValidStartDate(startDate) {
+  const parsed = new Date(startDate);
+  if (!startDate || Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid or missing startDate');
+  }
+  return parsed;
+}
+
 export function getCurrentWeek({ startDate, today = new Date() }) {
-  const start = new Date(startDate);
-  if (!startDate || Number.isNaN(start.getTime())) return 1;
+  const start = assertValidStartDate(startDate);
   const current = new Date(today);
   const diff = Math.floor((current - start) / 86_400_000);
   return Math.max(1, Math.min(32, Math.floor(diff / 7) + 1));
@@ -140,7 +147,7 @@ export function getCurrentWeek({ startDate, today = new Date() }) {
 
 export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekType }) {
   const sessions = getWeeklyTemplate({ trainingDays, weekType, weekNumber });
-  const weekStart = new Date(startDate);
+  const weekStart = assertValidStartDate(startDate);
   weekStart.setHours(0, 0, 0, 0);
   weekStart.setDate(weekStart.getDate() + ((weekNumber - 1) * 7));
 
