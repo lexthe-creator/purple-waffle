@@ -2,6 +2,8 @@ import {
   generateHyroxWorkoutSchedule,
   generateHyroxWeeklyWorkoutSelection,
 } from './hyroxWorkoutGenerator.js';
+import { get5kPhaseForWeek } from './5kWorkoutGenerator.js';
+import { generateWorkoutSchedule, generateWeeklyWorkoutSelection } from './programWorkoutGenerator.js';
 import { sessionTypes } from './workoutSystemSchema.js';
 
 const STATION_META = {
@@ -135,6 +137,18 @@ export const WKS_WORKOUT_DB = {
 const PROGRAM_DAY_OFFSETS = {
   '4-day': [1, 3, 5, 6],
   '5-day': [1, 2, 3, 4, 6],
+  '3-day': [1, 3, 6],
+};
+
+const PROGRAM_META = {
+  hyrox: {
+    label: 'HYROX 32-week plan',
+    maxWeeks: 32,
+  },
+  '5k': {
+    label: '5K run builder',
+    maxWeeks: 12,
+  },
 };
 
 const HYROX_SESSION_LABELS = {
@@ -142,7 +156,17 @@ const HYROX_SESSION_LABELS = {
   hyrox_simulation: 'Simulation',
 };
 
-function normalizeTrainingDays(trainingDays) {
+function normalizeProgramType(programType) {
+  return String(programType || 'hyrox').toLowerCase() === '5k' ? '5k' : 'hyrox';
+}
+
+function normalizeTrainingDays(trainingDays, programType = 'hyrox') {
+  const normalizedProgramType = normalizeProgramType(programType);
+  if (normalizedProgramType === '5k') {
+    if (trainingDays === '3-day') return '3-day';
+    if (trainingDays === '5-day') return '5-day';
+    return '4-day';
+  }
   return trainingDays === '5-day' ? '5-day' : '4-day';
 }
 
@@ -155,8 +179,20 @@ export function toDateKey(date) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
-export function getPhaseForWeek(weekNumber) {
+export function getPhaseForWeek(weekNumber, programType = 'hyrox', totalWeeks = 8) {
+  const normalizedProgramType = normalizeProgramType(programType);
   const week = Number.isFinite(weekNumber) ? weekNumber : 1;
+  if (normalizedProgramType === '5k') {
+    const phase = get5kPhaseForWeek({ weekNumber: week, totalWeeks });
+    return {
+      id: phase.phaseType,
+      name: phase.displayName,
+      weekStart: phase.startWeek,
+      weekEnd: phase.endWeek,
+      weekLabel: `${phase.startWeek}–${phase.endWeek}`,
+      theme: phase.goal,
+    };
+  }
   return PHASES.find(phase => week >= phase.weekStart && week <= phase.weekEnd) ?? PHASES[PHASES.length - 1];
 }
 
@@ -168,11 +204,20 @@ function assertValidStartDate(startDate) {
   return parsed;
 }
 
-export function getCurrentWeek({ startDate, today = new Date() }) {
+function getProgramMaxWeeks(programType, totalWeeks) {
+  const normalizedProgramType = normalizeProgramType(programType);
+  if (normalizedProgramType === '5k') {
+    const requested = Number.isFinite(totalWeeks) ? Math.trunc(totalWeeks) : 8;
+    return Math.max(6, Math.min(PROGRAM_META['5k'].maxWeeks, requested));
+  }
+  return PROGRAM_META.hyrox.maxWeeks;
+}
+
+export function getCurrentWeek({ startDate, today = new Date(), programType = 'hyrox', totalWeeks = 8 }) {
   const start = assertValidStartDate(startDate);
   const current = new Date(today);
   const diff = Math.floor((current - start) / 86_400_000);
-  return Math.max(1, Math.min(32, Math.floor(diff / 7) + 1));
+  return Math.max(1, Math.min(getProgramMaxWeeks(programType, totalWeeks), Math.floor(diff / 7) + 1));
 }
 
 export function getStationMeta(stationKey) {
@@ -271,16 +316,117 @@ function hydrateHyroxWorkoutSession(workout, {
   };
 }
 
-function generateHyroxWeekSessions({ trainingDays, weekType, weekNumber, schedulePhase }) {
-  return generateHyroxWeeklyWorkoutSelection({
+function mapSessionStructureToExercises(workout) {
+  return (workout?.structure || []).map((block, index) => ({
+    n: block.name || `Block ${index + 1}`,
+    s: String(block.durationMinutes ?? 1),
+    r: block.details || '',
+    note: [
+      Array.isArray(block.stationsUsed) && block.stationsUsed.length > 0
+        ? `Stations: ${block.stationsUsed.join(', ')}`
+        : null,
+      block.selectedMovement?.displayName
+        ? `Selected movement: ${block.selectedMovement.displayName}`
+        : null,
+    ].filter(Boolean).join(' · '),
+  }));
+}
+
+function toProgramWorkoutType({ programType, category }) {
+  if (programType === 'hyrox') return 'hyrox';
+  if (category === 'run') return 'run';
+  if (category === 'recovery') return 'recovery';
+  if (category === 'strength') return 'strength';
+  return 'workout';
+}
+
+function hydrateProgramWorkoutSession(workout, {
+  programType = 'hyrox',
+  weekNumber,
+  weekType,
+  trainingDays,
+  dateKey = null,
+  date = null,
+  offset = null,
+  dayLabel = null,
+  dateLabel = null,
+  totalWeeks = 8,
+} = {}) {
+  if (!workout) return null;
+  if (programType === 'hyrox') {
+    return hydrateHyroxWorkoutSession(workout, {
+      weekNumber,
+      weekType,
+      trainingDays,
+      dateKey,
+      date,
+      offset,
+      dayLabel,
+      dateLabel,
+    });
+  }
+
+  const sessionType = workout.sessionTypeCanonical || workout.sessionType || 'run_easy';
+  const sessionDefinition = sessionTypes[sessionType] || null;
+  const phase = workout.schedulePhaseType || getPhaseForWeek(weekNumber, programType, totalWeeks).id;
+  const phaseDisplay = getPhaseForWeek(weekNumber, programType, totalWeeks).name;
+  const sessionLabel = sessionDefinition?.displayName || sessionType;
+
+  return {
+    ...workout,
+    id: workout.workoutId,
+    workoutKey: workout.workoutId,
+    programType,
+    label: `${phaseDisplay} ${sessionLabel}`,
+    title: workout.workoutId,
+    detail: `${workout.durationMinutes} min · ${workout.intensity} · ${workout.prescription || sessionLabel}`,
+    objective: workout.shortVersionRule || sessionDefinition?.objective || '',
+    type: toProgramWorkoutType({ programType, category: sessionDefinition?.category }),
+    duration: workout.durationMinutes,
+    ex: mapSessionStructureToExercises(workout),
+    stations: Array.isArray(workout.hyroxStationsUsed) ? [...workout.hyroxStationsUsed] : [],
+    phase,
+    week: Number.isFinite(weekNumber) ? weekNumber : null,
+    weekType: weekType || null,
+    trainingDays,
+    date,
+    dateKey,
+    offset,
+    dayLabel,
+    dateLabel,
+    sessionType,
+    schedulePhaseType: phase,
+  };
+}
+
+function generateProgramWeekSessions({ programType, trainingDays, weekType, weekNumber, schedulePhase, totalWeeks = 8 }) {
+  if (programType === 'hyrox') {
+    return generateHyroxWeeklyWorkoutSelection({
+      trainingDays,
+      weekType,
+      weekNumber,
+      schedulePhase,
+    }).map(workout => hydrateProgramWorkoutSession(workout, {
+      programType,
+      trainingDays,
+      weekType,
+      weekNumber,
+      totalWeeks,
+    }));
+  }
+
+  return generateWeeklyWorkoutSelection({
+    programType,
     trainingDays,
     weekType,
     weekNumber,
-    schedulePhase,
-  }).map(workout => hydrateHyroxWorkoutSession(workout, {
+    totalWeeks,
+  }).map(workout => hydrateProgramWorkoutSession(workout, {
+    programType,
     trainingDays,
     weekType,
     weekNumber,
+    totalWeeks,
   }));
 }
 
@@ -289,32 +435,47 @@ export function getWksWorkout(workoutKey, athleteDefaults) {
   return personalizeWorkout(baseWorkout, athleteDefaults);
 }
 
-export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
+export function getWeeklyTemplate({ trainingDays, weekType, weekNumber, programType = 'hyrox', totalWeeks = 8 }) {
   // Compatibility adapter: callers still receive a hydrated weekly array, but
   // the sessions now come from the generator instead of a static template map.
-  const normalizedDays = normalizeTrainingDays(trainingDays);
+  const normalizedProgramType = normalizeProgramType(programType);
+  const normalizedDays = normalizeTrainingDays(trainingDays, normalizedProgramType);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
-  return generateHyroxWeekSessions({
+  return generateProgramWeekSessions({
+    programType: normalizedProgramType,
     trainingDays: normalizedDays,
     weekType: normalizedWeekType,
     weekNumber,
-    schedulePhase: getPhaseForWeek(weekNumber).name,
+    schedulePhase: getPhaseForWeek(weekNumber, normalizedProgramType, totalWeeks).name,
+    totalWeeks,
   });
 }
 
-export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekType, athleteDefaults }) {
-  const normalizedDays = normalizeTrainingDays(trainingDays);
+export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekType, athleteDefaults, programType = 'hyrox', totalWeeks = 8 }) {
+  const normalizedProgramType = normalizeProgramType(programType);
+  const normalizedDays = normalizeTrainingDays(trainingDays, normalizedProgramType);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
-  const schedulePhase = getPhaseForWeek(weekNumber).name;
-  const sessions = generateHyroxWorkoutSchedule({
+  const schedulePhase = getPhaseForWeek(weekNumber, normalizedProgramType, totalWeeks).name;
+  const rawSessions = normalizedProgramType === 'hyrox'
+    ? generateHyroxWorkoutSchedule({
+      trainingDays: normalizedDays,
+      weekType: normalizedWeekType,
+      weekNumber,
+      schedulePhase,
+    })
+    : generateWorkoutSchedule({
+      programType: normalizedProgramType,
+      trainingDays: normalizedDays,
+      weekType: normalizedWeekType,
+      weekNumber,
+      totalWeeks,
+    });
+  const sessions = rawSessions.map(session => hydrateProgramWorkoutSession(session, {
+    programType: normalizedProgramType,
     trainingDays: normalizedDays,
     weekType: normalizedWeekType,
     weekNumber,
-    schedulePhase,
-  }).map(session => hydrateHyroxWorkoutSession(session, {
-    trainingDays: normalizedDays,
-    weekType: normalizedWeekType,
-    weekNumber,
+    totalWeeks,
   }));
   const weekStart = assertValidStartDate(startDate);
   weekStart.setHours(0, 0, 0, 0);
@@ -325,7 +486,8 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekT
     const date = new Date(weekStart);
     const offset = dayOffsets[index] ?? index;
     date.setDate(date.getDate() + offset);
-    const hydrated = hydrateHyroxWorkoutSession(session, {
+    const hydrated = hydrateProgramWorkoutSession(session, {
+      programType: normalizedProgramType,
       trainingDays: normalizedDays,
       weekType: normalizedWeekType,
       weekNumber,
@@ -334,6 +496,7 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekT
       offset,
       dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      totalWeeks,
     });
     const personalized = personalizeWorkout(hydrated, athleteDefaults);
 
@@ -356,6 +519,8 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekT
 export function resolveWeeklyPlanStatus({
   startDate,
   trainingDays,
+  programType = 'hyrox',
+  totalWeeks = 8,
   weekNumber,
   weekType,
   history = [],
@@ -364,8 +529,16 @@ export function resolveWeeklyPlanStatus({
   carryMissed = true,
 }) {
   const todayKey = toDateKey(today);
-  const week = weekNumber || getCurrentWeek({ startDate, today });
-  const scheduled = buildWeeklySchedule({ trainingDays, weekNumber: week, startDate, weekType, athleteDefaults });
+  const week = weekNumber || getCurrentWeek({ startDate, today, programType, totalWeeks });
+  const scheduled = buildWeeklySchedule({
+    programType,
+    totalWeeks,
+    trainingDays,
+    weekNumber: week,
+    startDate,
+    weekType,
+    athleteDefaults,
+  });
 
   return scheduled.map((session, index) => {
     const completedLog = history.find(item => item.status === 'completed' && (item.scheduledDate === session.dateKey || item.plannedDate === session.dateKey));
@@ -411,12 +584,22 @@ export function resolveWeeklyPlanStatus({
   });
 }
 
-export function getTodayResolvedWorkout({ startDate, trainingDays, today = new Date(), history = [], athleteDefaults }) {
-  const week = getCurrentWeek({ startDate, today });
+export function getTodayResolvedWorkout({
+  startDate,
+  trainingDays,
+  programType = 'hyrox',
+  totalWeeks = 8,
+  today = new Date(),
+  history = [],
+  athleteDefaults,
+}) {
+  const week = getCurrentWeek({ startDate, today, programType, totalWeeks });
   const weekType = normalizeWeekType(null, week);
   const resolvedWeek = resolveWeeklyPlanStatus({
     startDate,
     trainingDays,
+    programType,
+    totalWeeks,
     weekNumber: week,
     weekType,
     history,
@@ -427,13 +610,35 @@ export function getTodayResolvedWorkout({ startDate, trainingDays, today = new D
   return resolvedWeek.find(session => session.status === 'today' || (session.status === 'moved' && session.movedToDate === toDateKey(today))) ?? null;
 }
 
-export function getPlanState({ startDate, trainingDays, today = new Date(), history = [], athleteDefaults }) {
-  const week = getCurrentWeek({ startDate, today });
-  const phase = getPhaseForWeek(week);
+export function getPlanState({
+  startDate,
+  trainingDays,
+  programType = 'hyrox',
+  totalWeeks = 8,
+  today = new Date(),
+  history = [],
+  athleteDefaults,
+}) {
+  const normalizedProgramType = normalizeProgramType(programType);
+  const week = getCurrentWeek({ startDate, today, programType: normalizedProgramType, totalWeeks });
+  const phase = getPhaseForWeek(week, normalizedProgramType, totalWeeks);
   const weekType = week % 2 === 1 ? 'A' : 'B';
-  const sessions = resolveWeeklyPlanStatus({ startDate, trainingDays, weekNumber: week, weekType, history, today, athleteDefaults, carryMissed: true });
+  const sessions = resolveWeeklyPlanStatus({
+    startDate,
+    trainingDays,
+    programType: normalizedProgramType,
+    totalWeeks,
+    weekNumber: week,
+    weekType,
+    history,
+    today,
+    athleteDefaults,
+    carryMissed: true,
+  });
 
   return {
+    programType: normalizedProgramType,
+    programLabel: PROGRAM_META[normalizedProgramType]?.label || 'Training program',
     week,
     phase,
     weekType,
