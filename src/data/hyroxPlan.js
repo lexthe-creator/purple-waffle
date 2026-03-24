@@ -1,11 +1,8 @@
-<<<<<<< Updated upstream
-import { phaseRules, sessionTypes, weeklyTemplates } from './workoutSystemSchema.js';
-=======
 import {
   generateHyroxWorkoutSchedule,
   generateHyroxWeeklyWorkoutSelection,
 } from './hyroxWorkoutGenerator.js';
->>>>>>> Stashed changes
+import { sessionTypes } from './workoutSystemSchema.js';
 
 const STATION_META = {
   SkiErg: { key: 'skierg', name: 'SkiErg', unit: 'm', raceDistance: 1000, category: 'cardio' },
@@ -18,22 +15,16 @@ const STATION_META = {
   'Wall Ball': { key: 'wallBalls', name: 'Wall Ball', unit: 'reps', raceDistance: 100, category: 'power' },
 };
 
-function toLegacyPhaseShape(phase) {
-  return {
-    id: phase.phaseType,
-    name: phase.displayName,
-    weekStart: phase.startWeek,
-    weekEnd: phase.endWeek,
-    weekLabel: `${phase.startWeek}–${phase.endWeek}`,
-    theme: phase.goal,
-  };
-}
-
-export const PHASES = Object.values(phaseRules).map(toLegacyPhaseShape);
+export const PHASES = [
+  { id: 'foundation', name: 'Base', weekStart: 1, weekEnd: 8, weekLabel: '1–8', theme: 'Movement prep and aerobic base' },
+  { id: 'base', name: 'Build', weekStart: 9, weekEnd: 16, weekLabel: '9–16', theme: 'Build sustainable volume' },
+  { id: 'build', name: 'Specificity', weekStart: 17, weekEnd: 23, weekLabel: '17–23', theme: 'Raise specificity and workload' },
+  { id: 'peak', name: 'Peak', weekStart: 24, weekEnd: 28, weekLabel: '24–28', theme: 'Race-specific sharpening' },
+  { id: 'peak', name: 'Taper', weekStart: 29, weekEnd: 32, weekLabel: '29–32', theme: 'Reduce fatigue and consolidate adaptation' },
+];
 
 export const ALL_STATIONS = Object.keys(STATION_META);
 
-<<<<<<< Updated upstream
 const SESSION_TYPE_COMPATIBILITY_ALIASES = {
   // Temporary aliases to preserve existing caller keys while schema uses normalized names.
   run_quality: 'run_intervals',
@@ -46,24 +37,6 @@ const SESSION_TYPE_COMPATIBILITY_ALIASES = {
 
 const SESSION_TYPE_DETAILS = {
   run_intervals: {
-=======
-export const HYROX_SCHEDULE_PHASE_MAP = {
-  Base: 'foundation',
-  Build: 'base',
-  Specificity: 'build',
-  Peak: 'peak',
-  Taper: 'peak',
-};
-
-export const WKS_WORKOUT_DB = {
-  run_quality: {
-    id: 'run_quality',
-    label: 'Run quality',
-    type: 'run',
-    duration: 48,
-    objective: 'Raise threshold pace and race repeatability.',
-    winTheDayTargets: ['Warm-up completed', 'Hit quality paces', 'Cooldown + notes logged'],
->>>>>>> Stashed changes
     ex: [
       { n: 'Warm-up jog', s: '1', r: '10 min easy + drills' },
       { n: 'Threshold reps', s: '5', r: '3 min hard / 2 min easy' },
@@ -125,7 +98,14 @@ export const WKS_WORKOUT_DB = {
   },
 };
 
-<<<<<<< Updated upstream
+export const HYROX_SCHEDULE_PHASE_MAP = {
+  Base: 'foundation',
+  Build: 'base',
+  Specificity: 'build',
+  Peak: 'peak',
+  Taper: 'peak',
+};
+
 function toLegacyWorkoutShape(sessionType) {
   if (!sessionType) return null;
   const details = SESSION_TYPE_DETAILS[sessionType.sessionTypeId];
@@ -152,40 +132,6 @@ export const WKS_WORKOUT_DB = {
     Object.entries(SESSION_TYPE_COMPATIBILITY_ALIASES).map(([legacyKey, normalizedKey]) => [legacyKey, normalizedWorkouts[normalizedKey]]),
   ),
 };
-
-function getPhaseTypeForWeek(weekNumber) {
-  return getPhaseForWeek(weekNumber)?.id || 'foundation';
-}
-
-function getTemplatePriority(weekType) {
-  return weekType === 'B' ? 2 : 1;
-}
-
-function resolveWeeklyTemplatePattern({ trainingDays, weekType, weekNumber }) {
-  const daysPerWeek = trainingDays === '5-day' ? 5 : 4;
-  const phaseType = getPhaseTypeForWeek(weekNumber);
-  const templatePriority = getTemplatePriority(weekType);
-
-  const exact = weeklyTemplates.find(
-    template =>
-      template.programType === 'hyrox' &&
-      template.phaseType === phaseType &&
-      template.daysPerWeek === daysPerWeek &&
-      template.templatePriority === templatePriority,
-  );
-
-  if (exact) return exact.dayPattern;
-
-  const fallback = weeklyTemplates.find(
-    template => template.programType === 'hyrox' && template.phaseType === phaseType && template.daysPerWeek === daysPerWeek,
-  );
-  return fallback?.dayPattern || [];
-}
-
-export const WEEKLY_TEMPLATES = weeklyTemplates;
-
-=======
->>>>>>> Stashed changes
 const PROGRAM_DAY_OFFSETS = {
   '4-day': [1, 3, 5, 6],
   '5-day': [1, 2, 3, 4, 6],
@@ -343,30 +289,11 @@ export function getWeeklyTemplate({ trainingDays, weekType, weekNumber }) {
   // the sessions now come from the generator instead of a static template map.
   const normalizedDays = normalizeTrainingDays(trainingDays);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
-<<<<<<< Updated upstream
-  const dayPattern = resolveWeeklyTemplatePattern({
-    trainingDays: normalizedDays,
-    weekType: normalizedWeekType,
-    weekNumber,
-  });
-
-  return dayPattern.map(workoutKey => {
-    const workout = getWksWorkout(workoutKey);
-    return {
-      ...workout,
-      workoutKey,
-      weekType: normalizedWeekType,
-      trainingDays: normalizedDays,
-      title: workout?.label,
-      detail: workout?.objective,
-    };
-=======
   return generateHyroxWeekSessions({
     trainingDays: normalizedDays,
     weekType: normalizedWeekType,
     weekNumber,
     schedulePhase: getPhaseForWeek(weekNumber).name,
->>>>>>> Stashed changes
   });
 }
 
