@@ -1,4 +1,5 @@
 import { generateHyroxWeeklyWorkoutSelection } from '../src/data/hyroxWorkoutGenerator.js';
+import { pathToFileURL } from 'node:url';
 
 const AUDIT_START_WEEK = 21;
 const AUDIT_END_WEEK = 32;
@@ -106,25 +107,39 @@ function auditMode(trainingDays) {
   };
 }
 
-const reports = TRAINING_DAY_MODES.map(auditMode);
-const allIssues = reports.flatMap(report => report.issues.map(issue => `[${report.trainingDays}] ${issue}`));
-
-for (const report of reports) {
-  console.log(`\n=== HYROX generator audit (${report.trainingDays}) ===`);
-  console.log(`Weeks ${report.window.startWeek}-${report.window.endWeek}`);
-  console.log(`Rotation overlap avg/max: ${(report.metrics.averageOverlap * 100).toFixed(1)}% / ${(report.metrics.maxOverlap * 100).toFixed(1)}%`);
-  console.log(`Peak duration avg: ${report.metrics.peakDuration.toFixed(1)} min`);
-  console.log(`Taper duration avg: ${report.metrics.taperDuration.toFixed(1)} min`);
-  console.log(`Peak intensity idx: ${report.metrics.peakIntensity.toFixed(2)}`);
-  console.log(`Taper intensity idx: ${report.metrics.taperIntensity.toFixed(2)}`);
+export function runHyroxGeneratorBehaviorAudit() {
+  const reports = TRAINING_DAY_MODES.map(auditMode);
+  const allIssues = reports.flatMap(report => report.issues.map(issue => `[${report.trainingDays}] ${issue}`));
+  return {
+    ok: allIssues.length === 0,
+    issues: allIssues,
+    reports,
+  };
 }
 
-if (allIssues.length) {
-  console.error('\nHYROX generator behavior audit found issues:');
-  for (const issue of allIssues) {
-    console.error(`- ${issue}`);
+function isDirectExecution() {
+  return process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+}
+
+if (isDirectExecution()) {
+  const result = runHyroxGeneratorBehaviorAudit();
+  for (const report of result.reports) {
+    console.log(`\n=== HYROX generator audit (${report.trainingDays}) ===`);
+    console.log(`Weeks ${report.window.startWeek}-${report.window.endWeek}`);
+    console.log(`Rotation overlap avg/max: ${(report.metrics.averageOverlap * 100).toFixed(1)}% / ${(report.metrics.maxOverlap * 100).toFixed(1)}%`);
+    console.log(`Peak duration avg: ${report.metrics.peakDuration.toFixed(1)} min`);
+    console.log(`Taper duration avg: ${report.metrics.taperDuration.toFixed(1)} min`);
+    console.log(`Peak intensity idx: ${report.metrics.peakIntensity.toFixed(2)}`);
+    console.log(`Taper intensity idx: ${report.metrics.taperIntensity.toFixed(2)}`);
   }
-  process.exitCode = 1;
-} else {
-  console.log('\nHYROX generator behavior audit passed with no issues.');
+
+  if (result.issues.length) {
+    console.error('\nHYROX generator behavior audit found issues:');
+    for (const issue of result.issues) {
+      console.error(`- ${issue}`);
+    }
+    process.exitCode = 1;
+  } else {
+    console.log('\nHYROX generator behavior audit passed with no issues.');
+  }
 }
