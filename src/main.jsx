@@ -84,6 +84,23 @@ const MORE_SECTIONS = [
 
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
 const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
+const AVAILABLE_PROGRAMS = [
+  {
+    id: 'hyrox',
+    label: 'HYROX 32-week plan',
+    description: 'Current generator and plan views are fully wired for HYROX.',
+  },
+  {
+    id: '5k',
+    label: '5K run builder',
+    description: 'Available for program selection; full downstream UI is still being phased in.',
+  },
+  {
+    id: 'strength',
+    label: 'Strength block',
+    description: 'Placeholder slot for upcoming multi-program planning support.',
+  },
+];
 const WEEKDAY_INDEX = {
   Sunday: 0,
   Monday: 1,
@@ -229,6 +246,8 @@ function getCurrentWorkoutType(workout) {
 
 function createWorkoutFromSession({ createWorkout, createExercise, session, settings, todayKey }) {
   const sessionType = session?.type || 'hyrox';
+  const normalizedProgramType = session?.programType || settings?.programType || 'hyrox';
+  const programName = normalizedProgramType === '5k' ? '5K run builder' : 'HYROX 32-week plan';
   const prescribedExercises = Array.isArray(session?.ex) && session.ex.length > 0
     ? session.ex.map(item => createExercise({
       name: item.n || 'Exercise',
@@ -244,14 +263,21 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
   const scheduledDate = session?.dateKey || todayKey;
   const workout = createWorkout({
     name: session.label || session.title || 'HYROX Session',
-    programId: 'hyrox',
-    programName: 'HYROX 32-week plan',
-    type: sessionType.includes('run') ? 'run' : sessionType.includes('hyrox') ? 'hyrox' : 'strength',
+    programId: normalizedProgramType,
+    programName,
+    type: sessionType.includes('run')
+      ? 'run'
+      : sessionType.includes('hyrox')
+        ? 'hyrox'
+        : sessionType.includes('recovery')
+          ? 'recovery'
+          : 'strength',
     status: 'planned',
     scheduledDate,
     plannedDate: scheduledDate,
     sessionOffset: session.offset ?? null,
     trainingDays: settings.trainingDays,
+    programType: normalizedProgramType,
     phase: session.phase || '',
     week: session.week || null,
     duration: session.duration || 45,
@@ -357,7 +383,7 @@ function formatSignedNumber(value) {
   return `${rounded >= 0 ? '+' : '-'}${Math.abs(rounded)}`;
 }
 
-function SettingsSheet({ isOpen, onClose }) {
+function SettingsScreen() {
   const {
     fitnessSettings,
     setFitnessSettings,
@@ -378,13 +404,9 @@ function SettingsSheet({ isOpen, onClose }) {
   const [athleteDraft, setAthleteDraft] = useState(() => ({ ...profile.athlete }));
 
   useEffect(() => {
-    if (isOpen) {
-      setDraft({ ...fitnessSettings });
-      setAthleteDraft({ ...profile.athlete });
-    }
-  }, [isOpen, fitnessSettings, profile.athlete]);
-
-  if (!isOpen) return null;
+    setDraft({ ...fitnessSettings });
+    setAthleteDraft({ ...profile.athlete });
+  }, [fitnessSettings, profile.athlete]);
 
   const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
 
@@ -409,23 +431,163 @@ function SettingsSheet({ isOpen, onClose }) {
   function save() {
     setFitnessSettings(current => ({ ...current, ...draft }));
     updateAthlete(athleteDraft);
-    onClose();
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="modal-card settings-sheet" onClick={event => event.stopPropagation()}>
-        <div className="modal-header">
-          <div>
-            <p className="eyebrow">Settings</p>
-            <h2>Configuration</h2>
-          </div>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close settings">
-            ×
-          </button>
-        </div>
+    <div className="tab-stack settings-page">
+      <Card>
+        <SectionHeader eyebrow="Settings" title="Configuration" />
+        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
+      </Card>
 
-        <div className="settings-stack">
+      <div className="settings-stack">
+        <ExpandablePanel header={<strong>Program Setup</strong>} defaultOpen>
+          <div className="field-stack">
+            <div className="field-stack compact-field">
+              <p className="eyebrow">Program</p>
+              <label className="field-stack compact-field">
+                <span>Active program</span>
+                <div className="segmented-control">
+                  {AVAILABLE_PROGRAMS.map(program => (
+                    <button
+                      key={program.id}
+                      type="button"
+                      className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
+                      onClick={() => patch('programType', program.id)}
+                    >
+                      {program.label}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <div className="field-stack compact-field">
+                <span>Available programs</span>
+                <div className="subtle-feed">
+                  {AVAILABLE_PROGRAMS.map(program => (
+                    <ListRow
+                      key={program.id}
+                      variant="card"
+                      label={program.label}
+                      sub={program.description}
+                      action={(
+                        <button
+                          type="button"
+                          className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
+                          onClick={() => patch('programType', program.id)}
+                        >
+                          {draft.programType === program.id ? 'Active' : 'Select'}
+                        </button>
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="field-stack compact-field">
+              <p className="eyebrow">Timeline</p>
+              <label className="field-stack compact-field">
+                <span>Event date</span>
+                <input
+                  type="date"
+                  className="task-title-input"
+                  value={draft.raceDate ?? ''}
+                  onChange={e => patch('raceDate', e.target.value || null)}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Program start date</span>
+                <input
+                  type="date"
+                  className="task-title-input"
+                  value={draft.programStartDate ?? ''}
+                  onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+                />
+              </label>
+            </div>
+
+            <div className="field-stack compact-field">
+              <p className="eyebrow">Training Structure</p>
+              <label className="field-stack compact-field">
+                <span>Training days per week</span>
+                <div className="segmented-control">
+                  {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
+                    <button
+                      key={freq}
+                      type="button"
+                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                      onClick={() => patch('trainingDays', freq)}
+                    >
+                      {freq}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Equipment preferences</span>
+                <div className="segmented-control">
+                  {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
+                    <button
+                      key={eq}
+                      type="button"
+                      className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
+                      onClick={() => patch('equipmentAccess', eq)}
+                    >
+                      {eq}
+                    </button>
+                  ))}
+                </div>
+              </label>
+            </div>
+          </div>
+        </ExpandablePanel>
+
+        <div className="settings-section-divider" aria-hidden="true" />
+
+          <ExpandablePanel header={<strong>Athlete Profile</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Fitness level</span>
+                <div className="segmented-control">
+                  {FITNESS_LEVELS.map(level => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`status-chip ${draft.fitnessLevel === level ? 'is-active' : ''}`}
+                      onClick={() => patch('fitnessLevel', level)}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Weak stations</span>
+                <div className="tag-row">
+                  {ALL_STATIONS.map(station => (
+                    <button
+                      key={station}
+                      type="button"
+                      className={`status-chip ${weakStations.includes(station) ? 'is-active' : ''}`}
+                      onClick={() => toggleStation(station)}
+                    >
+                      {station}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="field-stack compact-field">
+                <span>Injuries or limitations</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  value={draft.injuriesOrLimitations ?? ''}
+                  onChange={e => patch('injuriesOrLimitations', e.target.value)}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
           <ExpandablePanel header={<strong>Work Calendar</strong>}>
             <div className="field-stack">
               <label className="field-stack compact-field">
@@ -457,89 +619,6 @@ function SettingsSheet({ isOpen, onClose }) {
                     </button>
                   ))}
                 </div>
-              </label>
-            </div>
-          </ExpandablePanel>
-
-          <ExpandablePanel header={<strong>Fitness Profile</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Training days</span>
-                <div className="segmented-control">
-                  {['4-day', '5-day'].map(freq => (
-                    <button
-                      key={freq}
-                      type="button"
-                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                      onClick={() => patch('trainingDays', freq)}
-                    >
-                      {freq}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Program start date</span>
-                <input
-                  type="date"
-                  className="task-title-input"
-                  value={draft.programStartDate ?? ''}
-                  onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-                />
-              </label>
-              <label className="field-stack compact-field">
-                <span>Fitness level</span>
-                <div className="segmented-control">
-                  {FITNESS_LEVELS.map(level => (
-                    <button
-                      key={level}
-                      type="button"
-                      className={`status-chip ${draft.fitnessLevel === level ? 'is-active' : ''}`}
-                      onClick={() => patch('fitnessLevel', level)}
-                    >
-                      {level}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Equipment access</span>
-                <div className="segmented-control">
-                  {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-                    <button
-                      key={eq}
-                      type="button"
-                      className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                      onClick={() => patch('equipmentAccess', eq)}
-                    >
-                      {eq}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Weak stations</span>
-                <div className="tag-row">
-                  {ALL_STATIONS.map(station => (
-                    <button
-                      key={station}
-                      type="button"
-                      className={`status-chip ${weakStations.includes(station) ? 'is-active' : ''}`}
-                      onClick={() => toggleStation(station)}
-                    >
-                      {station}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Injuries or limitations</span>
-                <textarea
-                  className="task-title-input"
-                  rows={3}
-                  value={draft.injuriesOrLimitations ?? ''}
-                  onChange={e => patch('injuriesOrLimitations', e.target.value)}
-                />
               </label>
             </div>
           </ExpandablePanel>
@@ -625,17 +704,25 @@ function SettingsSheet({ isOpen, onClose }) {
               </label>
             </div>
           </ExpandablePanel>
-        </div>
+      </div>
 
-        <div className="inline-actions" style={{ padding: '1rem' }}>
+      <Card>
+        <div className="inline-actions">
           <button type="button" className="primary-button" onClick={save}>
             Save settings
           </button>
-          <button type="button" className="ghost-button" onClick={onClose}>
-            Cancel
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              setDraft({ ...fitnessSettings });
+              setAthleteDraft({ ...profile.athlete });
+            }}
+          >
+            Reset unsaved
           </button>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -789,11 +876,12 @@ function TodayScreen({
     () => getPlanState({
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
       today: now,
       history: workoutHistory,
       athleteDefaults,
     }),
-    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.trainingDays, now, workoutHistory],
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, now, workoutHistory],
   );
 
   const todaysWorkout = useMemo(
@@ -1116,8 +1204,12 @@ function CalendarScreen() {
   const { calendarPatterns, setCalendarPatterns, workCalendarPrefs } = useAppContext();
 
   const planState = useMemo(
-    () => getPlanState({ startDate: fitnessSettings.programStartDate, trainingDays: fitnessSettings.trainingDays }),
-    [fitnessSettings.programStartDate, fitnessSettings.trainingDays],
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
+    }),
+    [fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays],
   );
 
   const weekStart = useMemo(() => alignDateToAnchor(selectedDate, 'Monday'), [selectedDate]);
@@ -1148,7 +1240,7 @@ function CalendarScreen() {
         id: `plan-${session.dateKey}-${session.title}`,
         type: 'plan',
         title: session.label || session.title,
-        subtitle: `${session.dayLabel} · HYROX · ${session.detail || session.title}`,
+        subtitle: `${session.dayLabel} · ${planState.programLabel} · ${session.detail || session.title}`,
       }));
 
     const calendarDayItems = calendarItems
@@ -1827,11 +1919,12 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     () => getPlanState({
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
       today: now,
       history: normalizedWorkoutHistory,
       athleteDefaults,
     }),
-    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.trainingDays, normalizedWorkoutHistory, now],
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, normalizedWorkoutHistory, now],
   );
   const weeklySchedule = planState.sessions;
   const programWeek = planState.week;
@@ -1888,10 +1981,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     if (activeWorkout) return activeWorkout;
     const scheduledToday = workouts.find(workout => workout.scheduledDate === todayKey && workout.status !== 'completed');
     if (scheduledToday) return scheduledToday;
-    return workouts.find(workout => getCurrentWorkoutType(workout) === 'hyrox' && workout.status !== 'completed')
+    const preferredType = fitnessSettings.programType === '5k' ? 'running' : 'hyrox';
+    return workouts.find(workout => getCurrentWorkoutType(workout) === preferredType && workout.status !== 'completed')
       ?? workouts.find(workout => workout.status !== 'completed')
       ?? null;
-  }, [activeWorkout, todayKey, workouts]);
+  }, [activeWorkout, fitnessSettings.programType, todayKey, workouts]);
 
   const missedSessions = useMemo(
     () => weeklySchedule.filter(session => session.dateKey < todayKey && !workouts.some(workout => workout.scheduledDate === session.dateKey && workout.status === 'completed')),
@@ -1920,8 +2014,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             status: 'active',
             startedAt,
             type: getCurrentWorkoutType(workout),
-            programId: 'hyrox',
-            programName: workout.programName || 'HYROX 32-week plan',
+            programId: fitnessSettings.programType || 'hyrox',
+            programName: workout.programName || (fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan'),
           }
         : workout.status === 'active'
           ? { ...workout, status: 'planned' }
@@ -1988,8 +2082,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     const nextDate = laterThisWeek?.dateKey ?? toDateKey(addDays(new Date(`${session.dateKey}T00:00:00`), 7));
     const movedWorkout = createWorkout({
       name: session.label || session.title,
-      programId: 'hyrox',
-      programName: 'HYROX 32-week plan',
+      programId: fitnessSettings.programType || 'hyrox',
+      programName: fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan',
       type: session.type,
       status: 'planned',
       scheduledDate: nextDate,
@@ -2011,8 +2105,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   function skipMissedSession(session) {
     const skippedWorkout = createWorkout({
       name: session.label || session.title,
-      programId: 'hyrox',
-      programName: 'HYROX 32-week plan',
+      programId: fitnessSettings.programType || 'hyrox',
+      programName: fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan',
       type: session.type,
       status: 'skipped',
       scheduledDate: session.dateKey,
@@ -2272,7 +2366,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       {activeSubTab === 'plan' && (
         <>
           <section className="task-card">
-            <SectionHeader eyebrow="Active program" title="HYROX 32-week plan" />
+            <SectionHeader eyebrow="Active program" title={planState.programLabel || 'Training program'} />
             <p className="empty-message">{planState.phase.theme}</p>
             <div className="tag-row">
               <span className="status-chip is-active">{planState.weekType} week</span>
@@ -2423,7 +2517,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 }
 
-function MoreScreen({ initialSection = 'tasks', onOpenSettings, onSwitchToTab, now }) {
+function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
   const { profile, setProfile } = useProfileContext();
   const { workouts, inboxItems, setInboxItems } = useTaskContext();
   const { energyState, recoveryInputs, setRecoveryInputs, hubInsights, setHubInsights } = useAppContext();
@@ -2580,13 +2674,7 @@ function MoreScreen({ initialSection = 'tasks', onOpenSettings, onSwitchToTab, n
         </Card>
       )}
       {activeSection === 'settings' && (
-        <Card>
-          <SectionHeader eyebrow="Settings" title="Configuration entry point" />
-          <p className="empty-message">Use the header settings button to open the full configuration sheet.</p>
-          <button type="button" className="secondary-button" onClick={onOpenSettings}>
-            Open settings
-          </button>
-        </Card>
+        <SettingsScreen />
       )}
       {activeSection === 'inbox' && (
         <Card>
@@ -2657,7 +2745,6 @@ function AppShell() {
     fitnessSettings,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState('today');
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState(null);
   const [now, setNow] = useState(() => new Date());
   const [moreSection, setMoreSection] = useState('tasks');
@@ -2687,6 +2774,11 @@ function AppShell() {
 
   function openMoreSection(section) {
     setMoreSection(section);
+    setActiveTab('more');
+  }
+
+  function openSettingsPage() {
+    setMoreSection('settings');
     setActiveTab('more');
   }
 
@@ -2766,7 +2858,7 @@ function AppShell() {
     }
 
     if (activeTab === 'more') {
-      return <MoreScreen initialSection={moreSection} onOpenSettings={() => setSettingsOpen(true)} onSwitchToTab={setActiveTab} now={now} />;
+      return <MoreScreen initialSection={moreSection} onSwitchToTab={setActiveTab} now={now} />;
     }
 
     return (
@@ -2801,7 +2893,7 @@ function AppShell() {
         inboxCount={unreadNotifications.length}
         onOpenInbox={() => setNotificationCenterOpen(true)}
         onOpenQuickAdd={openQuickCapture}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettingsPage}
       >
         {primaryScreen}
       </AppFrame>
@@ -2818,8 +2910,6 @@ function AppShell() {
         onClose={() => setNotificationCenterOpen(false)}
         onMarkAllRead={markAllNotificationsRead}
       />
-
-      <SettingsSheet isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <MorningCheckinModal />
     </>
