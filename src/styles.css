@@ -1085,6 +1085,12 @@ p {
   gap: 10px;
 }
 
+.settings-section-divider {
+  height: 1px;
+  background: var(--border-divider);
+  margin: 2px 0;
+}
+
 .settings-card {
   border-radius: 18px;
   border: 1px solid var(--primary-alpha-sm);
