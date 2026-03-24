@@ -25,6 +25,17 @@ export const programProfiles = {
   },
 };
 
+export const hyroxEquipmentModes = Object.freeze(['full_gym', 'limited_gym', 'bodyweight']);
+export const hyroxPreferredRunModes = Object.freeze(['outdoor', 'treadmill', 'either']);
+export const hyroxPreferredEngineModes = Object.freeze(['rower', 'ski_erg', 'bike', 'any']);
+export const hyroxEquipmentAvailabilitySchema = Object.freeze({
+  strength: ['barbell', 'dumbbells', 'kettlebells', 'cable_machine', 'smith_machine', 'leg_press', 'hack_squat_machine', 'hip_thrust_machine', 'plate_loaded_machines', 'selectorized_machines', 'adjustable_bench'],
+  hyroxFunctional: ['sled_push', 'sled_pull', 'wall_ball', 'sandbag', 'farmer_carry_handles', 'battle_ropes', 'plyo_box'],
+  cardio: ['treadmill', 'outdoor_running', 'bike', 'rower', 'ski_erg'],
+});
+export const hyroxSessionStructureTypes = Object.freeze(['straight_sets', 'superset', 'circuit', 'hybrid_strength', 'hyrox_style']);
+export const hyroxMovementSpecificityTypes = Object.freeze(['exact', 'analogous', 'fallback']);
+
 export const phaseRules = {
   foundation: {
     phaseType: 'foundation',
