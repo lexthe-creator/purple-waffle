@@ -362,6 +362,11 @@ function getFitnessProgressSnapshot({
     : [];
 
   const completedWorkoutCount = currentWeekWorkouts.filter(session => session.status === 'completed').length;
+  const targetWorkouts = fitnessSettings.trainingDays === '3-day'
+    ? 3
+    : fitnessSettings.trainingDays === '5-day'
+      ? 5
+      : 4;
 
   const completedMiles = workouts
     .filter(workout => workout.status === 'completed' && getWorkoutProgramType(workout) === normalizedProgramType)
@@ -373,7 +378,7 @@ function getFitnessProgressSnapshot({
 
   return {
     workoutsCompleted: completedWorkoutCount,
-    workoutsTarget: Math.max(currentWeekWorkouts.length, fitnessSettings.trainingDays === '5-day' ? 5 : 4),
+    workoutsTarget: Math.max(currentWeekWorkouts.length, targetWorkouts),
     milesCompleted: completedMiles,
     milesTarget: targetMiles,
     strengthSessions,
@@ -2435,6 +2440,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 
   const todayKey = toDateKey(now);
+  const normalizedProgramType = normalizeProgramType(fitnessSettings.programType);
   const athleteDefaults = profile?.athlete || {};
   const normalizedWorkoutHistory = useMemo(
     () => workouts.map(workout => ({ ...workout, plannedDate: workout.plannedDate || workout.scheduledDate || null })),
@@ -2454,32 +2460,41 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const weeklySchedule = planState.sessions;
   const programWeek = planState.week;
   const programPhase = planState.phase.name;
-  const weekStartKey = toDateKey(alignDateToAnchor(now, 'Monday'));
-  const programCountdown = fitnessSettings.raceDate
-    ? Math.max(0, Math.round((startOfDay(`${fitnessSettings.raceDate}T00:00:00`) - startOfDay(now)) / 86_400_000))
-    : null;
+  const activeProgramName = planState.programLabel || getProgramDisplayName(fitnessSettings.programType);
+  const hasGeneratedSchedule = weeklySchedule.length > 0;
+  const programEmptyState = getProgramEmptyState(fitnessSettings.programType);
 
-  const workoutHistory = useMemo(
-    () => workouts.map(workout => ({
-      type: getCurrentWorkoutType(workout),
-      date: workout.scheduledDate || toDateKey(workout.createdAt),
-      data: { plannedDate: workout.scheduledDate || null, calories: workout.calories || 0 },
-    })),
-    [workouts],
+  const todayWorkoutCard = useMemo(
+    () => getTodayWorkoutCardState({
+      weeklySchedule,
+      todayKey,
+      programType: fitnessSettings.programType,
+    }),
+    [fitnessSettings.programType, todayKey, weeklySchedule],
   );
 
-  const weeklyAnalytics = useMemo(
-    () => computeWeeklyAnalytics(workoutHistory, weekStartKey),
-    [weekStartKey, workoutHistory],
+  const progressSnapshot = useMemo(
+    () => getFitnessProgressSnapshot({
+      workouts,
+      weeklySchedule,
+      fitnessSettings,
+      programType: fitnessSettings.programType,
+      todayKey,
+    }),
+    [fitnessSettings, todayKey, weeklySchedule, workouts],
   );
-  const weeklyCompletionSummary = useMemo(() => {
-    const completed = weeklySchedule.filter(session => session.status === 'completed').length;
-    const missed = weeklySchedule.filter(session => session.status === 'missed' || session.status === 'skipped').length;
-    const trainingMinutes = workouts
-      .filter(workout => workout.scheduledDate && weeklySchedule.some(session => session.dateKey === workout.scheduledDate) && workout.status === 'completed')
-      .reduce((total, workout) => total + (Number.isFinite(workout.duration) ? workout.duration : 0), 0);
-    return { completed, missed, trainingMinutes };
-  }, [weeklySchedule, workouts]);
+
+  const librarySections = useMemo(
+    () => getProgramLibrarySections(fitnessSettings.programType),
+    [fitnessSettings.programType],
+  );
+
+  const recentCompletedWorkouts = useMemo(
+    () => workouts
+      .filter(workout => workout.status === 'completed' && getWorkoutProgramType(workout) === normalizedProgramType)
+      .slice(0, 5),
+    [normalizedProgramType, workouts],
+  );
 
   const recoveryState = useMemo(
     () => computeRecoveryState({ energyScore: checkInDraft.energy, sleepHours: checkInDraft.sleepHours }, checkInDraft.energy, checkInDraft.sleepHours),
@@ -2487,7 +2502,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 
   const recoveryRecommendation = useMemo(() => {
-    const baseWorkout = planState.sessions.find(session => toDateKey(session.date) === todayKey) ?? null;
+    const baseWorkout = weeklySchedule.find(session => session.dateKey === todayKey) ?? null;
     if (!baseWorkout) return null;
     return adjustWorkoutForRecovery({
       id: 'today-session',
@@ -2495,26 +2510,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       type: baseWorkout.type,
       ex: [],
     }, recoveryState);
-  }, [planState.sessions, recoveryState, todayKey]);
-
-  const todaySession = useMemo(
-    () => weeklySchedule.find(session => toDateKey(session.date) === todayKey) ?? null,
-    [todayKey, weeklySchedule],
-  );
-
-  const currentWorkout = useMemo(() => {
-    if (activeWorkout) return activeWorkout;
-    const scheduledToday = workouts.find(workout => workout.scheduledDate === todayKey && workout.status !== 'completed');
-    if (scheduledToday) return scheduledToday;
-    const preferredType = fitnessSettings.programType === '5k'
-      ? 'running'
-      : fitnessSettings.programType === 'strength_block'
-        ? 'strength_block'
-        : 'hyrox';
-    return workouts.find(workout => getCurrentWorkoutType(workout) === preferredType && workout.status !== 'completed')
-      ?? workouts.find(workout => workout.status !== 'completed')
-      ?? null;
-  }, [activeWorkout, fitnessSettings.programType, todayKey, workouts]);
+  }, [recoveryState, todayKey, weeklySchedule]);
 
   const missedSessions = useMemo(
     () => weeklySchedule.filter(session => session.dateKey < todayKey && !workouts.some(workout => workout.scheduledDate === session.dateKey && workout.status === 'completed')),
@@ -2595,6 +2591,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }
 
   function startTodaysWorkout() {
+    const todaySession = weeklySchedule.find(session => session.dateKey === todayKey) ?? null;
     if (!todaySession) return;
     const sessionWorkout = createWorkoutFromSession({
       createWorkout,
@@ -2672,26 +2669,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     }
   }
 
-  function moveWeeklySession(session, nextDate) {
-    const movedWorkout = createWorkoutFromSession({
-      createWorkout,
-      createExercise,
-      session: { ...session, dateKey: nextDate },
-      settings: fitnessSettings,
-      todayKey: nextDate,
-    });
-    setWorkouts(current => [
-      { ...movedWorkout, status: 'planned', plannedDate: session.dateKey, scheduledDate: nextDate },
-      ...current,
-    ]);
-  }
-
-  const selectedTrainingDays = weeklySchedule.length;
-  const activeProgramName = planState.programLabel || getProgramDisplayName(fitnessSettings.programType);
-  const isHyroxProgram = normalizeProgramType(fitnessSettings.programType) === 'hyrox';
-  const hasGeneratedSchedule = weeklySchedule.length > 0;
-  const programEmptyState = getProgramEmptyState(fitnessSettings.programType);
-
   return (
     <div className="tab-stack fitness-stack">
       {activeWorkout && (
@@ -2702,11 +2679,12 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         <div className="task-card-header">
           <div>
             <p className="eyebrow">Fitness</p>
-            <h2>{activeProgramName}</h2>
+            <h2>Fitness</h2>
+            <p className="empty-message">{activeProgramName} · Week {programWeek} · {programPhase}</p>
           </div>
         </div>
 
-        <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness sections">
+        <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness internal navigation">
           {FITNESS_SUBTABS.map(tab => (
             <button
               key={tab.id}
@@ -2733,178 +2711,178 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             </section>
           ) : (
             <>
-          <section className="task-card">
-            <SectionHeader eyebrow="Plan state" title={planState.label} />
-            <div className="ui-metrics-row">
-              <MetricBlock value={programWeek} label="Week" />
-              <MetricBlock value={programPhase} label="Phase" />
-              <MetricBlock value={fitnessSettings.trainingDays} label="Frequency" />
-            </div>
-            <p className="empty-message">{planState.phase.theme}</p>
-          </section>
+              <p className="eyebrow fitness-section-label">Fitness Today</p>
+              <section className="task-card fitness-today-card">
+                {todayWorkoutCard.kind === 'empty' ? (
+                  <EmptyState title={todayWorkoutCard.title} description={todayWorkoutCard.description} />
+                ) : (
+                  <>
+                    <div className="fitness-today-header">
+                      <div>
+                        <h2>Today&apos;s Workout</h2>
+                        <p className="fitness-workout-title">{todayWorkoutCard.title}</p>
+                      </div>
+                      <span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>
+                    </div>
+                    <p className="empty-message">{todayWorkoutCard.helperLine}</p>
+                    <p className="fitness-workout-meta">{todayWorkoutCard.metaLine}</p>
+                    {todayWorkoutCard.session?.detail && (
+                      <p className="empty-message">{todayWorkoutCard.session.detail}</p>
+                    )}
+                    {Array.isArray(todayWorkoutCard.session?.ex) && todayWorkoutCard.session.ex.length > 0 && (
+                      <div className="subtle-feed fitness-workout-feed">
+                        {todayWorkoutCard.session.ex.map((item, index) => (
+                          <ListRow
+                            key={`${item.n}-${index}`}
+                            variant="card"
+                            label={item.n}
+                            sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <div className="quick-entry-row">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={startTodaysWorkout}
+                        disabled={!todayWorkoutCard.canStart}
+                      >
+                        Start Workout
+                      </button>
+                      <button type="button" className="ghost-button compact-ghost" onClick={() => setActiveSubTab('plan')}>
+                        View Plan
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
 
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Daily check-in</p>
-                <h2>Open the day with recovery context</h2>
-              </div>
-            </div>
-            <div className="fitness-checkin-grid">
-              <label className="field-stack compact-field">
-                <span>Mood</span>
-                <div className="status-chip-group">
-                  {['steady', 'charged', 'flat', 'tired'].map(mood => (
-                    <button
-                      key={mood}
-                      type="button"
-                      className={`status-chip ${checkInDraft.mood === mood ? 'is-active' : ''}`}
-                      onClick={() => setCheckInDraft(current => ({ ...current, mood }))}
-                    >
-                      {mood}
-                    </button>
-                  ))}
+              {progressSnapshot.hasSchedule && (
+                <section className="task-card">
+                  <p className="eyebrow fitness-section-label">Weekly Training Progress</p>
+                  <div className="fitness-progress-grid">
+                    <article className="summary-tile fitness-progress-tile">
+                      <span>Workouts</span>
+                      <strong>{progressSnapshot.workoutsCompleted} / {progressSnapshot.workoutsTarget}</strong>
+                    </article>
+                    <article className="summary-tile fitness-progress-tile">
+                      <span>Miles</span>
+                      <strong>{progressSnapshot.milesCompleted} / {progressSnapshot.milesTarget}</strong>
+                    </article>
+                    {progressSnapshot.strengthSessions > 0 && (
+                      <article className="summary-tile fitness-progress-tile">
+                        <span>Strength</span>
+                        <strong>{progressSnapshot.strengthSessions}</strong>
+                      </article>
+                    )}
+                    {progressSnapshot.recoverySessions > 0 && (
+                      <article className="summary-tile fitness-progress-tile">
+                        <span>Recovery</span>
+                        <strong>{progressSnapshot.recoverySessions}</strong>
+                      </article>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              <section className="task-card">
+                <div className="task-card-header">
+                  <div>
+                    <p className="eyebrow">Daily check-in</p>
+                    <h2>Open the day with recovery context</h2>
+                  </div>
                 </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Energy</span>
-                <div className="status-chip-group" role="group" aria-label="Energy rating">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(value => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`status-chip ${checkInDraft.energy === value ? 'is-active' : ''}`}
-                      onClick={() => setCheckInDraft(current => ({ ...current, energy: value }))}
-                    >
-                      {value}
-                    </button>
-                  ))}
+                <div className="fitness-checkin-grid">
+                  <label className="field-stack compact-field">
+                    <span>Mood</span>
+                    <div className="status-chip-group">
+                      {['steady', 'charged', 'flat', 'tired'].map(mood => (
+                        <button
+                          key={mood}
+                          type="button"
+                          className={`status-chip ${checkInDraft.mood === mood ? 'is-active' : ''}`}
+                          onClick={() => setCheckInDraft(current => ({ ...current, mood }))}
+                        >
+                          {mood}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                  <label className="field-stack compact-field">
+                    <span>Energy</span>
+                    <div className="status-chip-group" role="group" aria-label="Energy rating">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(value => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`status-chip ${checkInDraft.energy === value ? 'is-active' : ''}`}
+                          onClick={() => setCheckInDraft(current => ({ ...current, energy: value }))}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                  <label className="field-stack compact-field">
+                    <span>Sleep</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      className="task-title-input"
+                      value={checkInDraft.sleepHours}
+                      onChange={event => setCheckInDraft(current => ({ ...current, sleepHours: Number.parseFloat(event.target.value) }))}
+                    />
+                  </label>
                 </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Sleep</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  className="task-title-input"
-                  value={checkInDraft.sleepHours}
-                  onChange={event => setCheckInDraft(current => ({ ...current, sleepHours: Number.parseFloat(event.target.value) }))}
-                />
-              </label>
-            </div>
-            <div className="quick-entry-row">
-              <button type="button" className="secondary-button" onClick={saveCheckIn}>
-                Save check-in
-              </button>
-              <button type="button" className="ghost-button compact-ghost" onClick={skipCheckIn}>
-                Skip check-in
-              </button>
-            </div>
-            {recoveryState.level === 'Low' && !acceptedRecovery && (
-              <div className="feed-card">
-                <strong>Recovery recommendation</strong>
-                <p>Low energy or short sleep should move today toward recovery.</p>
                 <div className="quick-entry-row">
-                  <button type="button" className="secondary-button" onClick={acceptRecoverySuggestion}>
-                    Accept recovery day
+                  <button type="button" className="secondary-button" onClick={saveCheckIn}>
+                    Save check-in
                   </button>
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => setAcceptedRecovery(true)}>
-                    Keep current plan
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
-          {unacknowledgedMisses.length > 0 && (
-            <section className="task-card">
-              <div className="task-card-header">
-                <div>
-                  <p className="eyebrow">Missed session</p>
-                  <h2>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</h2>
-                </div>
-              </div>
-              <article className="feed-card">
-                <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
-                <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
-                <p className="empty-message">Move it to the next valid day, or skip it to keep the sequence clean.</p>
-                <div className="quick-entry-row">
-                  <button type="button" className="secondary-button" onClick={() => moveMissedSession(unacknowledgedMisses[0])}>
-                    Move to next training day
-                  </button>
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => skipMissedSession(unacknowledgedMisses[0])}>
-                    Skip
+                  <button type="button" className="ghost-button compact-ghost" onClick={skipCheckIn}>
+                    Skip check-in
                   </button>
                 </div>
-              </article>
-            </section>
-          )}
-
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">Today’s workout</p>
-                <h2>{todaySession ? (todaySession.label || todaySession.title) : currentWorkout?.name || 'Rest day'}</h2>
-              </div>
-            </div>
-            {todaySession && !currentWorkout?.scheduledDate ? (
-              <article className="feed-card">
-                <strong>{todaySession.label || todaySession.title}</strong>
-                <p>{activeProgramName} · {todaySession.detail || todaySession.title}</p>
-                <p>Week {programWeek} · {programPhase} · {fitnessSettings.trainingDays}</p>
-                {Array.isArray(todaySession.ex) && todaySession.ex.length > 0 && (
-                  <div className="subtle-feed" style={{ marginTop: '8px' }}>
-                    {todaySession.ex.map((item, index) => (
-                      <ListRow
-                        key={`${item.n}-${index}`}
-                        variant="card"
-                        label={item.n}
-                        sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
-                      />
-                    ))}
+                {recoveryState.level === 'Low' && !acceptedRecovery && (
+                  <div className="feed-card">
+                    <strong>Recovery recommendation</strong>
+                    <p>Low energy or short sleep should move today toward recovery.</p>
+                    <div className="quick-entry-row">
+                      <button type="button" className="secondary-button" onClick={acceptRecoverySuggestion}>
+                        Accept recovery day
+                      </button>
+                      <button type="button" className="ghost-button compact-ghost" onClick={() => setAcceptedRecovery(true)}>
+                        Keep current plan
+                      </button>
+                    </div>
                   </div>
                 )}
-                {getSessionStations(todaySession).length > 0 && (
-                  <p className="empty-message">{getSessionStations(todaySession).map(station => station.name).join(' · ')}</p>
-                )}
-                <button type="button" className="secondary-button" onClick={startTodaysWorkout}>
-                  Start Today’s Workout
-                </button>
-              </article>
-            ) : currentWorkout ? (
-              <article className="feed-card">
-                <strong>{currentWorkout.name}</strong>
-                <p>{currentWorkout.programName || activeProgramName} · {currentWorkout.duration} min · {currentWorkout.status}</p>
-                <p>Week {programWeek} · {programPhase}</p>
-                <button type="button" className="secondary-button" onClick={() => startWorkout(currentWorkout.id)}>
-                  {activeWorkout ? 'Continue Workout' : 'Start Workout'}
-                </button>
-              </article>
-            ) : (
-              <div className="empty-panel">
-                <strong>Rest day</strong>
-                <p>No session scheduled today. Recovery is part of the program.</p>
-              </div>
-            )}
-            {recoveryRecommendation && (
-              <p className="empty-message">Recovery adjustment available: {recoveryRecommendation.adjustmentLabel || 'Planned Session'}</p>
-            )}
-          </section>
+              </section>
 
-          <section className="task-card">
-            <SectionHeader eyebrow="Weekly stats" title="Training progress and trend" />
-            <div className="ui-metrics-row">
-              <MetricBlock value={weeklyAnalytics.sessionsLogged} label="Sessions" />
-              <MetricBlock value={weeklyCompletionSummary.completed} label="Completed" />
-              <MetricBlock value={weeklyCompletionSummary.missed} label="Missed" />
-              <MetricBlock value={weeklyCompletionSummary.trainingMinutes} label="Minutes" />
-              <MetricBlock value={weeklyAnalytics.runMiles} label="Run mi" />
-            </div>
-            <p className="empty-message">
-              Trend: {weeklyAnalytics.sessionsLogged >= 0 ? '+' : ''}{weeklyAnalytics.sessionsLogged} sessions this week.
-            </p>
-          </section>
+              {unacknowledgedMisses.length > 0 && (
+                <section className="task-card">
+                  <div className="task-card-header">
+                    <div>
+                      <p className="eyebrow">Missed session</p>
+                      <h2>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</h2>
+                    </div>
+                  </div>
+                  <article className="feed-card">
+                    <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
+                    <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
+                    <p className="empty-message">Move it to the next valid day, or skip it to keep the sequence clean.</p>
+                    <div className="quick-entry-row">
+                      <button type="button" className="secondary-button" onClick={() => moveMissedSession(unacknowledgedMisses[0])}>
+                        Move to next training day
+                      </button>
+                      <button type="button" className="ghost-button compact-ghost" onClick={() => skipMissedSession(unacknowledgedMisses[0])}>
+                        Skip
+                      </button>
+                    </div>
+                  </article>
+                </section>
+              )}
             </>
           )}
         </>
@@ -2921,85 +2899,36 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             </section>
           ) : (
             <>
-          <section className="task-card">
-            <SectionHeader eyebrow="Active program" title={planState.programLabel || 'Training program'} />
-            <p className="empty-message">{planState.phase.theme}</p>
-            <div className="tag-row">
-              <span className="status-chip is-active">{planState.weekType} week</span>
-              <span className="status-chip is-active">{fitnessSettings.trainingDays}</span>
-              <span className="status-chip is-active">{selectedTrainingDays} sessions</span>
-            </div>
-            <div className="ui-metrics-row">
-              <MetricBlock value={programWeek} label="Current week" />
-              <MetricBlock value={programPhase} label="Current phase" />
-              <MetricBlock value={programCountdown ?? '—'} label="Race countdown" />
-            </div>
-          </section>
-
-          <section className="task-card">
-            <SectionHeader eyebrow="Goal card" title="Race build" />
-            <div className="summary-row">
-              <div className="summary-tile">
-                <span>Race</span>
-                <strong>{fitnessSettings.raceName || 'Not set'}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Countdown</span>
-                <strong>{programCountdown === null ? 'Not set' : `${programCountdown} days`}</strong>
-              </div>
-              <div className="summary-tile">
-                <span>Program week</span>
-                <strong>{programWeek}</strong>
-              </div>
-            </div>
-            <p className="empty-message">Set race info and training settings in Settings.</p>
-          </section>
-
-          <section className="task-card">
-            <SectionHeader eyebrow="Weekly schedule" title="Program week layout" />
-            <div className="subtle-feed">
-              {weeklySchedule.map(session => {
-                const stationNames = getSessionStations(session).map(station => station.name).join(', ');
-                const statusLabel = session.status === 'completed'
-                  ? 'Completed'
-                  : session.status === 'moved'
-                    ? `Moved → ${session.movedToDate}`
-                    : session.status === 'skipped'
-                      ? 'Skipped'
-                      : session.status === 'missed'
-                        ? 'Missed'
-                        : session.status === 'today'
-                          ? 'Today'
-                          : 'Planned';
-                return (
-                  <article key={`${session.title}-${session.dateKey}`} className="feed-card">
-                    <strong>{session.dayLabel} · {session.label || session.title}</strong>
-                    <p>{session.dateLabel} · {session.detail || session.title}{stationNames ? ` · ${stationNames}` : ''}</p>
-                    <div className="tag-row" style={{ marginTop: '8px' }}>
-                      <span className="status-pill">{statusLabel}</span>
-                      {['planned', 'today', 'missed'].includes(session.status) && (
-                        <>
-                          <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'completed')}>
-                            Mark done
-                          </button>
-                          <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'skipped')}>
-                            Skip
-                          </button>
-                          <button
-                            type="button"
-                            className="status-chip"
-                            onClick={() => moveWeeklySession(session, toDateKey(addDays(new Date(`${session.dateKey}T00:00:00`), 1)))}
-                          >
-                            Move +1d
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
+              <p className="eyebrow fitness-section-label">Plan</p>
+              <section className="task-card">
+                <SectionHeader eyebrow="Weekly Plan" title={planState.label} />
+                <p className="empty-message">{activeProgramName} · {planState.phase.theme}</p>
+                <div className="subtle-feed">
+                  {weeklySchedule.map(session => {
+                    const status = getWorkoutStatusLabel(session, todayKey);
+                    return (
+                      <article key={`${session.title}-${session.dateKey}`} className="feed-card">
+                        <strong>{session.dayLabel} · {session.label || session.title}</strong>
+                        <p>{session.dateLabel} · {getProgramWorkoutTypeLabel(session)} · {session.duration} min</p>
+                        {session.detail && <p className="empty-message">{session.detail}</p>}
+                        <div className="tag-row" style={{ marginTop: '8px' }}>
+                          <span className={`status-pill ${status.className}`}>{status.label}</span>
+                          {['planned', 'today', 'missed'].includes(session.status) && (
+                            <>
+                              <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'completed')}>
+                                Mark done
+                              </button>
+                              <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'skipped')}>
+                                Skip
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
             </>
           )}
         </>
@@ -3017,71 +2946,56 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           ) : (
             <>
               <section className="task-card">
-                <SectionHeader eyebrow={isHyroxProgram ? 'HYROX stations' : 'Program library'} title={isHyroxProgram ? 'Race station overview' : 'Active program library'} />
-                {isHyroxProgram ? (
+                <SectionHeader eyebrow="Workout Library" title={activeProgramName} />
+                {librarySections.length > 0 ? (
                   <div className="subtle-feed">
-                    {stationList.map(station => (
-                      <ListRow key={station.key} variant="card" label={station.name} sub={`${station.raceDistance} ${station.unit} · ${station.category}`} />
+                    {librarySections.map(section => (
+                      <article key={section.title} className="feed-card">
+                        <strong>{section.title}</strong>
+                        <div className="subtle-feed fitness-library-group">
+                          {section.items.map(item => (
+                            <ListRow
+                              key={item.id}
+                              variant="card"
+                              label={item.title}
+                              sub={`${item.duration} min · ${item.objective}`}
+                            />
+                          ))}
+                        </div>
+                      </article>
                     ))}
                   </div>
                 ) : (
-                  <EmptyState title="No race stations for this program" description="Station-specific content only appears for HYROX." />
+                  <EmptyState
+                    title={programEmptyState.title}
+                    description={normalizeProgramType(fitnessSettings.programType) === 'strength_block'
+                      ? 'This program does not have generated library items yet.'
+                      : programEmptyState.description}
+                  />
                 )}
-              </section>
-
-              <section className="task-card">
-                <SectionHeader eyebrow="Saved workouts" title="Completed sessions" />
-                <div className="subtle-feed">
-                  {workouts.filter(workout => workout.status === 'completed').length > 0 ? (
-                    workouts.filter(workout => workout.status === 'completed').slice(0, 5).map(workout => {
-                      const meta = getCurrentWorkoutType(workout);
-                      const candidates = getSwapCandidates({ n: workout.name });
-                      return (
-                        <ListRow
-                          key={workout.id}
-                          variant="card"
-                          label={workout.name}
-                          sub={`${workout.programName || activeProgramName} · ${workout.duration} min · ${meta}${candidates.length > 0 ? ` · swaps: ${candidates.slice(0, 2).join(', ')}` : ''}`}
-                        />
-                      );
-                    })
-                  ) : (
-                    <EmptyState title="No completed workouts yet" description="Finished sessions will appear here as you log them." />
-                  )}
-                </div>
               </section>
             </>
           )}
         </>
       )}
 
-      {activeSubTab === 'history' && (
+      {activeSubTab === 'logging' && (
         <>
           <section className="task-card">
-            <SectionHeader eyebrow="History" title="Lightweight and expandable" />
-            <div className="ui-metrics-row">
-              <MetricBlock value={workouts.length} label="Workouts" />
-              <MetricBlock value={workouts.filter(workout => getCurrentWorkoutType(workout) === 'running').length} label="Runs" />
-              <MetricBlock value={workouts.filter(workout => ['strength', 'hyrox', 'hybrid'].includes(getCurrentWorkoutType(workout))).length} label="Strength" />
-              <MetricBlock value={workouts.filter(workout => getCurrentWorkoutType(workout) === 'recovery').length} label="Recovery" />
-            </div>
-          </section>
-
-          <section className="task-card">
-            <SectionHeader eyebrow="Workouts" title="Session history" />
+            <SectionHeader eyebrow="Logging" title="Recent completed workouts" />
             <div className="subtle-feed">
-              {workouts.slice(0, 4).map(workout => (
-                <ListRow key={workout.id} variant="card" label={workout.name} sub={`${workout.duration} min · ${workout.status}`} />
-              ))}
-            </div>
-          </section>
-
-          <section className="task-card">
-            <SectionHeader eyebrow="Notes" title="Quick log entry" />
-            <div className="subtle-feed">
-              {notes.slice(0, 3).map(note => (
-                <ListRow key={note.id} variant="card" label={note.content} />
-              ))}
+              {recentCompletedWorkouts.length > 0 ? (
+                recentCompletedWorkouts.map(workout => (
+                  <ListRow
+                    key={workout.id}
+                    variant="card"
+                    label={workout.name}
+                    sub={`${formatDateLabel(workout.completedAt || workout.createdAt)} · ${workout.duration} min · ${getCurrentWorkoutType(workout)}`}
+                  />
+                ))
+              ) : (
+                <EmptyState title="No completed workouts yet" description="Finished sessions will appear here once you log them." />
+              )}
             </div>
           </section>
         </>
