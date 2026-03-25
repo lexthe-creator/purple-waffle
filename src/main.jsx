@@ -19,6 +19,7 @@ import {
   getPlanState,
   getStationMeta,
 } from './data/hyroxPlan.js';
+import { normalizeProgramType } from './data/programRouter.js';
 import {
   QUICK_MEAL_TAGS,
   NUTRITION_SLOTS,
@@ -95,7 +96,7 @@ const AVAILABLE_PROGRAMS = [
     description: 'Available for program selection; full downstream UI is still being phased in.',
   },
   {
-    id: 'strength',
+    id: 'strength_block',
     label: 'Strength Block',
     description: 'Placeholder slot for upcoming multi-program planning support.',
   },
@@ -160,6 +161,52 @@ function toDateKey(value) {
   return startOfDay(value).toISOString().slice(0, 10);
 }
 
+function getProgramDisplayName(programType) {
+  switch (normalizeProgramType(programType)) {
+    case '5k':
+      return '5K run builder';
+    case 'strength_block':
+      return 'Strength Block plan';
+    case 'hyrox':
+    default:
+      return 'HYROX plan';
+  }
+}
+
+function getProgramFieldVisibility(programType) {
+  const normalized = normalizeProgramType(programType);
+  return {
+    showRaceName: normalized === 'hyrox',
+    showRaceCategory: normalized === 'hyrox',
+    showGoalFinishTime: normalized === 'hyrox' || normalized === '5k',
+    showRaceDate: normalized === 'hyrox' || normalized === '5k',
+    showCurrentWeeklyMileage: normalized === 'hyrox' || normalized === '5k',
+  };
+}
+
+function getProgramEmptyState(programType) {
+  const normalized = normalizeProgramType(programType);
+
+  switch (normalized) {
+    case '5k':
+      return {
+        title: '5K setup saved',
+        description: 'Your 5K settings are saved, but workouts are not yet available in this build.',
+      };
+    case 'strength_block':
+      return {
+        title: 'Strength Block setup saved',
+        description: 'Your Strength Block settings are saved, but workouts are not yet available in this build.',
+      };
+    case 'hyrox':
+    default:
+      return {
+        title: 'No workouts ready yet',
+        description: 'Your settings are saved, but workouts are not yet available right now.',
+      };
+  }
+}
+
 function alignDateToAnchor(date, anchorDay) {
   const base = startOfDay(date);
   const targetIndex = WEEKDAY_INDEX[anchorDay] ?? 1;
@@ -183,10 +230,24 @@ function inferWorkoutProgram(workout) {
   if (rawType === 'run') return 'running';
   if (['hyrox', 'strength', 'running', 'pilates', 'recovery', 'hybrid'].includes(rawType)) return rawType;
   if (rawName.includes('hyrox')) return 'hyrox';
+  if (rawName.includes('strength block')) return 'strength_block';
   if (rawName.includes('pilates')) return 'pilates';
   if (rawName.includes('recover') || rawName.includes('mobility') || rawName.includes('stretch')) return 'recovery';
   if (rawName.includes('run')) return 'running';
   return 'strength';
+}
+
+function getWorkoutProgramType(workout) {
+  const declaredProgram = workout?.programType || workout?.programId;
+  if (declaredProgram) return normalizeProgramType(declaredProgram);
+
+  const rawType = typeof workout?.type === 'string' ? workout.type.toLowerCase() : '';
+  const rawName = `${workout?.programName || workout?.name || ''}`.toLowerCase();
+
+  if (rawName.includes('5k') || rawType === 'run') return '5k';
+  if (rawName.includes('strength block') || rawType === 'strength_block') return 'strength_block';
+  if (rawName.includes('hyrox') || rawType === 'hyrox') return 'hyrox';
+  return null;
 }
 
 function getWorkoutStats(workouts, now, programType) {
@@ -204,12 +265,12 @@ function getWorkoutStats(workouts, now, programType) {
 
   const completedCurrent = currentWeek.filter(workout => workout.status === 'completed');
   const completedPrevious = previousWeek.filter(workout => workout.status === 'completed');
-  const selectedCurrent = currentWeek.filter(workout => inferWorkoutProgram(workout) === programType);
+  const selectedCurrent = currentWeek.filter(workout => getWorkoutProgramType(workout) === programType);
 
   return {
     workoutsCompleted: completedCurrent.length,
     milesCompleted: completedCurrent.reduce((total, workout) => total + (Number.isFinite(workout.distanceMiles) ? workout.distanceMiles : 0), 0),
-    strengthSessions: completedCurrent.filter(workout => ['strength', 'hyrox', 'hybrid'].includes(inferWorkoutProgram(workout))).length,
+    strengthSessions: completedCurrent.filter(workout => ['strength', 'strength_block', 'hyrox', 'hybrid'].includes(inferWorkoutProgram(workout))).length,
     recoverySessions: completedCurrent.filter(workout => ['recovery', 'pilates'].includes(inferWorkoutProgram(workout))).length,
     workoutTrend: completedCurrent.length - completedPrevious.length,
     currentWeekWorkouts: selectedCurrent,
@@ -247,7 +308,7 @@ function getCurrentWorkoutType(workout) {
 function createWorkoutFromSession({ createWorkout, createExercise, session, settings, todayKey }) {
   const sessionType = session?.type || 'hyrox';
   const normalizedProgramType = session?.programType || settings?.programType || 'hyrox';
-  const programName = normalizedProgramType === '5k' ? '5K run builder' : 'HYROX 32-week plan';
+  const programName = getProgramDisplayName(normalizedProgramType);
   const prescribedExercises = Array.isArray(session?.ex) && session.ex.length > 0
     ? session.ex.map(item => createExercise({
       name: item.n || 'Exercise',
@@ -262,7 +323,7 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
     ];
   const scheduledDate = session?.dateKey || todayKey;
   const workout = createWorkout({
-    name: session.label || session.title || 'HYROX Session',
+    name: session.label || session.title || 'Training Session',
     programId: normalizedProgramType,
     programName,
     type: sessionType.includes('run')
@@ -383,27 +444,192 @@ function formatSignedNumber(value) {
   return `${rounded >= 0 ? '+' : '-'}${Math.abs(rounded)}`;
 }
 
+const workCalendarCardStyle = {
+  background: 'var(--card)',
+  border: '1px solid var(--border)',
+  borderRadius: 16,
+  padding: 16,
+  marginBottom: 12,
+  boxShadow: 'var(--shadow)',
+};
+
+const workCalendarHeaderButtonStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  width: '100%',
+  background: 'none',
+  border: 'none',
+  cursor: 'pointer',
+  padding: 0,
+};
+
+const workCalendarTitleStyle = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+};
+
+const workCalendarChevronStyle = {
+  color: 'var(--text-secondary)',
+  fontSize: 16,
+  lineHeight: 1,
+};
+
+const workCalendarContentWrapStyle = {
+  marginTop: 12,
+  paddingTop: 12,
+  borderTop: '0.5px solid var(--border)',
+};
+
+const workCalendarHelperTextStyle = {
+  fontSize: 12,
+  color: 'var(--text-secondary)',
+  marginBottom: 12,
+  lineHeight: 1.6,
+};
+
+const workCalendarMiniLabelStyle = {
+  fontSize: 11,
+  fontWeight: 600,
+  color: 'var(--text-primary)',
+  marginBottom: 6,
+};
+
+const workCalendarPriorityRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '5px 0',
+  borderBottom: '0.5px solid var(--border)',
+};
+
+const workCalendarBadgeStyle = {
+  width: 18,
+  height: 18,
+  borderRadius: '50%',
+  color: 'var(--white)',
+  fontSize: 10,
+  fontWeight: 700,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flexShrink: 0,
+};
+
+const workCalendarRowTextStyle = {
+  fontSize: 12,
+  color: 'var(--text-primary)',
+};
+
+const workCalendarSecondaryHelperStyle = {
+  marginTop: 12,
+  fontSize: 11,
+  color: 'var(--text-secondary)',
+  lineHeight: 1.5,
+};
+
+const workCalendarSmallHeadingStyle = {
+  marginTop: 10,
+  marginBottom: 4,
+  fontSize: 11,
+  fontWeight: 500,
+  color: 'var(--text-primary)',
+};
+
+const workCalendarEmptyStateStyle = {
+  fontSize: 11,
+  color: 'var(--text-secondary)',
+};
+
+const WORK_CALENDAR_PRIORITY_ROWS = [
+  { n: 1, label: 'Fixed Google events', bg: 'var(--primary)' },
+  { n: 2, label: 'Manual busy blocks', bg: 'var(--warning)' },
+  { n: 3, label: 'Meal prep', bg: 'var(--success)' },
+  { n: 4, label: 'Workout', bg: 'var(--success)' },
+  { n: 5, label: 'Tasks', bg: 'var(--text-secondary)' },
+];
+
+function formatBusyBlockSummary(item) {
+  const title = typeof item?.title === 'string' && item.title.trim() ? item.title.trim() : 'Busy block';
+  const date = typeof item?.date === 'string' ? item.date : '';
+  const startTime = typeof item?.startTime === 'string' ? item.startTime : '';
+  const endTime = typeof item?.endTime === 'string' ? item.endTime : '';
+
+  if (date && startTime && endTime) {
+    return `${title} · ${date} ${startTime}-${endTime}`;
+  }
+
+  if (startTime && endTime) {
+    return `${title} · ${startTime}-${endTime}`;
+  }
+
+  return title;
+}
+
+function WorkCalendarAccordionCard({ busyBlocks }) {
+  const [expanded, setExpanded] = useState(true);
+  const busyBlockSummary = busyBlocks.length === 0
+    ? 'None yet. Go to Calendar to add blocks.'
+    : busyBlocks.map(formatBusyBlockSummary).join(' | ');
+
+  return (
+    <div style={workCalendarCardStyle}>
+      <button
+        type="button"
+        style={workCalendarHeaderButtonStyle}
+        onClick={() => setExpanded(current => !current)}
+      >
+        <span style={workCalendarTitleStyle}>Work Calendar</span>
+        <span style={workCalendarChevronStyle}>{expanded ? '^' : '⌄'}</span>
+      </button>
+
+      {expanded && (
+        <div style={workCalendarContentWrapStyle}>
+          <div style={workCalendarHelperTextStyle}>
+            Manually enter work-unavailable windows so the app can plan workouts, meals, and tasks around them. Busy blocks are locked — the planner treats them like fixed meetings.
+          </div>
+
+          <div style={workCalendarMiniLabelStyle}>Priority order</div>
+
+          {WORK_CALENDAR_PRIORITY_ROWS.map(item => (
+            <div key={item.n} style={workCalendarPriorityRowStyle}>
+              <span style={{ ...workCalendarBadgeStyle, background: item.bg }}>{item.n}</span>
+              <span style={workCalendarRowTextStyle}>{item.label}</span>
+            </div>
+          ))}
+
+          <div style={workCalendarSecondaryHelperStyle}>
+            Add busy blocks from the Calendar tab. Use the quick presets for common patterns, or save a weekly pattern and apply it each Sunday.
+          </div>
+
+          <div style={workCalendarSmallHeadingStyle}>Current busy blocks</div>
+          <div style={workCalendarEmptyStateStyle}>{busyBlockSummary}</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SettingsScreen() {
   const {
     fitnessSettings,
     setFitnessSettings,
-    workCalendarPrefs,
-    setWorkCalendarPrefs,
     mealPrefs,
     setMealPrefs,
     notificationPrefs,
     setNotificationPrefs,
-    calendarPatterns,
     recoveryInputs,
     setRecoveryInputs,
   } = useAppContext();
+  const { calendarItems } = useTaskContext();
   const { profile, updateAthlete } = useProfileContext();
 
   const [draft, setDraft] = useState(() => ({ ...fitnessSettings }));
   const [athleteDraft, setAthleteDraft] = useState(() => ({ ...profile.athlete }));
   const [saveBanner, setSaveBanner] = useState('');
   const saveBannerTimerRef = useRef(null);
+  const fieldVisibility = getProgramFieldVisibility(draft.programType);
 
   useEffect(() => {
     setDraft({ ...fitnessSettings });
@@ -418,6 +644,10 @@ function SettingsScreen() {
 
   const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
   const strongStations = Array.isArray(athleteDraft.strongStations) ? athleteDraft.strongStations : [];
+  const busyCalendarBlocks = useMemo(
+    () => calendarItems.filter(item => item.type === 'busy'),
+    [calendarItems],
+  );
 
   function patch(key, value) {
     setDraft(current => ({ ...current, [key]: value }));
@@ -480,15 +710,17 @@ function SettingsScreen() {
 
         <div className="field-stack compact-field">
           <span>Timeline</span>
-          <label className="field-stack compact-field">
-            <span>Race Date</span>
-            <input
-              type="date"
-              className="task-title-input settings-input"
-              value={draft.raceDate ?? ''}
-              onChange={e => patch('raceDate', e.target.value || null)}
-            />
-          </label>
+          {fieldVisibility.showRaceDate && (
+            <label className="field-stack compact-field">
+              <span>Race Date</span>
+              <input
+                type="date"
+                className="task-title-input settings-input"
+                value={draft.raceDate ?? ''}
+                onChange={e => patch('raceDate', e.target.value || null)}
+              />
+            </label>
+          )}
           <label className="field-stack compact-field">
             <span>Plan Start Date</span>
             <input
@@ -499,27 +731,33 @@ function SettingsScreen() {
             />
           </label>
           <div className="subtle-feed">
-            <input
-              type="text"
-              className="task-title-input"
-              placeholder="Race name"
-              value={draft.raceName}
-              onChange={e => patch('raceName', e.target.value)}
-            />
-            <input
-              type="text"
-              className="task-title-input"
-              placeholder="Race category"
-              value={draft.raceCategory}
-              onChange={e => patch('raceCategory', e.target.value)}
-            />
-            <input
-              type="text"
-              className="task-title-input"
-              placeholder="Goal finish time"
-              value={draft.goalFinishTime}
-              onChange={e => patch('goalFinishTime', e.target.value)}
-            />
+            {fieldVisibility.showRaceName && (
+              <input
+                type="text"
+                className="task-title-input"
+                placeholder="Race name"
+                value={draft.raceName}
+                onChange={e => patch('raceName', e.target.value)}
+              />
+            )}
+            {fieldVisibility.showRaceCategory && (
+              <input
+                type="text"
+                className="task-title-input"
+                placeholder="Race category"
+                value={draft.raceCategory}
+                onChange={e => patch('raceCategory', e.target.value)}
+              />
+            )}
+            {fieldVisibility.showGoalFinishTime && (
+              <input
+                type="text"
+                className="task-title-input"
+                placeholder="Goal finish time"
+                value={draft.goalFinishTime}
+                onChange={e => patch('goalFinishTime', e.target.value)}
+              />
+            )}
           </div>
         </div>
 
@@ -555,16 +793,18 @@ function SettingsScreen() {
               ))}
             </div>
           </label>
-          <label className="field-stack compact-field">
-            <span>Current weekly mileage</span>
-            <input
-              type="number"
-              min="0"
-              className="task-title-input settings-input"
-              value={draft.currentWeeklyMileage ?? ''}
-              onChange={e => patch('currentWeeklyMileage', e.target.value === '' ? null : Number(e.target.value))}
-            />
-          </label>
+          {fieldVisibility.showCurrentWeeklyMileage && (
+            <label className="field-stack compact-field">
+              <span>Current weekly mileage</span>
+              <input
+                type="number"
+                min="0"
+                className="task-title-input settings-input"
+                value={draft.currentWeeklyMileage ?? ''}
+                onChange={e => patch('currentWeeklyMileage', e.target.value === '' ? null : Number(e.target.value))}
+              />
+            </label>
+          )}
           <label className="field-stack compact-field">
             <span>Injuries or limitations</span>
             <textarea
@@ -704,39 +944,7 @@ function SettingsScreen() {
       </div>
     ),
     workCalendar: (
-      <div className="field-stack">
-        <label className="field-stack compact-field">
-          <span>Planning order</span>
-          <div className="segmented-control">
-            {['priority', 'time'].map(opt => (
-              <button
-                key={opt}
-                type="button"
-                className={`status-chip ${workCalendarPrefs.planningOrder === opt ? 'is-active' : ''}`}
-                onClick={() => setWorkCalendarPrefs(p => ({ ...p, planningOrder: opt }))}
-              >
-                {opt === 'priority' ? 'Priority first' : 'Chronological'}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="field-stack compact-field">
-          <span>Busy-block behavior</span>
-          <div className="segmented-control">
-            {['hard', 'soft'].map(opt => (
-              <button
-                key={opt}
-                type="button"
-                className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
-                onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
-              >
-                {opt === 'hard' ? 'Hard block' : 'Soft block'}
-              </button>
-            ))}
-          </div>
-        </label>
-        <p className="empty-message">Saved patterns: {calendarPatterns.length}. Calendar preferences are configured here.</p>
-      </div>
+      <WorkCalendarAccordionCard busyBlocks={busyCalendarBlocks} />
     ),
     nutrition: (
       <div className="field-stack">
@@ -835,9 +1043,13 @@ function SettingsScreen() {
       <div className="settings-stack">
         {settingsSections.map((section, index) => (
           <React.Fragment key={section.id}>
-            <ExpandablePanel header={<strong>{section.label}</strong>} defaultOpen={index === 0} className="settings-card">
-              {sectionContent[section.id]}
-            </ExpandablePanel>
+            {section.id === 'workCalendar' ? (
+              sectionContent[section.id]
+            ) : (
+              <ExpandablePanel header={<strong>{section.label}</strong>} defaultOpen={index === 0} className="settings-card">
+                {sectionContent[section.id]}
+              </ExpandablePanel>
+            )}
             {index === 0 && <div className="settings-section-divider" aria-hidden="true" />}
           </React.Fragment>
         ))}
@@ -2118,7 +2330,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     if (activeWorkout) return activeWorkout;
     const scheduledToday = workouts.find(workout => workout.scheduledDate === todayKey && workout.status !== 'completed');
     if (scheduledToday) return scheduledToday;
-    const preferredType = fitnessSettings.programType === '5k' ? 'running' : 'hyrox';
+    const preferredType = fitnessSettings.programType === '5k'
+      ? 'running'
+      : fitnessSettings.programType === 'strength_block'
+        ? 'strength_block'
+        : 'hyrox';
     return workouts.find(workout => getCurrentWorkoutType(workout) === preferredType && workout.status !== 'completed')
       ?? workouts.find(workout => workout.status !== 'completed')
       ?? null;
@@ -2152,7 +2368,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             startedAt,
             type: getCurrentWorkoutType(workout),
             programId: fitnessSettings.programType || 'hyrox',
-            programName: workout.programName || (fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan'),
+            programType: fitnessSettings.programType || workout.programType || 'hyrox',
+            programName: workout.programName || getProgramDisplayName(fitnessSettings.programType),
           }
         : workout.status === 'active'
           ? { ...workout, status: 'planned' }
@@ -2220,7 +2437,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     const movedWorkout = createWorkout({
       name: session.label || session.title,
       programId: fitnessSettings.programType || 'hyrox',
-      programName: fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan',
+      programType: fitnessSettings.programType || 'hyrox',
+      programName: getProgramDisplayName(fitnessSettings.programType),
       type: session.type,
       status: 'planned',
       scheduledDate: nextDate,
@@ -2243,7 +2461,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     const skippedWorkout = createWorkout({
       name: session.label || session.title,
       programId: fitnessSettings.programType || 'hyrox',
-      programName: fitnessSettings.programType === '5k' ? '5K run builder' : 'HYROX 32-week plan',
+      programType: fitnessSettings.programType || 'hyrox',
+      programName: getProgramDisplayName(fitnessSettings.programType),
       type: session.type,
       status: 'skipped',
       scheduledDate: session.dateKey,
@@ -2292,6 +2511,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }
 
   const selectedTrainingDays = weeklySchedule.length;
+  const activeProgramName = planState.programLabel || getProgramDisplayName(fitnessSettings.programType);
+  const isHyroxProgram = normalizeProgramType(fitnessSettings.programType) === 'hyrox';
+  const hasGeneratedSchedule = weeklySchedule.length > 0;
+  const programEmptyState = getProgramEmptyState(fitnessSettings.programType);
 
   return (
     <div className="tab-stack fitness-stack">
@@ -2303,7 +2526,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         <div className="task-card-header">
           <div>
             <p className="eyebrow">Fitness</p>
-            <h2>HYROX program</h2>
+            <h2>{activeProgramName}</h2>
           </div>
         </div>
 
@@ -2325,6 +2548,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
       {activeSubTab === 'today' && (
         <>
+          {!hasGeneratedSchedule ? (
+            <section className="task-card">
+              <EmptyState
+                title={programEmptyState.title}
+                description={programEmptyState.description}
+              />
+            </section>
+          ) : (
+            <>
           <section className="task-card">
             <SectionHeader eyebrow="Plan state" title={planState.label} />
             <div className="ui-metrics-row">
@@ -2443,7 +2675,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             {todaySession && !currentWorkout?.scheduledDate ? (
               <article className="feed-card">
                 <strong>{todaySession.label || todaySession.title}</strong>
-                <p>HYROX · {todaySession.detail || todaySession.title}</p>
+                <p>{activeProgramName} · {todaySession.detail || todaySession.title}</p>
                 <p>Week {programWeek} · {programPhase} · {fitnessSettings.trainingDays}</p>
                 {Array.isArray(todaySession.ex) && todaySession.ex.length > 0 && (
                   <div className="subtle-feed" style={{ marginTop: '8px' }}>
@@ -2467,7 +2699,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             ) : currentWorkout ? (
               <article className="feed-card">
                 <strong>{currentWorkout.name}</strong>
-                <p>{currentWorkout.programName || 'HYROX'} · {currentWorkout.duration} min · {currentWorkout.status}</p>
+                <p>{currentWorkout.programName || activeProgramName} · {currentWorkout.duration} min · {currentWorkout.status}</p>
                 <p>Week {programWeek} · {programPhase}</p>
                 <button type="button" className="secondary-button" onClick={() => startWorkout(currentWorkout.id)}>
                   {activeWorkout ? 'Continue Workout' : 'Start Workout'}
@@ -2497,11 +2729,22 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
               Trend: {weeklyAnalytics.sessionsLogged >= 0 ? '+' : ''}{weeklyAnalytics.sessionsLogged} sessions this week.
             </p>
           </section>
+            </>
+          )}
         </>
       )}
 
       {activeSubTab === 'plan' && (
         <>
+          {!hasGeneratedSchedule ? (
+            <section className="task-card">
+              <EmptyState
+                title={programEmptyState.title}
+                description={programEmptyState.description}
+              />
+            </section>
+          ) : (
+            <>
           <section className="task-card">
             <SectionHeader eyebrow="Active program" title={planState.programLabel || 'Training program'} />
             <p className="empty-message">{planState.phase.theme}</p>
@@ -2581,41 +2824,58 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
               })}
             </div>
           </section>
+            </>
+          )}
         </>
       )}
 
       {activeSubTab === 'library' && (
         <>
-          <section className="task-card">
-            <SectionHeader eyebrow="HYROX stations" title="Race station overview" />
-            <div className="subtle-feed">
-              {stationList.map(station => (
-                <ListRow key={station.key} variant="card" label={station.name} sub={`${station.raceDistance} ${station.unit} · ${station.category}`} />
-              ))}
-            </div>
-          </section>
+          {!hasGeneratedSchedule ? (
+            <section className="task-card">
+              <EmptyState
+                title={programEmptyState.title}
+                description={programEmptyState.description}
+              />
+            </section>
+          ) : (
+            <>
+              <section className="task-card">
+                <SectionHeader eyebrow={isHyroxProgram ? 'HYROX stations' : 'Program library'} title={isHyroxProgram ? 'Race station overview' : 'Active program library'} />
+                {isHyroxProgram ? (
+                  <div className="subtle-feed">
+                    {stationList.map(station => (
+                      <ListRow key={station.key} variant="card" label={station.name} sub={`${station.raceDistance} ${station.unit} · ${station.category}`} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="No race stations for this program" description="Station-specific content only appears for HYROX." />
+                )}
+              </section>
 
-          <section className="task-card">
-            <SectionHeader eyebrow="Saved workouts" title="Completed sessions" />
-            <div className="subtle-feed">
-              {workouts.filter(workout => workout.status === 'completed').length > 0 ? (
-                workouts.filter(workout => workout.status === 'completed').slice(0, 5).map(workout => {
-                  const meta = getCurrentWorkoutType(workout);
-                  const candidates = getSwapCandidates({ n: workout.name });
-                  return (
-                    <ListRow
-                      key={workout.id}
-                      variant="card"
-                      label={workout.name}
-                      sub={`${workout.programName || 'HYROX'} · ${workout.duration} min · ${meta}${candidates.length > 0 ? ` · swaps: ${candidates.slice(0, 2).join(', ')}` : ''}`}
-                    />
-                  );
-                })
-              ) : (
-                <EmptyState title="No completed workouts yet" description="Finished sessions will appear here as you log them." />
-              )}
-            </div>
-          </section>
+              <section className="task-card">
+                <SectionHeader eyebrow="Saved workouts" title="Completed sessions" />
+                <div className="subtle-feed">
+                  {workouts.filter(workout => workout.status === 'completed').length > 0 ? (
+                    workouts.filter(workout => workout.status === 'completed').slice(0, 5).map(workout => {
+                      const meta = getCurrentWorkoutType(workout);
+                      const candidates = getSwapCandidates({ n: workout.name });
+                      return (
+                        <ListRow
+                          key={workout.id}
+                          variant="card"
+                          label={workout.name}
+                          sub={`${workout.programName || activeProgramName} · ${workout.duration} min · ${meta}${candidates.length > 0 ? ` · swaps: ${candidates.slice(0, 2).join(', ')}` : ''}`}
+                        />
+                      );
+                    })
+                  ) : (
+                    <EmptyState title="No completed workouts yet" description="Finished sessions will appear here as you log them." />
+                  )}
+                </div>
+              </section>
+            </>
+          )}
         </>
       )}
 

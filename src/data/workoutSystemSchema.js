@@ -4,7 +4,7 @@
  * Data structures only. Generator logic remains outside this module.
  */
 
-export const supportedProgramTypes = Object.freeze(['hyrox', '5k']);
+export const supportedProgramTypes = Object.freeze(['hyrox', '5k', 'strength_block']);
 export const secondaryGoals = Object.freeze(['fat_loss', 'strength_gain', 'endurance', 'sport_skill', 'maintenance']);
 export const workoutStatuses = Object.freeze(['planned', 'completed', 'skipped', 'moved', 'swapped', 'shortened']);
 export const checkInResultStates = Object.freeze(['green', 'yellow', 'red']);
@@ -114,6 +114,39 @@ export const programProfiles = {
       weaknessBiasAllowed: false,
     },
     supportedDaysPerWeek: [3, 4, 5],
+    defaultDaysPerWeek: 4,
+    phaseSequence: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
+  },
+  strength_block: {
+    programType: 'strength_block',
+    programProfileId: 'strength_block',
+    displayName: 'Strength Block',
+    primaryGoalCategory: 'strength',
+    supportedSecondaryGoals: [...secondaryGoals],
+    minimumWeeks: 4,
+    maximumWeeks: 12,
+    durationWeeks: { min: 4, max: 12, default: 8 },
+    defaultPhases: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
+    phaseDistributionRules: {
+      '4_to_6_weeks': { foundation: 1, base: 1, build: 1, peak: 1 },
+      '7_to_12_weeks': { foundation: 1, base: 2, build: 2, peak: 1 },
+    },
+    defaultRunFrequencyStart: 0,
+    defaultRunFrequencyMax: 0,
+    defaultStrengthFrequency: 3,
+    defaultRecoveryFrequency: 1,
+    progressionStyle: 'strength_cycle',
+    requiredSessionTypes: ['strength_lower', 'strength_upper'],
+    optionalSessionTypes: ['strength_full', 'strength_hybrid', 'recovery_walk_mobility'],
+    longRunEligible: false,
+    doubleDayEligible: false,
+    equipmentModesSupported: ['full_gym', 'limited_gym', 'bodyweight'],
+    overlayRules: {
+      runningProgression: 'not_applicable',
+      specificityProgression: 'progress_strength_and_accessory_volume',
+      weaknessBiasAllowed: true,
+    },
+    supportedDaysPerWeek: [4, 5],
     defaultDaysPerWeek: 4,
     phaseSequence: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
   },
@@ -966,8 +999,8 @@ function profileDaysSupported(programType, daysPerWeek) {
 export function validateWorkoutSystemSchema() {
   const issues = [];
 
-  if (!supportedProgramTypes.includes('hyrox') || !supportedProgramTypes.includes('5k')) {
-    issues.push('supportedProgramTypes must include hyrox and 5k');
+  if (!supportedProgramTypes.includes('hyrox') || !supportedProgramTypes.includes('5k') || !supportedProgramTypes.includes('strength_block')) {
+    issues.push('supportedProgramTypes must include hyrox, 5k, and strength_block');
   }
 
   for (const programType of supportedProgramTypes) {

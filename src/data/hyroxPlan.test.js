@@ -42,6 +42,25 @@ test('4-day and 5-day schedules generate the correct count', () => {
   assert.equal(fiveDay.length, 5);
 });
 
+test('buildWeeklySchedule routes by programType and preserves the active program id', () => {
+  const fiveK = buildWeeklySchedule({
+    trainingDays: '4-day',
+    weekNumber: 1,
+    startDate: START_DATE,
+    programType: '5k',
+  });
+  const strength = buildWeeklySchedule({
+    trainingDays: '4-day',
+    weekNumber: 1,
+    startDate: START_DATE,
+    programType: 'strength_block',
+  });
+
+  assert.ok(fiveK.length > 0);
+  assert.ok(fiveK.every(session => session.programType === '5k'));
+  assert.deepEqual(strength, []);
+});
+
 test('generator emits the expected workout count for each training day mode', () => {
   const fourDay = generateHyroxWeeklyWorkoutSelection({
     trainingDays: '4-day',
@@ -91,7 +110,7 @@ test('movement options honor limited equipment profiles', () => {
   });
   const limitedSelections = limited.flatMap(workout => workout.structure).filter(block => block.selectedMovement);
   assert.ok(limitedSelections.length > 0);
-  assert.ok(limitedSelections.every((block) => ['dumbbell', 'bodyweight'].includes(block.selectedMovement.equipmentType)));
+  assert.ok(limitedSelections.every((block) => ['treadmill', 'bodyweight'].includes(block.selectedMovement.equipmentType)));
 });
 
 test('phase mapping is explicit and stable', () => {

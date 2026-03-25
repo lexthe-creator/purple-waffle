@@ -7,6 +7,7 @@ import {
   supportedProgramTypes,
   workoutStatuses,
 } from './workoutSystemSchema.js';
+import { normalizeProgramType } from './programRouter.js';
 
 const STORAGE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -168,9 +169,16 @@ function normalizeWorkoutStatus(status) {
   return 'planned';
 }
 
+function getProgramDisplayName(programType) {
+  const normalized = normalizeProgramType(programType);
+  if (normalized === '5k') return '5K run builder';
+  if (normalized === 'strength_block') return 'Strength Block plan';
+  return 'HYROX 32-week plan';
+}
+
 export function normalizeFitnessSettings(raw) {
   const src = isPlainObject(raw) ? raw : {};
-  const programType = supportedProgramTypes.includes(src.programType) ? src.programType : 'hyrox';
+  const programType = normalizeProgramType(src.programType);
   const equipmentMode = normalizeEquipmentMode(src.equipmentMode, src.equipmentAccess);
   const preferredEngineModes = normalizeStringArray(src.preferredEngineModes, ['any'])
     .filter(mode => hyroxPreferredEngineModes.includes(mode))
@@ -224,13 +232,17 @@ export function normalizeWorkoutRecord(raw, index = 0) {
   const src = isPlainObject(raw) ? raw : {};
   const scheduledDate = normalizeDateKey(src.scheduledDate);
   const plannedDate = normalizeDateKey(src.plannedDate, scheduledDate);
+  const programType = normalizeProgramType(src.programType || src.programId);
 
   return {
     id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `workout-${index}-${Date.now()}`,
     name: typeof src.name === 'string' && src.name.length > 0 ? src.name : 'Focus Session',
-    programId: typeof src.programId === 'string' && src.programId.length > 0 ? src.programId : 'hyrox',
-    programName: typeof src.programName === 'string' && src.programName.length > 0 ? src.programName : 'HYROX 32-week plan',
-    type: typeof src.type === 'string' && src.type.length > 0 ? src.type : 'hyrox',
+    programId: programType,
+    programType,
+    programName: typeof src.programName === 'string' && src.programName.length > 0 ? src.programName : getProgramDisplayName(programType),
+    type: typeof src.type === 'string' && src.type.length > 0
+      ? src.type
+      : (programType === '5k' ? 'run' : programType === 'strength_block' ? 'strength' : 'hyrox'),
     status: normalizeWorkoutStatus(src.status),
     scheduledDate,
     plannedDate,

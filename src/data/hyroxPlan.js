@@ -1,9 +1,9 @@
-import {
-  generateHyroxWorkoutSchedule,
-  generateHyroxWeeklyWorkoutSelection,
-} from './hyroxWorkoutGenerator.js';
 import { get5kPhaseForWeek } from './5kWorkoutGenerator.js';
-import { generateWorkoutSchedule, generateWeeklyWorkoutSelection } from './programWorkoutGenerator.js';
+import {
+  generateWorkoutSchedule,
+  generateWeeklyWorkoutSelection,
+  normalizeProgramType,
+} from './programWorkoutGenerator.js';
 import { programProfiles, sessionTypes } from './workoutSystemSchema.js';
 
 const STATION_META = {
@@ -155,11 +155,6 @@ const HYROX_SESSION_LABELS = {
   hyrox_simulation: 'Simulation',
 };
 
-function normalizeProgramType(programType) {
-  const normalized = String(programType || 'hyrox').toLowerCase();
-  return programProfiles[normalized] ? normalized : 'hyrox';
-}
-
 function normalizeTrainingDays(trainingDays, programType = 'hyrox') {
   const normalizedProgramType = normalizeProgramType(programType);
   if (normalizedProgramType === '5k') {
@@ -294,6 +289,7 @@ function hydrateHyroxWorkoutSession(workout, {
     ...workout,
     id: workout.workoutId,
     workoutKey: workout.workoutId,
+    programType: 'hyrox',
     label,
     title: workout.workoutId,
     detail: `${workout.durationMinutes} min · ${workout.intensity} · ${detailStations}`,
@@ -400,26 +396,12 @@ function hydrateProgramWorkoutSession(workout, {
 }
 
 function generateProgramWeekSessions({ programType, trainingDays, weekType, weekNumber, schedulePhase, totalWeeks = 8 }) {
-  if (programType === 'hyrox') {
-    return generateHyroxWeeklyWorkoutSelection({
-      trainingDays,
-      weekType,
-      weekNumber,
-      schedulePhase,
-    }).map(workout => hydrateProgramWorkoutSession(workout, {
-      programType,
-      trainingDays,
-      weekType,
-      weekNumber,
-      totalWeeks,
-    }));
-  }
-
   return generateWeeklyWorkoutSelection({
     programType,
     trainingDays,
     weekType,
     weekNumber,
+    schedulePhase,
     totalWeeks,
   }).map(workout => hydrateProgramWorkoutSession(workout, {
     programType,
@@ -456,20 +438,14 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekT
   const normalizedDays = normalizeTrainingDays(trainingDays, normalizedProgramType);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
   const schedulePhase = getPhaseForWeek(weekNumber, normalizedProgramType, totalWeeks).name;
-  const rawSessions = normalizedProgramType === 'hyrox'
-    ? generateHyroxWorkoutSchedule({
-      trainingDays: normalizedDays,
-      weekType: normalizedWeekType,
-      weekNumber,
-      schedulePhase,
-    })
-    : generateWorkoutSchedule({
-      programType: normalizedProgramType,
-      trainingDays: normalizedDays,
-      weekType: normalizedWeekType,
-      weekNumber,
-      totalWeeks,
-    });
+  const rawSessions = generateWorkoutSchedule({
+    programType: normalizedProgramType,
+    trainingDays: normalizedDays,
+    weekType: normalizedWeekType,
+    weekNumber,
+    schedulePhase,
+    totalWeeks,
+  });
   const sessions = rawSessions.map(session => hydrateProgramWorkoutSession(session, {
     programType: normalizedProgramType,
     trainingDays: normalizedDays,
