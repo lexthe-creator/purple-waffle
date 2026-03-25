@@ -505,6 +505,10 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
   const scheduledDate = session?.dateKey || todayKey;
   const workout = createWorkout({
     name: session.label || session.title || 'Training Session',
+    title: session.label || session.title || 'Training Session',
+    label: session.label || session.title || 'Training Session',
+    detail: session.detail || '',
+    objective: session.objective || session.shortVersionRule || '',
     programId: normalizedProgramType,
     programName,
     type: sessionType.includes('run')
@@ -523,6 +527,13 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
     phase: session.phase || '',
     week: session.week || null,
     duration: session.duration || 45,
+    sessionType: session.sessionType || null,
+    sessionTypeCanonical: session.sessionTypeCanonical || null,
+    warmupTemplateId: session.warmupTemplateId || null,
+    cooldownTemplateId: session.cooldownTemplateId || null,
+    shortVersionRule: session.shortVersionRule || null,
+    prescription: session.prescription || null,
+    coachingNote: session.coachingNotes || session.coachingNote || null,
     exercises: prescribedExercises,
   });
 
@@ -2564,6 +2575,23 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     onStartWorkout(null);
   }
 
+  function logCompletion() {
+    if (!activeWorkoutId) return;
+    const loggedAt = Date.now();
+    setWorkouts(current => current.map(workout => (
+      workout.id === activeWorkoutId
+        ? {
+            ...workout,
+            workoutLog: {
+              ...(workout.workoutLog || {}),
+              completionLoggedAt: loggedAt,
+            },
+          }
+        : workout
+    )));
+    upsertNotification('Completion logged', activeWorkout?.name || 'Workout');
+  }
+
   function saveCheckIn() {
     setEnergyState(current => ({
       ...current,
@@ -2669,333 +2697,342 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   return (
     <div className="tab-stack fitness-stack">
       {activeWorkout && (
-        <WorkoutPlayer workout={activeWorkout} onCancel={cancelWorkout} onComplete={completeWorkout} />
+        <WorkoutPlayer
+          workout={activeWorkout}
+          onCancel={cancelWorkout}
+          onComplete={completeWorkout}
+          onLogCompletion={logCompletion}
+        />
       )}
 
-      <section className="task-card fitness-nav-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Fitness</p>
-            <h2>Fitness</h2>
-            <p className="empty-message">{activeProgramName} · Week {programWeek} · {programPhase}</p>
+      {!activeWorkout && (
+        <>
+        <section className="task-card fitness-nav-card">
+          <div className="task-card-header">
+            <div>
+              <p className="eyebrow">Fitness</p>
+              <h2>Fitness</h2>
+              <p className="empty-message">{activeProgramName} · Week {programWeek} · {programPhase}</p>
+            </div>
           </div>
-        </div>
 
-        <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness internal navigation">
-          {FITNESS_SUBTABS.map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeSubTab === tab.id}
-              className={`status-chip ${activeSubTab === tab.id ? 'is-active' : ''}`}
-              onClick={() => setActiveSubTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </section>
+          <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness internal navigation">
+            {FITNESS_SUBTABS.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeSubTab === tab.id}
+                className={`status-chip ${activeSubTab === tab.id ? 'is-active' : ''}`}
+                onClick={() => setActiveSubTab(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
-      {activeSubTab === 'today' && (
-        <>
-          {!hasGeneratedSchedule ? (
-            <section className="task-card">
-              <EmptyState
-                title={programEmptyState.title}
-                description={programEmptyState.description}
-              />
-            </section>
-          ) : (
-            <>
-              <p className="eyebrow fitness-section-label">Fitness Today</p>
-              <section className="task-card fitness-today-card">
-                {todayWorkoutCard.kind === 'empty' ? (
-                  <EmptyState title={todayWorkoutCard.title} description={todayWorkoutCard.description} />
-                ) : (
-                  <>
-                    <div className="fitness-today-header">
-                      <div>
-                        <h2>Today&apos;s Workout</h2>
-                        <p className="fitness-workout-title">{todayWorkoutCard.title}</p>
-                      </div>
-                      <span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>
-                    </div>
-                    <p className="empty-message">{todayWorkoutCard.helperLine}</p>
-                    <p className="fitness-workout-meta">{todayWorkoutCard.metaLine}</p>
-                    {todayWorkoutCard.session?.detail && (
-                      <p className="empty-message">{todayWorkoutCard.session.detail}</p>
-                    )}
-                    {Array.isArray(todayWorkoutCard.session?.ex) && todayWorkoutCard.session.ex.length > 0 && (
-                      <div className="subtle-feed fitness-workout-feed">
-                        {todayWorkoutCard.session.ex.map((item, index) => (
-                          <ListRow
-                            key={`${item.n}-${index}`}
-                            variant="card"
-                            label={item.n}
-                            sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    <div className="quick-entry-row">
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={startTodaysWorkout}
-                        disabled={!todayWorkoutCard.canStart}
-                      >
-                        Start Workout
-                      </button>
-                      <button type="button" className="ghost-button compact-ghost" onClick={() => setActiveSubTab('plan')}>
-                        View Plan
-                      </button>
-                    </div>
-                  </>
-                )}
-              </section>
-
-              {progressSnapshot.hasSchedule && (
-                <section className="task-card">
-                  <p className="eyebrow fitness-section-label">Weekly Training Progress</p>
-                  <div className="fitness-progress-grid">
-                    <article className="summary-tile fitness-progress-tile">
-                      <span>Workouts</span>
-                      <strong>{progressSnapshot.workoutsCompleted} / {progressSnapshot.workoutsTarget}</strong>
-                    </article>
-                    <article className="summary-tile fitness-progress-tile">
-                      <span>Miles</span>
-                      <strong>{progressSnapshot.milesCompleted} / {progressSnapshot.milesTarget}</strong>
-                    </article>
-                    {progressSnapshot.strengthSessions > 0 && (
-                      <article className="summary-tile fitness-progress-tile">
-                        <span>Strength</span>
-                        <strong>{progressSnapshot.strengthSessions}</strong>
-                      </article>
-                    )}
-                    {progressSnapshot.recoverySessions > 0 && (
-                      <article className="summary-tile fitness-progress-tile">
-                        <span>Recovery</span>
-                        <strong>{progressSnapshot.recoverySessions}</strong>
-                      </article>
-                    )}
-                  </div>
-                </section>
-              )}
-
+        {activeSubTab === 'today' && (
+          <>
+            {!hasGeneratedSchedule ? (
               <section className="task-card">
-                <div className="task-card-header">
-                  <div>
-                    <p className="eyebrow">Daily check-in</p>
-                    <h2>Open the day with recovery context</h2>
-                  </div>
-                </div>
-                <div className="fitness-checkin-grid">
-                  <label className="field-stack compact-field">
-                    <span>Mood</span>
-                    <div className="status-chip-group">
-                      {['steady', 'charged', 'flat', 'tired'].map(mood => (
-                        <button
-                          key={mood}
-                          type="button"
-                          className={`status-chip ${checkInDraft.mood === mood ? 'is-active' : ''}`}
-                          onClick={() => setCheckInDraft(current => ({ ...current, mood }))}
-                        >
-                          {mood}
-                        </button>
-                      ))}
-                    </div>
-                  </label>
-                  <label className="field-stack compact-field">
-                    <span>Energy</span>
-                    <div className="status-chip-group" role="group" aria-label="Energy rating">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(value => (
-                        <button
-                          key={value}
-                          type="button"
-                          className={`status-chip ${checkInDraft.energy === value ? 'is-active' : ''}`}
-                          onClick={() => setCheckInDraft(current => ({ ...current, energy: value }))}
-                        >
-                          {value}
-                        </button>
-                      ))}
-                    </div>
-                  </label>
-                  <label className="field-stack compact-field">
-                    <span>Sleep</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      className="task-title-input"
-                      value={checkInDraft.sleepHours}
-                      onChange={event => setCheckInDraft(current => ({ ...current, sleepHours: Number.parseFloat(event.target.value) }))}
-                    />
-                  </label>
-                </div>
-                <div className="quick-entry-row">
-                  <button type="button" className="secondary-button" onClick={saveCheckIn}>
-                    Save check-in
-                  </button>
-                  <button type="button" className="ghost-button compact-ghost" onClick={skipCheckIn}>
-                    Skip check-in
-                  </button>
-                </div>
-                {recoveryState.level === 'Low' && !acceptedRecovery && (
-                  <div className="feed-card">
-                    <strong>Recovery recommendation</strong>
-                    <p>Low energy or short sleep should move today toward recovery.</p>
-                    <div className="quick-entry-row">
-                      <button type="button" className="secondary-button" onClick={acceptRecoverySuggestion}>
-                        Accept recovery day
-                      </button>
-                      <button type="button" className="ghost-button compact-ghost" onClick={() => setAcceptedRecovery(true)}>
-                        Keep current plan
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <EmptyState
+                  title={programEmptyState.title}
+                  description={programEmptyState.description}
+                />
               </section>
-
-              {unacknowledgedMisses.length > 0 && (
-                <section className="task-card">
-                  <div className="task-card-header">
-                    <div>
-                      <p className="eyebrow">Missed session</p>
-                      <h2>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</h2>
-                    </div>
-                  </div>
-                  <article className="feed-card">
-                    <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
-                    <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
-                    <p className="empty-message">Move it to the next valid day, or skip it to keep the sequence clean.</p>
-                    <div className="quick-entry-row">
-                      <button type="button" className="secondary-button" onClick={() => moveMissedSession(unacknowledgedMisses[0])}>
-                        Move to next training day
-                      </button>
-                      <button type="button" className="ghost-button compact-ghost" onClick={() => skipMissedSession(unacknowledgedMisses[0])}>
-                        Skip
-                      </button>
-                    </div>
-                  </article>
-                </section>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {activeSubTab === 'plan' && (
-        <>
-          {!hasGeneratedSchedule ? (
-            <section className="task-card">
-              <EmptyState
-                title={programEmptyState.title}
-                description={programEmptyState.description}
-              />
-            </section>
-          ) : (
-            <>
-              <p className="eyebrow fitness-section-label">Plan</p>
-              <section className="task-card">
-                <SectionHeader eyebrow="Weekly Plan" title={planState.label} />
-                <p className="empty-message">{activeProgramName} · {planState.phase.theme}</p>
-                <div className="subtle-feed">
-                  {weeklySchedule.map(session => {
-                    const status = getWorkoutStatusLabel(session, todayKey);
-                    return (
-                      <article key={`${session.title}-${session.dateKey}`} className="feed-card">
-                        <strong>{session.dayLabel} · {session.label || session.title}</strong>
-                        <p>{session.dateLabel} · {getProgramWorkoutTypeLabel(session)} · {session.duration} min</p>
-                        {session.detail && <p className="empty-message">{session.detail}</p>}
-                        <div className="tag-row" style={{ marginTop: '8px' }}>
-                          <span className={`status-pill ${status.className}`}>{status.label}</span>
-                          {['planned', 'today', 'missed'].includes(session.status) && (
-                            <>
-                              <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'completed')}>
-                                Mark done
-                              </button>
-                              <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'skipped')}>
-                                Skip
-                              </button>
-                            </>
-                          )}
+            ) : (
+              <>
+                <p className="eyebrow fitness-section-label">Fitness Today</p>
+                <section className="task-card fitness-today-card">
+                  {todayWorkoutCard.kind === 'empty' ? (
+                    <EmptyState title={todayWorkoutCard.title} description={todayWorkoutCard.description} />
+                  ) : (
+                    <>
+                      <div className="fitness-today-header">
+                        <div>
+                          <h2>Today&apos;s Workout</h2>
+                          <p className="fitness-workout-title">{todayWorkoutCard.title}</p>
                         </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-            </>
-          )}
-        </>
-      )}
-
-      {activeSubTab === 'library' && (
-        <>
-          {!hasGeneratedSchedule ? (
-            <section className="task-card">
-              <EmptyState
-                title={programEmptyState.title}
-                description={programEmptyState.description}
-              />
-            </section>
-          ) : (
-            <>
-              <section className="task-card">
-                <SectionHeader eyebrow="Workout Library" title={activeProgramName} />
-                {librarySections.length > 0 ? (
-                  <div className="subtle-feed">
-                    {librarySections.map(section => (
-                      <article key={section.title} className="feed-card">
-                        <strong>{section.title}</strong>
-                        <div className="subtle-feed fitness-library-group">
-                          {section.items.map(item => (
+                        <span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>
+                      </div>
+                      <p className="empty-message">{todayWorkoutCard.helperLine}</p>
+                      <p className="fitness-workout-meta">{todayWorkoutCard.metaLine}</p>
+                      {todayWorkoutCard.session?.detail && (
+                        <p className="empty-message">{todayWorkoutCard.session.detail}</p>
+                      )}
+                      {Array.isArray(todayWorkoutCard.session?.ex) && todayWorkoutCard.session.ex.length > 0 && (
+                        <div className="subtle-feed fitness-workout-feed">
+                          {todayWorkoutCard.session.ex.map((item, index) => (
                             <ListRow
-                              key={item.id}
+                              key={`${item.n}-${index}`}
                               variant="card"
-                              label={item.title}
-                              sub={`${item.duration} min · ${item.objective}`}
+                              label={item.n}
+                              sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
                             />
                           ))}
                         </div>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title={programEmptyState.title}
-                    description={normalizeProgramType(fitnessSettings.programType) === 'strength_block'
-                      ? 'This program does not have generated library items yet.'
-                      : programEmptyState.description}
-                  />
-                )}
-              </section>
-            </>
-          )}
-        </>
-      )}
+                      )}
+                      <div className="quick-entry-row">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={startTodaysWorkout}
+                          disabled={!todayWorkoutCard.canStart}
+                        >
+                          Start Workout
+                        </button>
+                        <button type="button" className="ghost-button compact-ghost" onClick={() => setActiveSubTab('plan')}>
+                          View Plan
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </section>
 
-      {activeSubTab === 'logging' && (
-        <>
-          <section className="task-card">
-            <SectionHeader eyebrow="Logging" title="Recent completed workouts" />
-            <div className="subtle-feed">
-              {recentCompletedWorkouts.length > 0 ? (
-                recentCompletedWorkouts.map(workout => (
-                  <ListRow
-                    key={workout.id}
-                    variant="card"
-                    label={workout.name}
-                    sub={`${formatDateLabel(workout.completedAt || workout.createdAt)} · ${workout.duration} min · ${getCurrentWorkoutType(workout)}`}
-                  />
-                ))
-              ) : (
-                <EmptyState title="No completed workouts yet" description="Finished sessions will appear here once you log them." />
-              )}
-            </div>
-          </section>
-        </>
+                {progressSnapshot.hasSchedule && (
+                  <section className="task-card">
+                    <p className="eyebrow fitness-section-label">Weekly Training Progress</p>
+                    <div className="fitness-progress-grid">
+                      <article className="summary-tile fitness-progress-tile">
+                        <span>Workouts</span>
+                        <strong>{progressSnapshot.workoutsCompleted} / {progressSnapshot.workoutsTarget}</strong>
+                      </article>
+                      <article className="summary-tile fitness-progress-tile">
+                        <span>Miles</span>
+                        <strong>{progressSnapshot.milesCompleted} / {progressSnapshot.milesTarget}</strong>
+                      </article>
+                      {progressSnapshot.strengthSessions > 0 && (
+                        <article className="summary-tile fitness-progress-tile">
+                          <span>Strength</span>
+                          <strong>{progressSnapshot.strengthSessions}</strong>
+                        </article>
+                      )}
+                      {progressSnapshot.recoverySessions > 0 && (
+                        <article className="summary-tile fitness-progress-tile">
+                          <span>Recovery</span>
+                          <strong>{progressSnapshot.recoverySessions}</strong>
+                        </article>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                <section className="task-card">
+                  <div className="task-card-header">
+                    <div>
+                      <p className="eyebrow">Daily check-in</p>
+                      <h2>Open the day with recovery context</h2>
+                    </div>
+                  </div>
+                  <div className="fitness-checkin-grid">
+                    <label className="field-stack compact-field">
+                      <span>Mood</span>
+                      <div className="status-chip-group">
+                        {['steady', 'charged', 'flat', 'tired'].map(mood => (
+                          <button
+                            key={mood}
+                            type="button"
+                            className={`status-chip ${checkInDraft.mood === mood ? 'is-active' : ''}`}
+                            onClick={() => setCheckInDraft(current => ({ ...current, mood }))}
+                          >
+                            {mood}
+                          </button>
+                        ))}
+                      </div>
+                    </label>
+                    <label className="field-stack compact-field">
+                      <span>Energy</span>
+                      <div className="status-chip-group" role="group" aria-label="Energy rating">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(value => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={`status-chip ${checkInDraft.energy === value ? 'is-active' : ''}`}
+                            onClick={() => setCheckInDraft(current => ({ ...current, energy: value }))}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
+                    </label>
+                    <label className="field-stack compact-field">
+                      <span>Sleep</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        className="task-title-input"
+                        value={checkInDraft.sleepHours}
+                        onChange={event => setCheckInDraft(current => ({ ...current, sleepHours: Number.parseFloat(event.target.value) }))}
+                      />
+                    </label>
+                  </div>
+                  <div className="quick-entry-row">
+                    <button type="button" className="secondary-button" onClick={saveCheckIn}>
+                      Save check-in
+                    </button>
+                    <button type="button" className="ghost-button compact-ghost" onClick={skipCheckIn}>
+                      Skip check-in
+                    </button>
+                  </div>
+                  {recoveryState.level === 'Low' && !acceptedRecovery && (
+                    <div className="feed-card">
+                      <strong>Recovery recommendation</strong>
+                      <p>Low energy or short sleep should move today toward recovery.</p>
+                      <div className="quick-entry-row">
+                        <button type="button" className="secondary-button" onClick={acceptRecoverySuggestion}>
+                          Accept recovery day
+                        </button>
+                        <button type="button" className="ghost-button compact-ghost" onClick={() => setAcceptedRecovery(true)}>
+                          Keep current plan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </section>
+
+                {unacknowledgedMisses.length > 0 && (
+                  <section className="task-card">
+                    <div className="task-card-header">
+                      <div>
+                        <p className="eyebrow">Missed session</p>
+                        <h2>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</h2>
+                      </div>
+                    </div>
+                    <article className="feed-card">
+                      <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
+                      <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
+                      <p className="empty-message">Move it to the next valid day, or skip it to keep the sequence clean.</p>
+                      <div className="quick-entry-row">
+                        <button type="button" className="secondary-button" onClick={() => moveMissedSession(unacknowledgedMisses[0])}>
+                          Move to next training day
+                        </button>
+                        <button type="button" className="ghost-button compact-ghost" onClick={() => skipMissedSession(unacknowledgedMisses[0])}>
+                          Skip
+                        </button>
+                      </div>
+                    </article>
+                  </section>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {activeSubTab === 'plan' && (
+          <>
+            {!hasGeneratedSchedule ? (
+              <section className="task-card">
+                <EmptyState
+                  title={programEmptyState.title}
+                  description={programEmptyState.description}
+                />
+              </section>
+            ) : (
+              <>
+                <p className="eyebrow fitness-section-label">Plan</p>
+                <section className="task-card">
+                  <SectionHeader eyebrow="Weekly Plan" title={planState.label} />
+                  <p className="empty-message">{activeProgramName} · {planState.phase.theme}</p>
+                  <div className="subtle-feed">
+                    {weeklySchedule.map(session => {
+                      const status = getWorkoutStatusLabel(session, todayKey);
+                      return (
+                        <article key={`${session.title}-${session.dateKey}`} className="feed-card">
+                          <strong>{session.dayLabel} · {session.label || session.title}</strong>
+                          <p>{session.dateLabel} · {getProgramWorkoutTypeLabel(session)} · {session.duration} min</p>
+                          {session.detail && <p className="empty-message">{session.detail}</p>}
+                          <div className="tag-row" style={{ marginTop: '8px' }}>
+                            <span className={`status-pill ${status.className}`}>{status.label}</span>
+                            {['planned', 'today', 'missed'].includes(session.status) && (
+                              <>
+                                <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'completed')}>
+                                  Mark done
+                                </button>
+                                <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(session, 'skipped')}>
+                                  Skip
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              </>
+            )}
+          </>
+        )}
+
+        {activeSubTab === 'library' && (
+          <>
+            {!hasGeneratedSchedule ? (
+              <section className="task-card">
+                <EmptyState
+                  title={programEmptyState.title}
+                  description={programEmptyState.description}
+                />
+              </section>
+            ) : (
+              <>
+                <section className="task-card">
+                  <SectionHeader eyebrow="Workout Library" title={activeProgramName} />
+                  {librarySections.length > 0 ? (
+                    <div className="subtle-feed">
+                      {librarySections.map(section => (
+                        <article key={section.title} className="feed-card">
+                          <strong>{section.title}</strong>
+                          <div className="subtle-feed fitness-library-group">
+                            {section.items.map(item => (
+                              <ListRow
+                                key={item.id}
+                                variant="card"
+                                label={item.title}
+                                sub={`${item.duration} min · ${item.objective}`}
+                              />
+                            ))}
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      title={programEmptyState.title}
+                      description={normalizeProgramType(fitnessSettings.programType) === 'strength_block'
+                        ? 'This program does not have generated library items yet.'
+                        : programEmptyState.description}
+                    />
+                  )}
+                </section>
+              </>
+            )}
+          </>
+        )}
+
+        {activeSubTab === 'logging' && (
+          <>
+            <section className="task-card">
+              <SectionHeader eyebrow="Logging" title="Recent completed workouts" />
+              <div className="subtle-feed">
+                {recentCompletedWorkouts.length > 0 ? (
+                  recentCompletedWorkouts.map(workout => (
+                    <ListRow
+                      key={workout.id}
+                      variant="card"
+                      label={workout.name}
+                      sub={`${formatDateLabel(workout.completedAt || workout.createdAt)} · ${workout.duration} min · ${getCurrentWorkoutType(workout)}`}
+                    />
+                  ))
+                ) : (
+                  <EmptyState title="No completed workouts yet" description="Finished sessions will appear here once you log them." />
+                )}
+              </div>
+            </section>
+          </>
+        )}
+      </>
       )}
     </div>
   );
