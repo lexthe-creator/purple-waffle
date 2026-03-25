@@ -195,6 +195,16 @@ p {
   transform: translateY(-1px);
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.ghost-button:disabled,
+.status-chip:disabled,
+.icon-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .primary-button {
   background: var(--primary);
   border-color: var(--primary);
@@ -287,15 +297,30 @@ p {
 }
 
 .fitness-nav-card {
-  gap: 12px;
+  gap: 14px;
+}
+
+.fitness-nav-card .task-card-header h2 {
+  font-size: 1.34rem;
+}
+
+.fitness-nav-card .empty-message {
+  margin-top: 2px;
 }
 
 .fitness-subnav {
   gap: 6px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--primary-alpha-sm);
+  border-radius: 18px;
 }
 
 .fitness-subnav .status-chip {
   flex: 1 1 auto;
+  padding: 8px 10px;
+  border-radius: 14px;
+  text-align: center;
 }
 
 .fitness-checkin-grid {
@@ -355,6 +380,60 @@ p {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.fitness-section-label {
+  margin: 2px 0 -2px 4px;
+}
+
+.fitness-today-card {
+  border-color: var(--primary-alpha-md);
+  box-shadow: var(--shadow-strong);
+  gap: 12px;
+}
+
+.fitness-today-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.fitness-today-header h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.fitness-workout-title {
+  margin: 4px 0 0;
+  font-size: 1.18rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.fitness-workout-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.fitness-progress-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fitness-progress-tile {
+  min-height: 82px;
+}
+
+.fitness-progress-tile strong {
+  font-size: 1.15rem;
+}
+
+.fitness-library-group {
+  margin-top: 2px;
 }
 
 .summary-row,
@@ -1335,6 +1414,10 @@ p {
 
   .fitness-checkin-grid {
     gap: 8px;
+  }
+
+  .fitness-progress-grid {
+    grid-template-columns: 1fr;
   }
 
   .week-strip {

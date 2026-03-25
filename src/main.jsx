@@ -2414,7 +2414,7 @@ function NutritionScreen({ now }) {
 }
 
 function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
-  const { workouts, notes, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
+  const { workouts, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
   const { energyState, setEnergyState, fitnessSettings } = useAppContext();
   const { profile } = useProfileContext();
   const [activeSubTab, setActiveSubTab] = useState('today');
@@ -2521,9 +2521,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     () => missedSessions.filter(session => !acknowledgedMisses.has(`miss-${session.dateKey}`)),
     [acknowledgedMisses, missedSessions],
   );
-
-  const stationList = useMemo(() => ALL_STATIONS.map(name => getStationMeta(name)).filter(Boolean), []);
-  const athletePaces = useMemo(() => computePaces(profile.athlete.fiveKTime ? Number.parseFloat(profile.athlete.fiveKTime) : null), [profile.athlete.fiveKTime]);
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
