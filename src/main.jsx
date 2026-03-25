@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AppFrame from './components/AppFrame.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
@@ -78,7 +78,6 @@ const MORE_SECTIONS = [
   { id: 'maintenance', label: 'Maintenance' },
   { id: 'insights', label: 'Insights' },
   { id: 'finance', label: 'Finance' },
-  { id: 'settings', label: 'Settings' },
   { id: 'inbox', label: 'Inbox' },
 ];
 
@@ -403,11 +402,19 @@ function SettingsScreen() {
 
   const [draft, setDraft] = useState(() => ({ ...fitnessSettings }));
   const [athleteDraft, setAthleteDraft] = useState(() => ({ ...profile.athlete }));
+  const [saveBanner, setSaveBanner] = useState('');
+  const saveBannerTimerRef = useRef(null);
 
   useEffect(() => {
     setDraft({ ...fitnessSettings });
     setAthleteDraft({ ...profile.athlete });
   }, [fitnessSettings, profile.athlete]);
+
+  useEffect(() => () => {
+    if (saveBannerTimerRef.current) {
+      clearTimeout(saveBannerTimerRef.current);
+    }
+  }, []);
 
   const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
   const strongStations = Array.isArray(athleteDraft.strongStations) ? athleteDraft.strongStations : [];
@@ -433,6 +440,14 @@ function SettingsScreen() {
   function save() {
     setFitnessSettings(current => ({ ...current, ...draft }));
     updateAthlete(athleteDraft);
+    setSaveBanner('Settings saved.');
+    if (saveBannerTimerRef.current) {
+      clearTimeout(saveBannerTimerRef.current);
+    }
+    saveBannerTimerRef.current = setTimeout(() => {
+      setSaveBanner('');
+      saveBannerTimerRef.current = null;
+    }, 2500);
   }
 
   const settingsSections = [
@@ -810,6 +825,12 @@ function SettingsScreen() {
       <Card>
         <SectionHeader eyebrow="Settings" title="Settings" />
       </Card>
+
+      {saveBanner ? (
+        <div className="settings-save-banner" role="status" aria-live="polite">
+          {saveBanner}
+        </div>
+      ) : null}
 
       <div className="settings-stack">
         {settingsSections.map((section, index) => (
@@ -2639,10 +2660,11 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
   const { energyState, recoveryInputs, setRecoveryInputs, hubInsights, setHubInsights } = useAppContext();
   const [activeSection, setActiveSection] = useState(initialSection);
   const [insightDraft, setInsightDraft] = useState('');
+  const validSections = useMemo(() => new Set(MORE_SECTIONS.map(section => section.id)), []);
 
   useEffect(() => {
-    setActiveSection(initialSection);
-  }, [initialSection]);
+    setActiveSection(validSections.has(initialSection) ? initialSection : 'tasks');
+  }, [initialSection, validSections]);
 
   const weeklyAnalytics = useMemo(() => {
     const weekStart = toDateKey(alignDateToAnchor(now || new Date(), 'Monday'));
@@ -2688,7 +2710,6 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
     recovery: 'Energy, sleep, and recovery defaults.',
     maintenance: 'Home upkeep and recurring chores.',
     insights: 'Weekly review and notes.',
-    settings: 'App preferences and training configuration.',
     inbox: 'Capture and route incoming items.',
   };
 
@@ -2696,7 +2717,7 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
     <div className="tab-stack">
       <Card>
         <SectionHeader eyebrow="More" title="Secondary workspaces" />
-        <p className="empty-message">Today, Calendar, and Fitness stay in the primary nav. Everything else lives here.</p>
+        <p className="empty-message">Today, Calendar, and Fitness stay in the primary nav. Recovery, Lifestyle, Maintenance, Insights, Finance, and Inbox live here.</p>
         <div className="tag-row">
           {MORE_SECTIONS.map(section => (
             <button
@@ -2788,9 +2809,6 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
             )}
           </div>
         </Card>
-      )}
-      {activeSection === 'settings' && (
-        <SettingsScreen />
       )}
       {activeSection === 'inbox' && (
         <Card>
@@ -2894,8 +2912,7 @@ function AppShell() {
   }
 
   function openSettingsPage() {
-    setMoreSection('settings');
-    setActiveTab('more');
+    setActiveTab('settings');
   }
 
   function handleQuickAddSubmit(payload) {
@@ -2975,6 +2992,10 @@ function AppShell() {
 
     if (activeTab === 'more') {
       return <MoreScreen initialSection={moreSection} onSwitchToTab={setActiveTab} now={now} />;
+    }
+
+    if (activeTab === 'settings') {
+      return <SettingsScreen />;
     }
 
     return (
