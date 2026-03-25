@@ -22,6 +22,7 @@ export default defineConfig(({ command }) => ({
     // Allow both localhost and 127.0.0.1 during local QA without custom HMR wiring.
     host: true,
     port: 4173,
-    strictPort: true,
+    // Prefer 4173, but automatically fall back if it's already occupied.
+    strictPort: false,
   },
 }));

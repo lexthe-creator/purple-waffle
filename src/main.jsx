@@ -537,6 +537,24 @@ function SettingsScreen() {
               />
             </label>
             <label className="field-stack compact-field">
+              <span>Program start date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.programStartDate ?? ''}
+                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+              />
+            </label>
+            <label className="field-stack compact-field">
+              <span>Program start date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.programStartDate ?? ''}
+                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+              />
+            </label>
+            <label className="field-stack compact-field">
               <span>Training days per week</span>
               <div className="segmented-control">
                 {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
@@ -569,6 +587,15 @@ function SettingsScreen() {
           </div>
 <<<<<<< ours
 <<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
 >>>>>>> theirs
 =======
 >>>>>>> theirs
