@@ -1082,7 +1082,17 @@ p {
 
 .settings-stack {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+}
+
+.settings-save-banner {
+  border: 1px solid rgba(165, 179, 140, 0.45);
+  background: var(--success-soft);
+  color: var(--success-text);
+  border-radius: 18px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 
 .settings-section-divider {
@@ -1096,11 +1106,11 @@ p {
   border: 1px solid var(--border-card);
   border-radius: 24px;
   box-shadow: var(--shadow);
-  padding: 14px 18px 10px;
+  padding: 10px 16px 8px;
 }
 
 .settings-page .ui-expandable.settings-card .ui-expandable__trigger {
-  padding: 12px 0 16px;
+  padding: 8px 0 10px;
 }
 
 .settings-page .ui-expandable.settings-card .ui-expandable__trigger:hover {
@@ -1109,11 +1119,11 @@ p {
 }
 
 .settings-page .ui-expandable.settings-card .ui-expandable__body.is-open {
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .settings-page .ui-expandable.settings-card .ui-expandable__inner {
-  padding-bottom: 6px;
+  padding-bottom: 2px;
 }
 
 .settings-page .field-stack > span,
