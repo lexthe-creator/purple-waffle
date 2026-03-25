@@ -418,6 +418,12 @@ function SettingsScreen() {
 
   const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
   const strongStations = Array.isArray(athleteDraft.strongStations) ? athleteDraft.strongStations : [];
+  const isHyroxProgram = draft.programType === 'hyrox';
+  const isFiveKProgram = draft.programType === '5k';
+  const isStrengthProgram = draft.programType === 'strength';
+  const showRaceFields = isHyroxProgram;
+  const showRaceDateField = isHyroxProgram || isFiveKProgram;
+  const showGoalTimeField = isHyroxProgram || isFiveKProgram;
 
   function patch(key, value) {
     setDraft(current => ({ ...current, [key]: value }));
@@ -481,15 +487,6 @@ function SettingsScreen() {
         <div className="field-stack compact-field">
           <span>Timeline</span>
           <label className="field-stack compact-field">
-            <span>Race Date</span>
-            <input
-              type="date"
-              className="task-title-input settings-input"
-              value={draft.raceDate ?? ''}
-              onChange={e => patch('raceDate', e.target.value || null)}
-            />
-          </label>
-          <label className="field-stack compact-field">
             <span>Plan Start Date</span>
             <input
               type="date"
@@ -498,29 +495,51 @@ function SettingsScreen() {
               onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
             />
           </label>
-          <div className="subtle-feed">
-            <input
-              type="text"
-              className="task-title-input"
-              placeholder="Race name"
-              value={draft.raceName}
-              onChange={e => patch('raceName', e.target.value)}
-            />
-            <input
-              type="text"
-              className="task-title-input"
-              placeholder="Race category"
-              value={draft.raceCategory}
-              onChange={e => patch('raceCategory', e.target.value)}
-            />
-            <input
-              type="text"
-              className="task-title-input"
-              placeholder="Goal finish time"
-              value={draft.goalFinishTime}
-              onChange={e => patch('goalFinishTime', e.target.value)}
-            />
-          </div>
+          {showRaceDateField && (
+            <label className="field-stack compact-field">
+              <span>{isFiveKProgram ? 'Race Date (optional)' : 'Race Date'}</span>
+              <input
+                type="date"
+                className="task-title-input settings-input"
+                value={draft.raceDate ?? ''}
+                onChange={e => patch('raceDate', e.target.value || null)}
+              />
+            </label>
+          )}
+          {(showRaceFields || showGoalTimeField) && (
+            <div className="subtle-feed">
+              {showRaceFields && (
+                <>
+                  <input
+                    type="text"
+                    className="task-title-input"
+                    placeholder="Race name"
+                    value={draft.raceName}
+                    onChange={e => patch('raceName', e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="task-title-input"
+                    placeholder="Race category"
+                    value={draft.raceCategory}
+                    onChange={e => patch('raceCategory', e.target.value)}
+                  />
+                </>
+              )}
+              {showGoalTimeField && (
+                <input
+                  type="text"
+                  className="task-title-input"
+                  placeholder={isFiveKProgram ? 'Goal time (optional)' : 'Goal finish time'}
+                  value={draft.goalFinishTime}
+                  onChange={e => patch('goalFinishTime', e.target.value)}
+                />
+              )}
+            </div>
+          )}
+          {isStrengthProgram && (
+            <p className="empty-message">Strength block hides race setup fields and keeps general training settings.</p>
+          )}
         </div>
 
         <div className="field-stack compact-field">
