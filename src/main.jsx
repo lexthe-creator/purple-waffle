@@ -846,25 +846,9 @@ function SettingsScreen() {
               </button>
             ))}
           </div>
-          <div className="subtle-feed">
-            {AVAILABLE_PROGRAMS.map(program => (
-              <ListRow
-                key={program.id}
-                variant="card"
-                label={program.label}
-                sub={program.description}
-                action={(
-                  <button
-                    type="button"
-                    className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
-                    onClick={() => patch('programType', program.id)}
-                  >
-                    {draft.programType === program.id ? 'Active' : 'Select'}
-                  </button>
-                )}
-              />
-            ))}
-          </div>
+          <p className="empty-message" style={{ marginTop: '8px' }}>
+            {AVAILABLE_PROGRAMS.find(program => program.id === draft.programType)?.description}
+          </p>
         </div>
 
         <div className="field-stack compact-field">
