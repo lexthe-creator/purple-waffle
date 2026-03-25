@@ -434,101 +434,77 @@ function SettingsScreen() {
     updateAthlete(athleteDraft);
   }
 
-  return (
-    <div className="tab-stack settings-page">
-      <Card>
-        <SectionHeader eyebrow="Settings" title="Configuration" />
-        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
-      </Card>
+  const settingsSections = [
+    { id: 'programSelection', label: 'Program Selection' },
+    { id: 'athleteProfile', label: 'Athlete Profile' },
+    { id: 'workCalendar', label: 'Work Calendar' },
+    { id: 'nutrition', label: 'Nutrition' },
+    { id: 'recoveryCalendar', label: 'Recovery + Calendar' },
+    { id: 'notifications', label: 'Notifications' },
+  ];
 
-      <div className="settings-stack">
-        <ExpandablePanel header={<strong>Program Selection</strong>} defaultOpen>
-          <div className="field-stack">
-            <label className="field-stack compact-field">
-              <span>Active program</span>
-              <div className="segmented-control">
-                {AVAILABLE_PROGRAMS.map(program => (
+  const sectionContent = {
+    programSelection: (
+      <div className="field-stack">
+        <label className="field-stack compact-field">
+          <span>Active program</span>
+          <div className="segmented-control">
+            {AVAILABLE_PROGRAMS.map(program => (
+              <button
+                key={program.id}
+                type="button"
+                className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
+                onClick={() => patch('programType', program.id)}
+              >
+                {program.label}
+              </button>
+            ))}
+          </div>
+        </label>
+        <div className="field-stack compact-field">
+          <span>Available programs</span>
+          <div className="subtle-feed">
+            {AVAILABLE_PROGRAMS.map(program => (
+              <ListRow
+                key={program.id}
+                variant="card"
+                label={program.label}
+                sub={program.description}
+                action={(
                   <button
-                    key={program.id}
                     type="button"
-                    className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
+                    className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
                     onClick={() => patch('programType', program.id)}
                   >
-                    {program.label}
+                    {draft.programType === program.id ? 'Active' : 'Select'}
                   </button>
-                ))}
-              </div>
-            </label>
-            <div className="field-stack compact-field">
-              <span>Available programs</span>
-              <div className="subtle-feed">
-                {AVAILABLE_PROGRAMS.map(program => (
-                  <ListRow
-                    key={program.id}
-                    variant="card"
-                    label={program.label}
-                    sub={program.description}
-                    action={(
-                      <button
-                        type="button"
-                        className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
-                        onClick={() => patch('programType', program.id)}
-                      >
-                        {draft.programType === program.id ? 'Active' : 'Select'}
-                      </button>
-                    )}
-                  />
-                ))}
-              </div>
-            </div>
-            <label className="field-stack compact-field">
-              <span>Event date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.raceDate ?? ''}
-                onChange={e => patch('raceDate', e.target.value || null)}
+                )}
               />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Training days per week</span>
-              <div className="segmented-control">
-                {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
-                  <button
-                    key={freq}
-                    type="button"
-                    className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                    onClick={() => patch('trainingDays', freq)}
-                  >
-                    {freq}
-                  </button>
-                ))}
-              </div>
-            </label>
-            <label className="field-stack compact-field">
-              <span>Equipment preferences</span>
-              <div className="segmented-control">
-                {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-                  <button
-                    key={eq}
-                    type="button"
-                    className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                    onClick={() => patch('equipmentAccess', eq)}
-                  >
-                    {eq}
-                  </button>
-                ))}
-              </div>
-            </label>
+            ))}
+          </div>
+        </div>
+        <label className="field-stack compact-field">
+          <span>Event date</span>
+          <input
+            type="date"
+            className="task-title-input"
+            value={draft.raceDate ?? ''}
+            onChange={e => patch('raceDate', e.target.value || null)}
+          />
+        </label>
+        <label className="field-stack compact-field">
+          <span>Training days per week</span>
+          <div className="segmented-control">
+            {['4-day', '5-day'].map(freq => (
+              <button
+                key={freq}
+                type="button"
+                className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                onClick={() => patch('trainingDays', freq)}
+              >
+                {freq}
+              </button>
+            ))}
           </div>
         </ExpandablePanel>
 
@@ -638,49 +614,22 @@ function SettingsScreen() {
             </div>
           </ExpandablePanel>
 
-          <ExpandablePanel header={<strong>Recovery + Calendar</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Preferred recovery session</span>
-                <div className="segmented-control">
-                  {RECOVERY_SESSIONS.map(session => (
-                    <button
-                      key={session.id}
-                      type="button"
-                      className={`status-chip ${recoveryInputs.preferredSession === session.id ? 'is-active' : ''}`}
-                      onClick={() => setRecoveryInputs(current => ({ ...current, preferredSession: session.id }))}
-                    >
-                      {session.name}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <p className="empty-message">
-                Saved patterns: {calendarPatterns.length}. Work-calendar block behavior is managed in the Work Calendar section.
-              </p>
-            </div>
-          </ExpandablePanel>
+  return (
+    <div className="tab-stack settings-page">
+      <Card>
+        <SectionHeader eyebrow="Settings" title="Configuration" />
+        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
+      </Card>
 
-          <ExpandablePanel header={<strong>Notifications</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Morning reminder</span>
-                <input
-                  type="checkbox"
-                  checked={notificationPrefs.morningReminder}
-                  onChange={e => setNotificationPrefs(p => ({ ...p, morningReminder: e.target.checked }))}
-                />
-              </label>
-              <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Workout reminder</span>
-                <input
-                  type="checkbox"
-                  checked={notificationPrefs.workoutReminder}
-                  onChange={e => setNotificationPrefs(p => ({ ...p, workoutReminder: e.target.checked }))}
-                />
-              </label>
-            </div>
-          </ExpandablePanel>
+      <div className="settings-stack">
+        {settingsSections.map((section, index) => (
+          <React.Fragment key={section.id}>
+            <ExpandablePanel header={<strong>{section.label}</strong>} defaultOpen={index === 0}>
+              {sectionContent[section.id]}
+            </ExpandablePanel>
+            {index === 0 && <div className="settings-section-divider" aria-hidden="true" />}
+          </React.Fragment>
+        ))}
       </div>
 
       <Card>
