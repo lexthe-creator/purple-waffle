@@ -384,391 +384,6 @@ function formatSignedNumber(value) {
   return `${rounded >= 0 ? '+' : '-'}${Math.abs(rounded)}`;
 }
 
-/* function SettingsScreen() {
-  const {
-    fitnessSettings,
-    setFitnessSettings,
-    workCalendarPrefs,
-    setWorkCalendarPrefs,
-    mealPrefs,
-    setMealPrefs,
-    notificationPrefs,
-    setNotificationPrefs,
-    calendarPatterns,
-    setCalendarPatterns,
-    recoveryInputs,
-    setRecoveryInputs,
-  } = useAppContext();
-  const { profile, updateAthlete } = useProfileContext();
-
-  const [draft, setDraft] = useState(() => ({ ...fitnessSettings }));
-  const [athleteDraft, setAthleteDraft] = useState(() => ({ ...profile.athlete }));
-
-  useEffect(() => {
-    setDraft({ ...fitnessSettings });
-    setAthleteDraft({ ...profile.athlete });
-  }, [fitnessSettings, profile.athlete]);
-
-  const weakStations = Array.isArray(athleteDraft.weakStations) ? athleteDraft.weakStations : [];
-
-  function patch(key, value) {
-    setDraft(current => ({ ...current, [key]: value }));
-  }
-
-  function patchAthlete(key, value) {
-    setAthleteDraft(current => ({ ...current, [key]: value }));
-  }
-
-  function toggleStation(key) {
-    setAthleteDraft(current => {
-      const active = Array.isArray(current.weakStations) ? current.weakStations : [];
-      return {
-        ...current,
-        weakStations: active.includes(key) ? active.filter(station => station !== key) : [...active, key],
-      };
-    });
-  }
-
-  function save() {
-    setFitnessSettings(current => ({ ...current, ...draft }));
-    updateAthlete(athleteDraft);
-  }
-
-  const settingsSections = [
-    { id: 'programSelection', label: 'Program Selection' },
-    { id: 'athleteProfile', label: 'Athlete Profile' },
-    { id: 'workCalendar', label: 'Work Calendar' },
-    { id: 'nutrition', label: 'Nutrition' },
-    { id: 'recoveryCalendar', label: 'Recovery + Calendar' },
-    { id: 'notifications', label: 'Notifications' },
-  ];
-
-  const sectionContent = {
-    programSelection: (
-      <div className="field-stack">
-        <label className="field-stack compact-field">
-          <span>Active program</span>
-          <div className="segmented-control">
-            {AVAILABLE_PROGRAMS.map(program => (
-              <button
-                key={program.id}
-                type="button"
-                className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
-                onClick={() => patch('programType', program.id)}
-              >
-                {program.label}
-              </button>
-            ))}
-          </div>
-        </label>
-        <div className="field-stack compact-field">
-          <span>Available programs</span>
-          <div className="subtle-feed">
-            {AVAILABLE_PROGRAMS.map(program => (
-              <ListRow
-                key={program.id}
-                variant="card"
-                label={program.label}
-                sub={program.description}
-                action={(
-                  <button
-                    type="button"
-                    className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
-                    onClick={() => patch('programType', program.id)}
-                  >
-                    {draft.programType === program.id ? 'Active' : 'Select'}
-                  </button>
-                )}
-              />
-<<<<<<< ours
-            ))}
-          </div>
-        </div>
-        <label className="field-stack compact-field">
-          <span>Event date</span>
-          <input
-            type="date"
-            className="task-title-input"
-            value={draft.raceDate ?? ''}
-            onChange={e => patch('raceDate', e.target.value || null)}
-          />
-        </label>
-        <label className="field-stack compact-field">
-          <span>Training days per week</span>
-          <div className="segmented-control">
-            {['4-day', '5-day'].map(freq => (
-              <button
-                key={freq}
-                type="button"
-                className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                onClick={() => patch('trainingDays', freq)}
-              >
-                {freq}
-              </button>
-            ))}
-          </div>
-=======
-            </label>
-            <label className="field-stack compact-field">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Program start date</span>
-              <input
-                type="date"
-                className="task-title-input"
-                value={draft.programStartDate ?? ''}
-                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-              />
-            </label>
-            <label className="field-stack compact-field">
-              <span>Training days per week</span>
-              <div className="segmented-control">
-                {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
-                  <button
-                    key={freq}
-                    type="button"
-                    className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                    onClick={() => patch('trainingDays', freq)}
-                  >
-                    {freq}
-                  </button>
-                ))}
-              </div>
-            </label>
-            <label className="field-stack compact-field">
-              <span>Equipment preferences</span>
-              <div className="segmented-control">
-                {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
-                  <button
-                    key={eq}
-                    type="button"
-                    className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
-                    onClick={() => patch('equipmentAccess', eq)}
-                  >
-                    {eq}
-                  </button>
-                ))}
-              </div>
-            </label>
-          </div>
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-=======
->>>>>>> theirs
-        </ExpandablePanel>
-
-        <div className="settings-section-divider" aria-hidden="true" />
-
-          <ExpandablePanel header={<strong>Athlete Profile</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Training days per week</span>
-                <div className="segmented-control">
-                  {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
-                    <button
-                      key={freq}
-                      type="button"
-                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                      onClick={() => patch('trainingDays', freq)}
-                    >
-                      {freq}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Weak stations</span>
-                <div className="tag-row">
-                  {ALL_STATIONS.map(station => (
-                    <button
-                      key={station}
-                      type="button"
-                      className={`status-chip ${weakStations.includes(station) ? 'is-active' : ''}`}
-                      onClick={() => toggleStation(station)}
-                    >
-                      {station}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Injuries or limitations</span>
-                <textarea
-                  className="task-title-input"
-                  rows={3}
-                  value={draft.injuriesOrLimitations ?? ''}
-                  onChange={e => patch('injuriesOrLimitations', e.target.value)}
-                />
-              </label>
-            </div>
-          </ExpandablePanel>
-
-          <ExpandablePanel header={<strong>Nutrition</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Hydration goal (cups)</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  className="task-title-input"
-                  value={mealPrefs.hydrationGoal}
-                  onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
-                />
-              </label>
-              <label className="field-stack compact-field">
-                <span>Dietary notes</span>
-                <textarea
-                  className="task-title-input"
-                  rows={3}
-                  value={mealPrefs.dietaryNotes}
-                  onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
-                />
-              </label>
-            </div>
-          </ExpandablePanel>
-
-<<<<<<< ours
-  return (
-    <div className="tab-stack settings-page">
-      <Card>
-        <SectionHeader eyebrow="Settings" title="Configuration" />
-        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
-      </Card>
-=======
-          <ExpandablePanel header={<strong>Recovery + Calendar</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Preferred recovery session</span>
-                <div className="segmented-control">
-                  {RECOVERY_SESSIONS.map(session => (
-                    <button
-                      key={session.id}
-                      type="button"
-                      className={`status-chip ${recoveryInputs.preferredSession === session.id ? 'is-active' : ''}`}
-                      onClick={() => setRecoveryInputs(current => ({ ...current, preferredSession: session.id }))}
-                    >
-                      {session.name}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Planning order</span>
-                <div className="segmented-control">
-                  {['priority', 'time'].map(opt => (
-                    <button
-                      key={opt}
-                      type="button"
-                      className={`status-chip ${workCalendarPrefs.planningOrder === opt ? 'is-active' : ''}`}
-                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, planningOrder: opt }))}
-                    >
-                      {opt === 'priority' ? 'Priority first' : 'Chronological'}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="field-stack compact-field">
-                <span>Busy-block behavior</span>
-                <div className="segmented-control">
-                  {['hard', 'soft'].map(opt => (
-                    <button
-                      key={opt}
-                      type="button"
-                      className={`status-chip ${workCalendarPrefs.busyBlockBehavior === opt ? 'is-active' : ''}`}
-                      onClick={() => setWorkCalendarPrefs(p => ({ ...p, busyBlockBehavior: opt }))}
-                    >
-                      {opt === 'hard' ? 'Hard block' : 'Soft block'}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <p className="empty-message">
-                Saved patterns: {calendarPatterns.length}. Calendar preferences are configured here.
-              </p>
-            </div>
-          </ExpandablePanel>
->>>>>>> theirs
-
-      <div className="settings-stack">
-        {settingsSections.map((section, index) => (
-          <React.Fragment key={section.id}>
-            <ExpandablePanel header={<strong>{section.label}</strong>} defaultOpen={index === 0}>
-              {sectionContent[section.id]}
-            </ExpandablePanel>
-            {index === 0 && <div className="settings-section-divider" aria-hidden="true" />}
-          </React.Fragment>
-        ))}
-      </div>
-
-      <Card>
-        <div className="inline-actions">
-          <button type="button" className="primary-button" onClick={save}>
-            Save settings
-          </button>
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              setDraft({ ...fitnessSettings });
-              setAthleteDraft({ ...profile.athlete });
-            }}
-          >
-            Reset unsaved
-          </button>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-*/
 
 function SettingsScreen() {
   const {
@@ -821,7 +436,7 @@ function SettingsScreen() {
   }
 
   const settingsSections = [
-    { id: 'programSetup', label: 'Program Setup' },
+    { id: 'programSetup', label: 'Fitness Profile' },
     { id: 'athleteProfile', label: 'Athlete Profile' },
     { id: 'workCalendar', label: 'Work Calendar' },
     { id: 'nutrition', label: 'Nutrition' },
@@ -833,8 +448,8 @@ function SettingsScreen() {
     programSetup: (
       <div className="field-stack">
         <div className="field-stack compact-field">
-          <span>Program</span>
-          <div className="segmented-control">
+          <span>Fitness Program</span>
+          <div className="segmented-control settings-pills">
             {AVAILABLE_PROGRAMS.map(program => (
               <button
                 key={program.id}
@@ -846,27 +461,24 @@ function SettingsScreen() {
               </button>
             ))}
           </div>
-          <p className="empty-message" style={{ marginTop: '8px' }}>
-            {AVAILABLE_PROGRAMS.find(program => program.id === draft.programType)?.description}
-          </p>
         </div>
 
         <div className="field-stack compact-field">
           <span>Timeline</span>
           <label className="field-stack compact-field">
-            <span>Event date</span>
+            <span>Race Date</span>
             <input
               type="date"
-              className="task-title-input"
+              className="task-title-input settings-input"
               value={draft.raceDate ?? ''}
               onChange={e => patch('raceDate', e.target.value || null)}
             />
           </label>
           <label className="field-stack compact-field">
-            <span>Program start date</span>
+            <span>Plan Start Date</span>
             <input
               type="date"
-              className="task-title-input"
+              className="task-title-input settings-input"
               value={draft.programStartDate ?? ''}
               onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
             />
@@ -900,7 +512,7 @@ function SettingsScreen() {
           <span>Training Structure</span>
           <label className="field-stack compact-field">
             <span>Training days per week</span>
-            <div className="segmented-control">
+            <div className="segmented-control settings-pills">
               {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
                 <button
                   key={freq}
@@ -915,7 +527,7 @@ function SettingsScreen() {
           </label>
           <label className="field-stack compact-field">
             <span>Equipment access</span>
-            <div className="segmented-control">
+            <div className="segmented-control settings-pills">
               {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
                 <button
                   key={eq}
@@ -933,7 +545,7 @@ function SettingsScreen() {
             <input
               type="number"
               min="0"
-              className="task-title-input"
+              className="task-title-input settings-input"
               value={draft.currentWeeklyMileage ?? ''}
               onChange={e => patch('currentWeeklyMileage', e.target.value === '' ? null : Number(e.target.value))}
             />
@@ -941,7 +553,7 @@ function SettingsScreen() {
           <label className="field-stack compact-field">
             <span>Injuries or limitations</span>
             <textarea
-              className="task-title-input"
+              className="task-title-input settings-input"
               rows={3}
               value={draft.injuriesOrLimitations}
               onChange={e => patch('injuriesOrLimitations', e.target.value)}
@@ -1196,14 +808,13 @@ function SettingsScreen() {
   return (
     <div className="tab-stack settings-page">
       <Card>
-        <SectionHeader eyebrow="Settings" title="Configuration" />
-        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
+        <SectionHeader eyebrow="Settings" title="Settings" />
       </Card>
 
       <div className="settings-stack">
         {settingsSections.map((section, index) => (
           <React.Fragment key={section.id}>
-            <ExpandablePanel header={<strong>{section.label}</strong>} defaultOpen={index === 0}>
+            <ExpandablePanel header={<strong>{section.label}</strong>} defaultOpen={index === 0} className="settings-card">
               {sectionContent[section.id]}
             </ExpandablePanel>
             {index === 0 && <div className="settings-section-divider" aria-hidden="true" />}

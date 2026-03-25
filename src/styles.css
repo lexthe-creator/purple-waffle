@@ -1082,13 +1082,58 @@ p {
 
 .settings-stack {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .settings-section-divider {
   height: 1px;
   background: var(--border-divider);
   margin: 2px 0;
+}
+
+.settings-page .ui-expandable.settings-card {
+  background: var(--card);
+  border: 1px solid var(--border-card);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  padding: 14px 18px 10px;
+}
+
+.settings-page .ui-expandable.settings-card .ui-expandable__trigger {
+  padding: 12px 0 16px;
+}
+
+.settings-page .ui-expandable.settings-card .ui-expandable__trigger:hover {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.settings-page .ui-expandable.settings-card .ui-expandable__body.is-open {
+  margin-top: 2px;
+}
+
+.settings-page .ui-expandable.settings-card .ui-expandable__inner {
+  padding-bottom: 6px;
+}
+
+.settings-page .field-stack > span,
+.settings-page .field-stack.compact-field > span,
+.settings-page .field-stack label > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-page .settings-input,
+.settings-page .task-title-input.settings-input {
+  background: #f0f3f6;
+  border-color: rgba(47, 64, 90, 0.06);
+}
+
+.settings-page .settings-pills .status-chip {
+  min-height: 38px;
 }
 
 .settings-card {
