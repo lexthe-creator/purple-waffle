@@ -1,16 +1,22 @@
+import { validateWorkoutSystemSchema } from '../src/data/workoutSystemSchema.js';
 import { auditHyroxWorkoutLibrary } from '../src/data/hyroxWorkoutLibrary.js';
 import { pathToFileURL } from 'node:url';
 
 export function runHyroxSchemaAudit() {
-  const result = auditHyroxWorkoutLibrary();
-  const ok = Boolean(result?.ok ?? result?.valid);
+  const schemaResult = validateWorkoutSystemSchema();
+  const libraryResult = auditHyroxWorkoutLibrary();
+  const issues = [
+    ...(schemaResult?.issues || schemaResult?.errors || []),
+    ...(libraryResult?.issues || libraryResult?.errors || []),
+  ];
+  const ok = Boolean(schemaResult?.ok ?? schemaResult?.valid) && Boolean(libraryResult?.ok ?? libraryResult?.valid) && issues.length === 0;
   return {
     ok,
-    issues: [...(result?.issues || result?.errors || [])],
-    workoutCount: result?.workoutCount ?? 0,
-    warmupCount: result?.warmupCount ?? 0,
-    cooldownCount: result?.cooldownCount ?? 0,
-    raw: result,
+    issues,
+    workoutCount: libraryResult?.workoutCount ?? 0,
+    warmupCount: libraryResult?.warmupCount ?? 0,
+    cooldownCount: libraryResult?.cooldownCount ?? 0,
+    raw: { schemaResult, libraryResult },
   };
 }
 

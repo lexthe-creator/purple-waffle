@@ -4,12 +4,82 @@
  * Data structures only. Generator logic remains outside this module.
  */
 
+export const supportedProgramTypes = Object.freeze(['hyrox', '5k']);
+export const secondaryGoals = Object.freeze(['fat_loss', 'strength_gain', 'endurance', 'sport_skill', 'maintenance']);
+export const workoutStatuses = Object.freeze(['planned', 'completed', 'skipped', 'moved', 'swapped', 'shortened']);
+export const checkInResultStates = Object.freeze(['green', 'yellow', 'red']);
+
+export const hyroxStrengthEquipmentTypes = Object.freeze([
+  'barbell',
+  'dumbbells',
+  'kettlebells',
+  'cable_machine',
+  'smith_machine',
+  'leg_press',
+  'hack_squat_machine',
+  'hip_thrust_machine',
+  'plate_loaded_machines',
+  'selectorized_machines',
+  'adjustable_bench',
+]);
+
+export const hyroxFunctionalEquipmentTypes = Object.freeze([
+  'sled_push',
+  'sled_pull',
+  'wall_ball',
+  'sandbag',
+  'farmer_carry_handles',
+  'battle_ropes',
+  'plyo_box',
+]);
+
+export const hyroxCardioEquipmentTypes = Object.freeze([
+  'treadmill',
+  'outdoor_running',
+  'bike',
+  'rower',
+  'ski_erg',
+]);
+
+export const hyroxEquipmentTypes = Object.freeze([
+  ...hyroxStrengthEquipmentTypes,
+  ...hyroxFunctionalEquipmentTypes,
+  ...hyroxCardioEquipmentTypes,
+  'bodyweight',
+]);
+
 export const programProfiles = {
   hyrox: {
     programType: 'hyrox',
     programProfileId: 'hyrox',
     displayName: 'HYROX',
+    primaryGoalCategory: 'hybrid_event',
+    supportedSecondaryGoals: [...secondaryGoals],
+    minimumWeeks: 6,
+    maximumWeeks: 32,
     durationWeeks: 32,
+    defaultPhases: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
+    phaseDistributionRules: {
+      '6_to_8_weeks': { foundation: 1, base: 2, build: 2, peak: 1 },
+      '9_to_16_weeks': { foundation: 2, base: 4, build: 5, peak: 2 },
+      '17_to_24_weeks': { foundation: 3, base: 6, build: 8, peak: 3 },
+      '25_to_36_weeks': { foundation: 4, base: 10, build: 14, peak: 4 },
+    },
+    defaultRunFrequencyStart: 2,
+    defaultRunFrequencyMax: 3,
+    defaultStrengthFrequency: 2,
+    defaultRecoveryFrequency: 2,
+    progressionStyle: 'moderate',
+    requiredSessionTypes: ['strength_lower', 'strength_upper', 'run_intervals', 'conditioning_hyrox'],
+    optionalSessionTypes: ['run_long', 'strength_hybrid', 'recovery_pilates', 'recovery_yoga', 'recovery_walk_mobility'],
+    longRunEligible: true,
+    doubleDayEligible: true,
+    equipmentModesSupported: ['full_gym', 'limited_gym', 'bodyweight'],
+    overlayRules: {
+      runningProgression: 'start_at_2_runs_then_progress_to_3_if_tolerated',
+      specificityProgression: 'increase_station_density_and_compromised_running_by_phase',
+      weaknessBiasAllowed: true,
+    },
     supportedDaysPerWeek: [4, 5],
     defaultDaysPerWeek: 4,
     phaseSequence: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
@@ -18,7 +88,31 @@ export const programProfiles = {
     programType: '5k',
     programProfileId: '5k',
     displayName: '5K Running',
+    primaryGoalCategory: 'running',
+    supportedSecondaryGoals: [...secondaryGoals],
+    minimumWeeks: 6,
+    maximumWeeks: 12,
     durationWeeks: { min: 6, max: 12, default: 8 },
+    defaultPhases: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
+    phaseDistributionRules: {
+      '6_to_8_weeks': { foundation: 1, base: 2, build: 2, peak: 1 },
+      '9_to_12_weeks': { foundation: 2, base: 3, build: 4, peak: 2 },
+    },
+    defaultRunFrequencyStart: 2,
+    defaultRunFrequencyMax: 5,
+    defaultStrengthFrequency: 1,
+    defaultRecoveryFrequency: 1,
+    progressionStyle: 'progressive',
+    requiredSessionTypes: ['run_easy', 'run_intervals', 'run_long'],
+    optionalSessionTypes: ['run_tempo', 'recovery_pilates', 'recovery_yoga'],
+    longRunEligible: true,
+    doubleDayEligible: false,
+    equipmentModesSupported: ['full_gym', 'limited_gym', 'bodyweight'],
+    overlayRules: {
+      runningProgression: 'start_at_2_runs_then_progress_to_4_if_tolerated',
+      specificityProgression: 'increase_long_run_and_threshold_volume_by_phase',
+      weaknessBiasAllowed: false,
+    },
     supportedDaysPerWeek: [3, 4, 5],
     defaultDaysPerWeek: 4,
     phaseSequence: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
@@ -29,12 +123,79 @@ export const hyroxEquipmentModes = Object.freeze(['full_gym', 'limited_gym', 'bo
 export const hyroxPreferredRunModes = Object.freeze(['outdoor', 'treadmill', 'either']);
 export const hyroxPreferredEngineModes = Object.freeze(['rower', 'ski_erg', 'bike', 'any']);
 export const hyroxEquipmentAvailabilitySchema = Object.freeze({
-  strength: ['barbell', 'dumbbells', 'kettlebells', 'cable_machine', 'smith_machine', 'leg_press', 'hack_squat_machine', 'hip_thrust_machine', 'plate_loaded_machines', 'selectorized_machines', 'adjustable_bench'],
-  hyroxFunctional: ['sled_push', 'sled_pull', 'wall_ball', 'sandbag', 'farmer_carry_handles', 'battle_ropes', 'plyo_box'],
-  cardio: ['treadmill', 'outdoor_running', 'bike', 'rower', 'ski_erg'],
+  strength: [...hyroxStrengthEquipmentTypes],
+  hyroxFunctional: [...hyroxFunctionalEquipmentTypes],
+  cardio: [...hyroxCardioEquipmentTypes],
 });
 export const hyroxSessionStructureTypes = Object.freeze(['straight_sets', 'superset', 'circuit', 'hybrid_strength', 'hyrox_style']);
 export const hyroxMovementSpecificityTypes = Object.freeze(['exact', 'analogous', 'fallback']);
+export const hyroxMovementCategories = Object.freeze([
+  'squat_pattern',
+  'hinge_pattern',
+  'lunge_pattern',
+  'horizontal_push',
+  'vertical_push',
+  'horizontal_pull',
+  'vertical_pull',
+  'carry',
+  'engine_run',
+  'engine_machine',
+  'full_body_conditioning',
+  'squat_press_endurance',
+  'core_stability',
+  'locomotion_power',
+]);
+
+export const userTrainingProfileSchema = Object.freeze({
+  requiredFields: [
+    'userId',
+    'primaryGoal',
+    'secondaryGoal',
+    'targetEventDate',
+    'planStartDate',
+    'availableDaysPerWeek',
+    'doubleDaysEnabled',
+    'preferredTrainingTime',
+    'currentFitnessLevel',
+    'currentRunFrequency',
+    'desiredRunFrequency',
+    'longRunPreferenceFromStart',
+    'pilatesPreferencePerWeek',
+    'yogaPreferencePerWeek',
+    'strengthPreferencePerWeek',
+    'equipmentMode',
+    'recoveryProfile',
+    'adherencePriority',
+    'experienceLevelByDiscipline',
+    'limitations',
+    'phaseOverrideAllowed',
+  ],
+  optionalFields: [
+    'currentLongRunDistance',
+    'recentRaceHistory',
+    'hyroxWeakStations',
+    'stressLevel',
+    'sleepAverageHours',
+    'cycleTrackingEnabled',
+    'bodyWeight',
+    'goalFinishTime',
+    'notes',
+  ],
+  currentSupportedFields: {
+    programType: supportedProgramTypes,
+    programStartDate: 'YYYY-MM-DD',
+    trainingDays: ['3-day', '4-day', '5-day'],
+    raceDate: 'YYYY-MM-DD',
+    raceName: 'string',
+    raceCategory: 'string',
+    goalFinishTime: 'string',
+    equipmentAccess: ['full-gym', 'limited', 'bodyweight-only'],
+    equipmentMode: hyroxEquipmentModes,
+    preferredEquipmentTags: 'string[]',
+    preferredRunMode: hyroxPreferredRunModes,
+    preferredEngineModes: hyroxPreferredEngineModes,
+  },
+});
 
 export const phaseRules = {
   foundation: {
@@ -733,8 +894,185 @@ export const shortVersions = {
   },
 };
 
+function validateProgramProfile(profile, programType) {
+  const issues = [];
+  const requiredStrings = [
+    'programType',
+    'programProfileId',
+    'displayName',
+    'primaryGoalCategory',
+    'progressionStyle',
+  ];
+  for (const field of requiredStrings) {
+    if (typeof profile?.[field] !== 'string' || profile[field].length === 0) {
+      issues.push(`Missing ${field} on ${programType}`);
+    }
+  }
+  if (profile?.programType !== programType) {
+    issues.push(`programType mismatch on ${programType}`);
+  }
+  if (!Array.isArray(profile?.supportedSecondaryGoals) || profile.supportedSecondaryGoals.some(goal => !secondaryGoals.includes(goal))) {
+    issues.push(`Invalid supportedSecondaryGoals on ${programType}`);
+  }
+  if (!Number.isFinite(profile?.minimumWeeks) || !Number.isFinite(profile?.maximumWeeks) || profile.minimumWeeks > profile.maximumWeeks) {
+    issues.push(`Invalid week bounds on ${programType}`);
+  }
+  if (!Array.isArray(profile?.phaseSequence) || profile.phaseSequence.some(phase => !phaseRules[phase])) {
+    issues.push(`Invalid phaseSequence on ${programType}`);
+  }
+  if (!Array.isArray(profile?.supportedDaysPerWeek) || profile.supportedDaysPerWeek.some(day => !Number.isInteger(day) || day < 3 || day > 5)) {
+    issues.push(`Invalid supportedDaysPerWeek on ${programType}`);
+  }
+  if (!profile?.supportedDaysPerWeek?.includes(profile.defaultDaysPerWeek)) {
+    issues.push(`defaultDaysPerWeek must be included in supportedDaysPerWeek on ${programType}`);
+  }
+  if (!Array.isArray(profile?.requiredSessionTypes) || profile.requiredSessionTypes.some(sessionType => !sessionTypes[sessionType])) {
+    issues.push(`Invalid requiredSessionTypes on ${programType}`);
+  }
+  if (!Array.isArray(profile?.optionalSessionTypes) || profile.optionalSessionTypes.some(sessionType => !sessionTypes[sessionType])) {
+    issues.push(`Invalid optionalSessionTypes on ${programType}`);
+  }
+  if (!Array.isArray(profile?.equipmentModesSupported) || profile.equipmentModesSupported.some(mode => !hyroxEquipmentModes.includes(mode))) {
+    issues.push(`Invalid equipmentModesSupported on ${programType}`);
+  }
+  if (!Array.isArray(profile?.defaultPhases) || profile.defaultPhases.some(phase => !phaseRules[phase])) {
+    issues.push(`Invalid defaultPhases on ${programType}`);
+  }
+  return issues;
+}
+
+function validateWeeklyTemplate(template) {
+  const issues = [];
+  if (!template || typeof template !== 'object') return ['Invalid weekly template entry'];
+  if (!supportedProgramTypes.includes(template.programType)) issues.push(`Invalid programType on ${template.weeklyTemplateId}`);
+  if (!phaseRules[template.phaseType]) issues.push(`Invalid phaseType on ${template.weeklyTemplateId}`);
+  if (!Array.isArray(template.dayPattern) || template.dayPattern.length !== template.daysPerWeek) {
+    issues.push(`Invalid dayPattern length on ${template.weeklyTemplateId}`);
+  }
+  if (!Array.isArray(template.dayPattern) || template.dayPattern.some(sessionType => !sessionTypes[sessionType])) {
+    issues.push(`Invalid dayPattern sessionType on ${template.weeklyTemplateId}`);
+  }
+  if (!profileDaysSupported(template.programType, template.daysPerWeek)) {
+    issues.push(`Unsupported daysPerWeek on ${template.weeklyTemplateId}`);
+  }
+  return issues;
+}
+
+function profileDaysSupported(programType, daysPerWeek) {
+  const profile = programProfiles[programType];
+  return Boolean(profile && Array.isArray(profile.supportedDaysPerWeek) && profile.supportedDaysPerWeek.includes(daysPerWeek));
+}
+
+export function validateWorkoutSystemSchema() {
+  const issues = [];
+
+  if (!supportedProgramTypes.includes('hyrox') || !supportedProgramTypes.includes('5k')) {
+    issues.push('supportedProgramTypes must include hyrox and 5k');
+  }
+
+  for (const programType of supportedProgramTypes) {
+    issues.push(...validateProgramProfile(programProfiles[programType], programType));
+  }
+
+  if (!Array.isArray(secondaryGoals) || secondaryGoals.length === 0) {
+    issues.push('secondaryGoals must be a non-empty array');
+  }
+
+  if (!Array.isArray(workoutStatuses) || workoutStatuses.length === 0) {
+    issues.push('workoutStatuses must be a non-empty array');
+  }
+
+  if (!Array.isArray(checkInResultStates) || checkInResultStates.length !== 3) {
+    issues.push('checkInResultStates must contain green, yellow, and red');
+  }
+
+  if (!Array.isArray(hyroxEquipmentModes) || hyroxEquipmentModes.some(mode => !['full_gym', 'limited_gym', 'bodyweight'].includes(mode))) {
+    issues.push('hyroxEquipmentModes contains an invalid value');
+  }
+
+  for (const [groupName, values] of Object.entries(hyroxEquipmentAvailabilitySchema)) {
+    if (!Array.isArray(values) || values.some(value => !hyroxEquipmentTypes.includes(value))) {
+      issues.push(`Invalid equipment availability schema group: ${groupName}`);
+    }
+  }
+
+  if (!Array.isArray(hyroxMovementCategories) || hyroxMovementCategories.length === 0) {
+    issues.push('hyroxMovementCategories must be a non-empty array');
+  }
+
+  if (!Array.isArray(hyroxMovementSpecificityTypes) || hyroxMovementSpecificityTypes.length !== 3) {
+    issues.push('hyroxMovementSpecificityTypes must contain exact, analogous, and fallback');
+  }
+
+  if (!Array.isArray(hyroxSessionStructureTypes) || !hyroxSessionStructureTypes.includes('hybrid_strength') || !hyroxSessionStructureTypes.includes('superset')) {
+    issues.push('hyroxSessionStructureTypes must include superset and hybrid_strength');
+  }
+
+  if (!Array.isArray(userTrainingProfileSchema.requiredFields) || userTrainingProfileSchema.requiredFields.length === 0) {
+    issues.push('userTrainingProfileSchema.requiredFields must be non-empty');
+  }
+  if (!Array.isArray(userTrainingProfileSchema.optionalFields)) {
+    issues.push('userTrainingProfileSchema.optionalFields must be an array');
+  }
+
+  for (const template of weeklyTemplates) {
+    issues.push(...validateWeeklyTemplate(template));
+  }
+
+  for (const [templateId, template] of Object.entries(warmupTemplates)) {
+    if (!template || template.warmupTemplateId !== templateId || !template.templateType || typeof template.displayName !== 'string') {
+      issues.push(`Invalid warmup template: ${templateId}`);
+    }
+  }
+
+  for (const [templateId, template] of Object.entries(cooldownTemplates)) {
+    if (!template || template.cooldownTemplateId !== templateId || !template.templateType || typeof template.displayName !== 'string') {
+      issues.push(`Invalid cooldown template: ${templateId}`);
+    }
+  }
+
+  for (const [programType, phases] of Object.entries(workoutLibrary)) {
+    if (!programProfiles[programType]) {
+      issues.push(`Invalid workoutLibrary programType: ${programType}`);
+      continue;
+    }
+    if (!phases || typeof phases !== 'object') {
+      issues.push(`Invalid workoutLibrary bucket for ${programType}`);
+      continue;
+    }
+    for (const [phaseType, workouts] of Object.entries(phases)) {
+      if (!phaseRules[phaseType]) {
+        issues.push(`Invalid workoutLibrary phaseType: ${programType}.${phaseType}`);
+        continue;
+      }
+      if (!Array.isArray(workouts)) {
+        issues.push(`Invalid workoutLibrary phase bucket: ${programType}.${phaseType}`);
+      }
+    }
+  }
+
+  for (const [shortVersionId, shortVersion] of Object.entries(shortVersions)) {
+    if (!shortVersion || typeof shortVersion.shortVersionId !== 'string' || typeof shortVersion.workoutLibraryId !== 'string') {
+      issues.push(`Invalid shortVersion entry: ${shortVersionId}`);
+    }
+  }
+
+  return {
+    ok: issues.length === 0,
+    issues,
+  };
+}
+
 // Assumption: consolidated schema export supports future dynamic generator modules.
 export const workoutSystemSchema = {
+  supportedProgramTypes,
+  secondaryGoals,
+  workoutStatuses,
+  checkInResultStates,
+  hyroxStrengthEquipmentTypes,
+  hyroxFunctionalEquipmentTypes,
+  hyroxCardioEquipmentTypes,
+  hyroxEquipmentTypes,
   programProfiles,
   phaseRules,
   sessionTypes,
@@ -744,4 +1082,12 @@ export const workoutSystemSchema = {
   workoutLibrary,
   substitutions,
   shortVersions,
+  hyroxEquipmentModes,
+  hyroxPreferredRunModes,
+  hyroxPreferredEngineModes,
+  hyroxEquipmentAvailabilitySchema,
+  hyroxSessionStructureTypes,
+  hyroxMovementSpecificityTypes,
+  hyroxMovementCategories,
+  userTrainingProfileSchema,
 };

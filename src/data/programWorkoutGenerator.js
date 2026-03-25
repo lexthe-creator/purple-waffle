@@ -6,9 +6,11 @@ import {
   generate5kWeeklyWorkoutSelection,
   generate5kWorkoutSchedule,
 } from './5kWorkoutGenerator.js';
+import { supportedProgramTypes } from './workoutSystemSchema.js';
 
 function normalizeProgramType(programType) {
-  return String(programType || 'hyrox').toLowerCase();
+  const normalized = String(programType || 'hyrox').toLowerCase();
+  return supportedProgramTypes.includes(normalized) ? normalized : 'hyrox';
 }
 
 export function generateWeeklyWorkoutSelection({ programType = 'hyrox', ...rest }) {

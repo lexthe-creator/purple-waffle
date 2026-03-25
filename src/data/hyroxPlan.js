@@ -4,7 +4,7 @@ import {
 } from './hyroxWorkoutGenerator.js';
 import { get5kPhaseForWeek } from './5kWorkoutGenerator.js';
 import { generateWorkoutSchedule, generateWeeklyWorkoutSelection } from './programWorkoutGenerator.js';
-import { sessionTypes } from './workoutSystemSchema.js';
+import { programProfiles, sessionTypes } from './workoutSystemSchema.js';
 
 const STATION_META = {
   SkiErg: { key: 'skierg', name: 'SkiErg', unit: 'm', raceDistance: 1000, category: 'cardio' },
@@ -140,16 +140,15 @@ const PROGRAM_DAY_OFFSETS = {
   '3-day': [1, 3, 6],
 };
 
-const PROGRAM_META = {
-  hyrox: {
-    label: 'HYROX 32-week plan',
-    maxWeeks: 32,
-  },
-  '5k': {
-    label: '5K run builder',
-    maxWeeks: 12,
-  },
-};
+const PROGRAM_META = Object.fromEntries(
+  Object.entries(programProfiles).map(([programType, profile]) => [
+    programType,
+    {
+      label: profile.displayName === '5K Running' ? '5K run builder' : `${profile.displayName} plan`,
+      maxWeeks: profile.maximumWeeks || profile.durationWeeks || 8,
+    },
+  ]),
+);
 
 const HYROX_SESSION_LABELS = {
   hyrox_functional: 'Functional',
@@ -157,7 +156,8 @@ const HYROX_SESSION_LABELS = {
 };
 
 function normalizeProgramType(programType) {
-  return String(programType || 'hyrox').toLowerCase() === '5k' ? '5k' : 'hyrox';
+  const normalized = String(programType || 'hyrox').toLowerCase();
+  return programProfiles[normalized] ? normalized : 'hyrox';
 }
 
 function normalizeTrainingDays(trainingDays, programType = 'hyrox') {

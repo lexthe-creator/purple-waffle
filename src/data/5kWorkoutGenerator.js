@@ -1,12 +1,10 @@
-import { phaseRules, weeklyTemplates } from './workoutSystemSchema.js';
+import { phaseRules, programProfiles, weeklyTemplates } from './workoutSystemSchema.js';
 
-const FIVE_K_DAY_SLOT_COUNTS = {
-  '3-day': 3,
-  '4-day': 4,
-  '5-day': 5,
-};
-
-const FIVE_K_PHASE_SEQUENCE = ['foundation', 'base', 'build', 'peak', 'recovery_deload'];
+const FIVE_K_PROFILE = programProfiles['5k'];
+const FIVE_K_DAY_SLOT_COUNTS = Object.fromEntries(
+  (FIVE_K_PROFILE.supportedDaysPerWeek || [3, 4, 5]).map(days => [`${days}-day`, days]),
+);
+const FIVE_K_PHASE_SEQUENCE = [...(FIVE_K_PROFILE.phaseSequence || ['foundation', 'base', 'build', 'peak', 'recovery_deload'])];
 const FIVE_K_HARD_SESSION_TYPES = new Set(['run_intervals', 'run_tempo']);
 
 function normalizeTrainingDays(trainingDays) {
@@ -21,8 +19,11 @@ function normalizeWeekType(weekType, weekNumber) {
 }
 
 function clampWeeks(totalWeeks) {
-  if (!Number.isFinite(totalWeeks)) return 8;
-  return Math.max(6, Math.min(12, Math.trunc(totalWeeks)));
+  if (!Number.isFinite(totalWeeks)) return FIVE_K_PROFILE.durationWeeks?.default || 8;
+  return Math.max(
+    FIVE_K_PROFILE.minimumWeeks || 6,
+    Math.min(FIVE_K_PROFILE.maximumWeeks || 12, Math.trunc(totalWeeks)),
+  );
 }
 
 function buildPhaseWindows(totalWeeks) {

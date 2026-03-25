@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { normalizeAppState } from '../data/workoutSystemState.js';
 
 const AppContext = createContext(null);
 
@@ -10,78 +11,6 @@ const DEFAULT_CHECKLIST = [
   { id: 'mc-2', label: "Set today's priorities", done: false },
   { id: 'mc-3', label: 'Complete one action', done: false },
 ];
-
-const DEFAULT_ENERGY = {
-  value: 5,
-  sleepHours: 7,
-  sleepSource: 'baseline',
-  lastCheckIn: null,
-};
-
-const DEFAULT_FITNESS_SETTINGS = {
-  programType: 'hyrox',
-  programStartDate: new Date().toISOString().slice(0, 10),
-  trainingDays: '4-day',
-  raceDate: null,
-  raceName: '',
-  raceCategory: '',
-  fitnessLevel: '',
-  equipmentAccess: 'full-gym',
-  goalFinishTime: '',
-  currentWeeklyMileage: null,
-  injuriesOrLimitations: '',
-};
-
-function migrateFitnessSettings(raw) {
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_FITNESS_SETTINGS };
-
-  const programType = ['hyrox', '5k', 'strength'].includes(raw.programType) ? raw.programType : DEFAULT_FITNESS_SETTINGS.programType;
-  const trainingDays =
-    raw.trainingDays === '5-day' || raw.selectedFrequency === '5-day' ? '5-day' : '4-day';
-
-  return {
-    ...DEFAULT_FITNESS_SETTINGS,
-    programType,
-    programStartDate:
-      typeof raw.programStartDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw.programStartDate)
-        ? raw.programStartDate
-        : DEFAULT_FITNESS_SETTINGS.programStartDate,
-    trainingDays,
-    ...(typeof raw.raceDate === 'string'              ? { raceDate: raw.raceDate }                           : {}),
-    ...(typeof raw.raceName === 'string'              ? { raceName: raw.raceName }                           : {}),
-    ...(typeof raw.raceCategory === 'string'          ? { raceCategory: raw.raceCategory }                   : {}),
-    ...(typeof raw.fitnessLevel === 'string'          ? { fitnessLevel: raw.fitnessLevel }                   : {}),
-    ...(typeof raw.equipmentAccess === 'string'       ? { equipmentAccess: raw.equipmentAccess }             : {}),
-    ...(typeof raw.goalFinishTime === 'string'        ? { goalFinishTime: raw.goalFinishTime }               : {}),
-    ...(Number.isFinite(raw.currentWeeklyMileage)     ? { currentWeeklyMileage: raw.currentWeeklyMileage }   : {}),
-    ...(typeof raw.injuriesOrLimitations === 'string' ? { injuriesOrLimitations: raw.injuriesOrLimitations } : {}),
-  };
-}
-
-const DEFAULT_WORK_CALENDAR_PREFS = {
-  planningOrder: 'priority',
-  busyBlockBehavior: 'hard',
-};
-
-const DEFAULT_MEAL_PREFS = {
-  hydrationGoal: 8,
-  dietaryNotes: '',
-};
-
-const DEFAULT_NOTIFICATION_PREFS = {
-  morningReminder: true,
-  workoutReminder: true,
-};
-
-const DEFAULT_CALENDAR_PATTERNS = [];
-const DEFAULT_RECOVERY_INPUTS = {
-  preferredSession: 'fullbody',
-  lastRecoveryFocus: '',
-};
-const DEFAULT_HUB_INSIGHTS = {
-  favoriteSections: [],
-  weeklyNotes: [],
-};
 
 function getTodayDateKey() {
   return new Date().toISOString().slice(0, 10);
@@ -110,39 +39,19 @@ function loadAppState() {
 }
 
 export function AppProvider({ children }) {
-  const saved = loadAppState();
+  const saved = normalizeAppState(loadAppState());
 
-  const [planningMode, setPlanningMode] = useState(() => saved?.planningMode ?? true);
+  const [planningMode, setPlanningMode] = useState(() => saved.planningMode);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
-  const [energyState, setEnergyState] = useState(() => ({
-    ...DEFAULT_ENERGY,
-    ...(saved?.energyState || {}),
-  }));
-  const [fitnessSettings, setFitnessSettings] = useState(() =>
-    migrateFitnessSettings(saved?.fitnessSettings),
-  );
-  const [workCalendarPrefs, setWorkCalendarPrefs] = useState(() => ({
-    ...DEFAULT_WORK_CALENDAR_PREFS,
-    ...(saved?.workCalendarPrefs || {}),
-  }));
-  const [mealPrefs, setMealPrefs] = useState(() => ({
-    ...DEFAULT_MEAL_PREFS,
-    ...(saved?.mealPrefs || {}),
-  }));
-  const [notificationPrefs, setNotificationPrefs] = useState(() => ({
-    ...DEFAULT_NOTIFICATION_PREFS,
-    ...(saved?.notificationPrefs || {}),
-  }));
-  const [calendarPatterns, setCalendarPatterns] = useState(() => saved?.calendarPatterns ?? DEFAULT_CALENDAR_PATTERNS);
-  const [recoveryInputs, setRecoveryInputs] = useState(() => ({
-    ...DEFAULT_RECOVERY_INPUTS,
-    ...(saved?.recoveryInputs || {}),
-  }));
-  const [hubInsights, setHubInsights] = useState(() => ({
-    ...DEFAULT_HUB_INSIGHTS,
-    ...(saved?.hubInsights || {}),
-  }));
+  const [energyState, setEnergyState] = useState(() => saved.energyState);
+  const [fitnessSettings, setFitnessSettings] = useState(() => saved.fitnessSettings);
+  const [workCalendarPrefs, setWorkCalendarPrefs] = useState(() => saved.workCalendarPrefs);
+  const [mealPrefs, setMealPrefs] = useState(() => saved.mealPrefs);
+  const [notificationPrefs, setNotificationPrefs] = useState(() => saved.notificationPrefs);
+  const [calendarPatterns, setCalendarPatterns] = useState(() => saved.calendarPatterns);
+  const [recoveryInputs, setRecoveryInputs] = useState(() => saved.recoveryInputs);
+  const [hubInsights, setHubInsights] = useState(() => saved.hubInsights);
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
 
   // Morning check-in modal state

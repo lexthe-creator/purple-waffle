@@ -1,5 +1,6 @@
 import { runHyroxSchemaAudit } from './auditHyroxSchema.mjs';
 import { runHyroxGeneratorBehaviorAudit } from './auditHyroxGeneratorBehavior.mjs';
+import { runWorkoutSystemStateAudit } from './auditWorkoutSystemState.mjs';
 
 function validateAuditResult(result, label) {
   if (!result || typeof result.ok !== 'boolean' || !Array.isArray(result.issues)) {
@@ -29,6 +30,7 @@ function run() {
 
   let schemaAudit;
   let generatorAudit;
+  let stateAudit;
 
   try {
     schemaAudit = validateAuditResult(runHyroxSchemaAudit(), 'Schema Audit');
@@ -48,10 +50,20 @@ function run() {
     };
   }
 
+  try {
+    stateAudit = validateAuditResult(runWorkoutSystemStateAudit(), 'State Audit');
+  } catch (error) {
+    stateAudit = {
+      ok: false,
+      issues: [`State Audit threw: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+
   printAudit('Schema Audit', schemaAudit);
   printAudit('Generator Audit', generatorAudit);
+  printAudit('State Audit', stateAudit);
 
-  const ok = schemaAudit.ok && generatorAudit.ok;
+  const ok = schemaAudit.ok && generatorAudit.ok && stateAudit.ok;
   console.log('');
   console.log(`FINAL RESULT: ${ok ? 'PASSED' : 'FAILED'}`);
   process.exit(ok ? 0 : 1);

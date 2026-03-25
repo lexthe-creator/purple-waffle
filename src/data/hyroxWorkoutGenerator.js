@@ -1,5 +1,4 @@
 import {
-  HYROX_MOVEMENT_SPECIFICITY_TYPES,
   HYROX_SUBSTITUTIONS,
   HYROX_WORKOUT_LIBRARY,
 } from './hyroxWorkoutLibrary.js';
@@ -8,6 +7,12 @@ import {
   HYROX_SCHEDULE_PHASE_TO_LIBRARY_PHASE,
   mapSchedulePhaseToLibraryPhase,
 } from './hyroxAdapters.js';
+import {
+  hyroxEquipmentModes,
+  hyroxPreferredEngineModes,
+  hyroxPreferredRunModes,
+  hyroxMovementSpecificityTypes,
+} from './workoutSystemSchema.js';
 
 const HYROX_TRAINING_DAY_SLOT_COUNTS = {
   '4-day': 4,
@@ -186,7 +191,8 @@ function resolveEquipmentContext(options = {}) {
     ? options.equipmentMode
     : null;
   const equipmentMode = requestedMode || legacyProfile || 'full_gym';
-  const defaults = { ...(HYROX_EQUIPMENT_MODE_DEFAULTS[equipmentMode] || HYROX_EQUIPMENT_MODE_DEFAULTS.full_gym) };
+  const normalizedMode = hyroxEquipmentModes.includes(equipmentMode) ? equipmentMode : 'full_gym';
+  const defaults = { ...(HYROX_EQUIPMENT_MODE_DEFAULTS[normalizedMode] || HYROX_EQUIPMENT_MODE_DEFAULTS.full_gym) };
   const explicitAvailability = options.equipmentAvailability || {};
   const availability = { ...defaults };
   for (const [key, enabled] of Object.entries(explicitAvailability)) {
@@ -195,11 +201,16 @@ function resolveEquipmentContext(options = {}) {
   }
 
   return {
-    equipmentMode,
+    equipmentMode: normalizedMode,
     availability,
     preferredEquipmentTags: [...(options.preferredEquipmentTags || [])],
-    preferredRunMode: options.preferredRunMode || 'either',
-    preferredEngineModes: [...(options.preferredEngineModes || ['any'])],
+    preferredRunMode: hyroxPreferredRunModes.includes(options.preferredRunMode) ? options.preferredRunMode : 'either',
+    preferredEngineModes: (() => {
+      const filtered = Array.isArray(options.preferredEngineModes) && options.preferredEngineModes.length > 0
+        ? options.preferredEngineModes.filter(mode => hyroxPreferredEngineModes.includes(mode))
+        : ['any'];
+      return filtered.length > 0 ? filtered : ['any'];
+    })(),
   };
 }
 
@@ -211,7 +222,7 @@ function resolveSubstitutionsForMovement(movementId, equipmentProfile) {
 
 function isOptionAllowedForPhase(option, libraryPhase) {
   const specificityType = option?.specificityType || 'analogous';
-  if (!HYROX_MOVEMENT_SPECIFICITY_TYPES.includes(specificityType)) return true;
+  if (!hyroxMovementSpecificityTypes.includes(specificityType)) return true;
   if (libraryPhase === 'foundation' || libraryPhase === 'base') return true;
   if (libraryPhase === 'build') return specificityType !== 'fallback';
   if (libraryPhase === 'peak') return specificityType === 'exact' || specificityType === 'analogous';
@@ -256,22 +267,22 @@ function resolveBlockMovement({
     const normalizedEquipment = HYROX_EQUIPMENT_ALIASES[option.equipmentType] || option.equipmentType;
     return normalizedEquipment === 'bodyweight' || availableEquipment[normalizedEquipment];
   });
-  const equipmentFiltered = optionsMatchingEquipment.length > 0 ? optionsMatchingEquipment : block.movementOptions;
-  const phaseFiltered = equipmentFiltered.filter(option => isOptionAllowedForPhase(option, libraryPhase));
-  const specificityPool = phaseFiltered.length > 0 ? phaseFiltered : equipmentFiltered;
-  const preferenceSorted = [...specificityPool].sort((left, right) => (
+  const equipmentFiltered = optionsMatchingEquipment;
+  const preferenceSorted = [...equipmentFiltered].sort((left, right) => (
     resolveOptionPreferenceScore(right, equipmentContext) - resolveOptionPreferenceScore(left, equipmentContext)
     || String(left.movementId).localeCompare(String(right.movementId))
   ));
-  const antiRepeatPool = preferenceSorted.filter(option => !recentMovementIds.has(option.movementId));
-  const selectionPool = antiRepeatPool.length > 0
-    ? antiRepeatPool
-    : preferenceSorted;
+  const phaseFiltered = preferenceSorted.filter(option => isOptionAllowedForPhase(option, libraryPhase));
+  const specificityPool = phaseFiltered.length > 0 ? phaseFiltered : preferenceSorted;
+  const antiRepeatFiltered = specificityPool.filter(option => !recentMovementIds.has(option.movementId));
+  const selectionPool = antiRepeatFiltered.length > 0
+    ? antiRepeatFiltered
+    : specificityPool;
   const startIndex = Math.max(0, (Number.isFinite(weekNumber) ? weekNumber : 1) - 1);
-  const rotationIndex = (startIndex + slotIndex) % selectionPool.length;
-  const rotatedOption = selectionPool[rotationIndex] || null;
   const defaultOption = optionsById.get(block.defaultMovementId) || null;
-  const selectedOption = rotatedOption || defaultOption || block.movementOptions[0];
+  const selectedOption = selectionPool.length > 0
+    ? selectionPool[(startIndex + slotIndex) % selectionPool.length]
+    : defaultOption || block.movementOptions[0];
   const substitution = selectedOption ? resolveSubstitutionsForMovement(selectedOption.movementId, equipmentContext.equipmentMode) : null;
 
   return {

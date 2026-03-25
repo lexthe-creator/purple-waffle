@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { normalizeWorkoutRecord } from '../data/workoutSystemState.js';
 
 const TASKS_STORAGE_KEY = 'purple-waffle-dashboard-v2';
 
@@ -204,50 +205,12 @@ function normalizeExercise(exercise, index) {
 }
 
 function normalizeWorkout(workout, index) {
-  const programId = inferWorkoutProgram(workout);
-  const defaultProgramName = {
-    hyrox: 'HYROX',
-    strength: 'Strength Base',
-    running: 'Running Build',
-    pilates: 'Pilates Flow',
-    recovery: 'Recovery Reset',
-  }[programId];
-
-  const rawScheduledDate = workout?.scheduledDate;
-  const scheduledDate =
-    typeof rawScheduledDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawScheduledDate)
-      ? rawScheduledDate
-      : null;
-  const rawPlannedDate = workout?.plannedDate;
-  const plannedDate =
-    typeof rawPlannedDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawPlannedDate)
-      ? rawPlannedDate
-      : null;
-
-  return {
-    id: workout?.id || generateId('workout'),
-    name: typeof workout?.name === 'string' ? workout.name : 'Focus Session',
-    programId,
-    programName: typeof workout?.programName === 'string' && workout.programName ? workout.programName : defaultProgramName,
-    type: programId,
-    status: ['planned', 'active', 'completed', 'skipped'].includes(workout?.status) ? workout.status : 'planned',
-    scheduledDate,
-    plannedDate,
-    sessionOffset: Number.isFinite(workout?.sessionOffset) ? workout.sessionOffset : null,
-    duration: Number.isFinite(workout?.duration) ? workout.duration : 30,
-    distanceMiles: Number.isFinite(workout?.distanceMiles) ? workout.distanceMiles : 0,
-    phase: typeof workout?.phase === 'string' && workout.phase ? workout.phase : 'Base',
-    week: Number.isFinite(workout?.week) ? workout.week : 1,
-    frequency: workout?.frequency === '5-day' ? '5-day' : '4-day',
-    anchorDay: ['Sunday', 'Monday', 'Wednesday'].includes(workout?.anchorDay) ? workout.anchorDay : 'Monday',
+  return normalizeWorkoutRecord({
+    ...workout,
     exercises: Array.isArray(workout?.exercises)
       ? workout.exercises.map(normalizeExercise)
       : [],
-    workoutLog: workout?.workoutLog && typeof workout.workoutLog === 'object' ? workout.workoutLog : null,
-    startedAt: Number.isFinite(workout?.startedAt) ? workout.startedAt : null,
-    completedAt: Number.isFinite(workout?.completedAt) ? workout.completedAt : null,
-    createdAt: Number.isFinite(workout?.createdAt) ? workout.createdAt : Date.now() + index,
-  };
+  }, index);
 }
 
 function normalizeNotification(notification, index) {
