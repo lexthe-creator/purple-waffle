@@ -491,9 +491,18 @@ function SettingsScreen() {
               />
             </label>
             <label className="field-stack compact-field">
+              <span>Program start date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.programStartDate ?? ''}
+                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+              />
+            </label>
+            <label className="field-stack compact-field">
               <span>Training days per week</span>
               <div className="segmented-control">
-                {['4-day', '5-day'].map(freq => (
+                {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
                   <button
                     key={freq}
                     type="button"
@@ -520,81 +529,6 @@ function SettingsScreen() {
                 ))}
               </div>
             </label>
-          </div>
-        </ExpandablePanel>
-
-          <ExpandablePanel header={<strong>Work Calendar</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Active program</span>
-                <div className="segmented-control">
-                  {AVAILABLE_PROGRAMS.map(program => (
-                    <button
-                      key={program.id}
-                      type="button"
-                      className={`status-chip ${draft.programType === program.id ? 'is-active' : ''}`}
-                      onClick={() => patch('programType', program.id)}
-                    >
-                      {program.label}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <div className="field-stack compact-field">
-                <span>Available programs</span>
-                <div className="subtle-feed">
-                  {AVAILABLE_PROGRAMS.map(program => (
-                    <ListRow
-                      key={program.id}
-                      variant="card"
-                      label={program.label}
-                      sub={program.description}
-                      action={(
-                        <button
-                          type="button"
-                          className={`ghost-button compact-ghost ${draft.programType === program.id ? 'is-active' : ''}`}
-                          onClick={() => patch('programType', program.id)}
-                        >
-                          {draft.programType === program.id ? 'Active' : 'Select'}
-                        </button>
-                      )}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="field-stack compact-field">
-              <p className="eyebrow">Timeline</p>
-              <label className="field-stack compact-field">
-                <span>Program start date</span>
-                <input
-                  type="date"
-                  className="task-title-input"
-                  value={draft.programStartDate ?? ''}
-                  onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
-                />
-              </label>
-            </div>
-
-            <div className="field-stack compact-field">
-              <p className="eyebrow">Training Structure</p>
-              <label className="field-stack compact-field">
-                <span>Training days per week</span>
-                <div className="segmented-control">
-                  {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
-                    <button
-                      key={freq}
-                      type="button"
-                      className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
-                      onClick={() => patch('trainingDays', freq)}
-                    >
-                      {freq}
-                    </button>
-                  ))}
-                </div>
-              </label>
-            </div>
           </div>
         </ExpandablePanel>
 
