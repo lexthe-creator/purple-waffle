@@ -20,6 +20,7 @@ import {
   getStationMeta,
 } from './data/hyroxPlan.js';
 import { normalizeProgramType } from './data/programRouter.js';
+import { sessionTypes } from './data/workoutSystemSchema.js';
 import {
   QUICK_MEAL_TAGS,
   NUTRITION_SLOTS,
@@ -69,8 +70,8 @@ const ROOT_TABS = [
 const FITNESS_SUBTABS = [
   { id: 'today', label: 'Today' },
   { id: 'plan', label: 'Plan' },
-  { id: 'library', label: 'Library' },
-  { id: 'history', label: 'History' },
+  { id: 'library', label: 'Workout Library' },
+  { id: 'logging', label: 'Logging' },
 ];
 
 const MORE_SECTIONS = [
@@ -191,20 +192,195 @@ function getProgramEmptyState(programType) {
     case '5k':
       return {
         title: '5K setup saved',
-        description: 'Your 5K settings are saved, but workouts are not yet available in this build.',
+        description: 'Your 5K settings are saved, but workouts have not generated yet.',
       };
     case 'strength_block':
       return {
         title: 'Strength Block setup saved',
-        description: 'Your Strength Block settings are saved, but workouts are not yet available in this build.',
+        description: 'Your Strength Block settings are saved, but workouts have not generated yet.',
       };
     case 'hyrox':
     default:
       return {
         title: 'No workouts ready yet',
-        description: 'Your settings are saved, but workouts are not yet available right now.',
+        description: 'Your settings are saved, but workouts have not generated yet.',
       };
   }
+}
+
+function getSessionTypeMeta(sessionTypeId) {
+  const session = sessionTypes[sessionTypeId];
+  if (!session) return null;
+
+  return {
+    id: session.sessionTypeId,
+    title: session.displayName,
+    category: session.category,
+    duration: session.duration,
+    objective: session.objective,
+  };
+}
+
+function getProgramLibrarySections(programType) {
+  const normalized = normalizeProgramType(programType);
+
+  if (normalized === 'strength_block') {
+    return [];
+  }
+
+  const sectionKeys = normalized === '5k'
+    ? [
+        { title: 'Easy', keys: ['run_easy'] },
+        { title: 'Quality', keys: ['run_intervals', 'run_tempo'] },
+        { title: 'Long', keys: ['run_long'] },
+        { title: 'Recovery', keys: ['recovery_walk_mobility', 'recovery_pilates', 'recovery_yoga'] },
+      ]
+    : [
+        { title: 'Strength', keys: ['strength_lower', 'strength_upper', 'strength_full', 'strength_hybrid'] },
+        { title: 'Running', keys: ['run_easy', 'run_intervals', 'run_tempo', 'run_long'] },
+        { title: 'Conditioning', keys: ['conditioning_hyrox', 'conditioning_engine', 'conditioning_circuit'] },
+        { title: 'Recovery', keys: ['recovery_walk_mobility', 'recovery_pilates', 'recovery_yoga'] },
+      ];
+
+  return sectionKeys
+    .map(section => ({
+      title: section.title,
+      items: section.keys
+        .map(getSessionTypeMeta)
+        .filter(Boolean),
+    }))
+    .filter(section => section.items.length > 0);
+}
+
+function getProgramWorkoutTypeLabel(session) {
+  if (!session) return 'Workout';
+  if (session.type === 'run') return 'Run';
+  if (session.type === 'recovery') return 'Recovery';
+  if (session.type === 'strength') return 'Strength';
+  if (session.type === 'conditioning') return 'Conditioning';
+  if (session.type === 'hyrox') return 'HYROX';
+  return 'Workout';
+}
+
+function getWorkoutStatusLabel(session, todayKey, isTodayCard = false) {
+  if (!session) {
+    return { label: 'Planned', className: 'status-planned' };
+  }
+
+  if (session.status === 'completed') {
+    return { label: 'Completed', className: 'status-active' };
+  }
+
+  if (session.status === 'missed') {
+    return { label: 'Missed', className: 'status-missed' };
+  }
+
+  if (session.status === 'skipped') {
+    return { label: 'Planned', className: 'status-planned' };
+  }
+
+  if (session.type === 'recovery') {
+    return { label: 'Recovery', className: 'status-planned' };
+  }
+
+  if (isTodayCard || session.dateKey === todayKey || session.status === 'today') {
+    return { label: 'Suggested', className: 'status-priority' };
+  }
+
+  return { label: 'Planned', className: 'status-planned' };
+}
+
+function getTodayWorkoutCardState({
+  weeklySchedule,
+  todayKey,
+  programType,
+}) {
+  if (!Array.isArray(weeklySchedule) || weeklySchedule.length === 0) {
+    return {
+      kind: 'empty',
+      title: 'No workouts ready yet',
+      description: getProgramEmptyState(programType).description,
+    };
+  }
+
+  const todaySession = weeklySchedule.find(session => session.dateKey === todayKey && session.status !== 'skipped') ?? null;
+  const nextSession = weeklySchedule.find(session => session.dateKey > todayKey && session.status !== 'completed' && session.status !== 'skipped')
+    ?? weeklySchedule.find(session => session.status === 'planned')
+    ?? weeklySchedule.find(session => session.status === 'today')
+    ?? null;
+
+  const displaySession = todaySession ?? nextSession;
+  if (!displaySession) {
+    return {
+      kind: 'empty',
+      title: 'No workouts ready yet',
+      description: getProgramEmptyState(programType).description,
+    };
+  }
+
+  const selectedIsToday = Boolean(todaySession);
+  const status = getWorkoutStatusLabel(displaySession, todayKey, selectedIsToday);
+  const workoutTitle = displaySession.label || displaySession.title || 'Workout';
+  const workoutMeta = [
+    displaySession.duration ? `${displaySession.duration} min` : null,
+    getProgramWorkoutTypeLabel(displaySession),
+  ].filter(Boolean).join(' · ');
+  const helperLine = selectedIsToday
+    ? `Planned for today: ${displaySession.label || displaySession.title || 'Workout'}`
+    : `Next planned workout: ${displaySession.label || displaySession.title || 'Workout'}`;
+
+  return {
+    kind: 'workout',
+    session: displaySession,
+    title: workoutTitle,
+    helperLine,
+    metaLine: workoutMeta,
+    status,
+    canStart: selectedIsToday,
+  };
+}
+
+function getFitnessProgressSnapshot({
+  workouts,
+  weeklySchedule,
+  fitnessSettings,
+  programType,
+  todayKey,
+}) {
+  const normalizedProgramType = normalizeProgramType(programType);
+  const plannedTargets = {
+    hyrox: 12,
+    '5k': 12,
+    strength_block: 0,
+  };
+  const targetMiles = Number.isFinite(fitnessSettings.currentWeeklyMileage)
+    ? fitnessSettings.currentWeeklyMileage
+    : plannedTargets[normalizedProgramType] ?? 12;
+
+  const currentWeekWorkouts = Array.isArray(weeklySchedule)
+    ? weeklySchedule
+    : [];
+
+  const completedWorkoutCount = currentWeekWorkouts.filter(session => session.status === 'completed').length;
+
+  const completedMiles = workouts
+    .filter(workout => workout.status === 'completed' && getWorkoutProgramType(workout) === normalizedProgramType)
+    .filter(workout => currentWeekWorkouts.some(session => session.dateKey === workout.scheduledDate || session.dateKey === workout.plannedDate))
+    .reduce((total, workout) => total + (Number.isFinite(workout.distanceMiles) ? workout.distanceMiles : 0), 0);
+
+  const strengthSessions = currentWeekWorkouts.filter(session => session.status === 'completed' && session.type === 'strength').length;
+  const recoverySessions = currentWeekWorkouts.filter(session => session.status === 'completed' && session.type === 'recovery').length;
+
+  return {
+    workoutsCompleted: completedWorkoutCount,
+    workoutsTarget: Math.max(currentWeekWorkouts.length, fitnessSettings.trainingDays === '5-day' ? 5 : 4),
+    milesCompleted: completedMiles,
+    milesTarget: targetMiles,
+    strengthSessions,
+    recoverySessions,
+    hasSchedule: currentWeekWorkouts.length > 0,
+    todayKey,
+  };
 }
 
 function alignDateToAnchor(date, anchorDay) {
