@@ -480,6 +480,7 @@ function SettingsScreen() {
                   </button>
                 )}
               />
+<<<<<<< ours
             ))}
           </div>
         </div>
@@ -506,6 +507,73 @@ function SettingsScreen() {
               </button>
             ))}
           </div>
+=======
+            </label>
+            <label className="field-stack compact-field">
+              <span>Program start date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.programStartDate ?? ''}
+                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+              />
+            </label>
+            <label className="field-stack compact-field">
+              <span>Program start date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.programStartDate ?? ''}
+                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+              />
+            </label>
+            <label className="field-stack compact-field">
+              <span>Program start date</span>
+              <input
+                type="date"
+                className="task-title-input"
+                value={draft.programStartDate ?? ''}
+                onChange={e => patch('programStartDate', e.target.value || new Date().toISOString().slice(0, 10))}
+              />
+            </label>
+            <label className="field-stack compact-field">
+              <span>Training days per week</span>
+              <div className="segmented-control">
+                {(draft.programType === '5k' ? ['3-day', '4-day', '5-day'] : ['4-day', '5-day']).map(freq => (
+                  <button
+                    key={freq}
+                    type="button"
+                    className={`status-chip ${draft.trainingDays === freq ? 'is-active' : ''}`}
+                    onClick={() => patch('trainingDays', freq)}
+                  >
+                    {freq}
+                  </button>
+                ))}
+              </div>
+            </label>
+            <label className="field-stack compact-field">
+              <span>Equipment preferences</span>
+              <div className="segmented-control">
+                {['full-gym', 'limited', 'bodyweight-only'].map(eq => (
+                  <button
+                    key={eq}
+                    type="button"
+                    className={`status-chip ${draft.equipmentAccess === eq ? 'is-active' : ''}`}
+                    onClick={() => patch('equipmentAccess', eq)}
+                  >
+                    {eq}
+                  </button>
+                ))}
+              </div>
+            </label>
+          </div>
+<<<<<<< ours
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
+=======
+>>>>>>> theirs
         </ExpandablePanel>
 
         <div className="settings-section-divider" aria-hidden="true" />
@@ -554,8 +622,56 @@ function SettingsScreen() {
             </div>
           </ExpandablePanel>
 
-          <ExpandablePanel header={<strong>Work Calendar</strong>}>
+          <ExpandablePanel header={<strong>Nutrition</strong>}>
             <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Hydration goal (cups)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="20"
+                  className="task-title-input"
+                  value={mealPrefs.hydrationGoal}
+                  onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
+                />
+              </label>
+              <label className="field-stack compact-field">
+                <span>Dietary notes</span>
+                <textarea
+                  className="task-title-input"
+                  rows={3}
+                  value={mealPrefs.dietaryNotes}
+                  onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+<<<<<<< ours
+  return (
+    <div className="tab-stack settings-page">
+      <Card>
+        <SectionHeader eyebrow="Settings" title="Configuration" />
+        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
+      </Card>
+=======
+          <ExpandablePanel header={<strong>Recovery + Calendar</strong>}>
+            <div className="field-stack">
+              <label className="field-stack compact-field">
+                <span>Preferred recovery session</span>
+                <div className="segmented-control">
+                  {RECOVERY_SESSIONS.map(session => (
+                    <button
+                      key={session.id}
+                      type="button"
+                      className={`status-chip ${recoveryInputs.preferredSession === session.id ? 'is-active' : ''}`}
+                      onClick={() => setRecoveryInputs(current => ({ ...current, preferredSession: session.id }))}
+                    >
+                      {session.name}
+                    </button>
+                  ))}
+                </div>
+              </label>
               <label className="field-stack compact-field">
                 <span>Planning order</span>
                 <div className="segmented-control">
@@ -586,40 +702,12 @@ function SettingsScreen() {
                   ))}
                 </div>
               </label>
+              <p className="empty-message">
+                Saved patterns: {calendarPatterns.length}. Calendar preferences are configured here.
+              </p>
             </div>
           </ExpandablePanel>
-
-          <ExpandablePanel header={<strong>Nutrition</strong>}>
-            <div className="field-stack">
-              <label className="field-stack compact-field">
-                <span>Hydration goal (cups)</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="20"
-                  className="task-title-input"
-                  value={mealPrefs.hydrationGoal}
-                  onChange={e => setMealPrefs(p => ({ ...p, hydrationGoal: Number(e.target.value) }))}
-                />
-              </label>
-              <label className="field-stack compact-field">
-                <span>Dietary notes</span>
-                <textarea
-                  className="task-title-input"
-                  rows={3}
-                  value={mealPrefs.dietaryNotes}
-                  onChange={e => setMealPrefs(p => ({ ...p, dietaryNotes: e.target.value }))}
-                />
-              </label>
-            </div>
-          </ExpandablePanel>
-
-  return (
-    <div className="tab-stack settings-page">
-      <Card>
-        <SectionHeader eyebrow="Settings" title="Configuration" />
-        <p className="empty-message">Adjust app preferences and training defaults from one dedicated page.</p>
-      </Card>
+>>>>>>> theirs
 
       <div className="settings-stack">
         {settingsSections.map((section, index) => (
