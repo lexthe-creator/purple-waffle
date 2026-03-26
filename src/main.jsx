@@ -43,27 +43,27 @@ const ROOT_TABS = [
   {
     id: 'today',
     label: 'Today',
-    iconPath: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z"/><polyline points="9 21 9 12 15 12 15 21"/>',
+    iconPath: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
   },
   {
     id: 'calendar',
     label: 'Calendar',
-    iconPath: '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
-  },
-  {
-    id: 'nutrition',
-    label: 'Nutrition',
-    iconPath: '<path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8Z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/>',
+    iconPath: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
   },
   {
     id: 'fitness',
     label: 'Fitness',
-    iconPath: '<rect x="6" y="9" width="12" height="6" rx="3"/><path d="M4 12h2"/><path d="M18 12h2"/><path d="M7.5 9V7.5"/><path d="M16.5 9V7.5"/><path d="M7.5 15v1.5"/><path d="M16.5 15v1.5"/>',
+    iconPath: '<path d="M6 8v8M18 8v8"/><path d="M9 12h6"/><path d="M4 10h2v4H4zM18 10h2v4h-2z"/>',
+  },
+  {
+    id: 'nutrition',
+    label: 'Nutrition',
+    iconPath: '<path d="M7 3v8"/><path d="M11 3v8"/><path d="M9 3v8"/><path d="M16 3c1.5 2 1.5 4 0 6v12"/>',
   },
   {
     id: 'more',
     label: 'More',
-    iconPath: '<path d="M12 5v14"/><path d="M5 12h14"/><circle cx="12" cy="12" r="9"/>',
+    iconPath: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
   },
 ];
 
@@ -93,7 +93,7 @@ const AVAILABLE_PROGRAMS = [
   },
   {
     id: '5k',
-    label: '5K Run Builder',
+    label: 'Run Builder',
     description: 'Available for program selection; full downstream UI is still being phased in.',
   },
   {
@@ -3375,7 +3375,7 @@ function AppShell() {
         tabs={ROOT_TABS}
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        userName="Alex"
+        userName="Alexis"
         inboxCount={unreadNotifications.length}
         onOpenInbox={() => setNotificationCenterOpen(true)}
         onOpenQuickAdd={openQuickCapture}
