@@ -56,9 +56,9 @@ const ROOT_TABS = [
     iconPath: '<path d="M6 8v8M18 8v8"/><path d="M9 12h6"/><path d="M4 10h2v4H4zM18 10h2v4h-2z"/>',
   },
   {
-    id: 'nutrition',
-    label: 'Nutrition',
-    iconPath: '<path d="M7 3v8"/><path d="M11 3v8"/><path d="M9 3v8"/><path d="M16 3c1.5 2 1.5 4 0 6v12"/>',
+  id: 'nutrition',
+  label: 'Nutrition',
+  iconPath: '<path d="M6 3v7"/><path d="M8 3v7"/><path d="M10 3v7"/><path d="M8 10v11"/><path d="M16 3c1.5 2 1.5 5 0 7"/><path d="M16 10v11"/>',
   },
   {
     id: 'more',
