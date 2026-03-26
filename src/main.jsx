@@ -1515,219 +1515,276 @@ function TodayScreen({
     { id: 'hydration', label: 'Hydration', done: hydrationGoalMet },
     { id: 'recovery', label: 'Recovery', done: recoveryDone },
   ];
+return (
+  <div className="tab-stack execution-home-stack">
+    <section className="task-card today-hero">
+      <div className="task-card-header">
+        <div>
+          <p className="eyebrow">{formatFullDate(now)}</p>
+          <h2>Today</h2>
+        </div>
+        <span
+          className={`status-pill ${
+            workoutStatus === 'Reduced volume'
+              ? 'status-planned'
+              : workoutStatus === 'Recovery day' || workoutStatus === 'Recovery replacement'
+                ? 'pill-warning'
+                : 'status-active'
+          }`}
+        >
+          {workoutStatus}
+        </span>
+      </div>
 
-  return (
-    <div className="tab-stack execution-home-stack">
-      <section className="task-card execution-hero-card today-hero">
+      <div className="execution-hero-copy">
+        <div>
+          <div className="execution-title-row">
+            <strong className="execution-title">{workoutName}</strong>
+            <span className="status-pill">{workoutDuration}</span>
+          </div>
+          <p className="execution-subtitle">{workoutDetail}</p>
+        </div>
+      </div>
+
+      <div className="execution-summary-grid" style={{ marginTop: '12px' }}>
+        <div className="summary-tile">
+          <span>Race countdown</span>
+          <strong>{daysToRace === null ? 'Not set' : `${daysToRace}d`}</strong>
+        </div>
+        <div className="summary-tile">
+          <span>Readiness</span>
+          <strong>{readiness.level}</strong>
+        </div>
+        <div className="summary-tile">
+          <span>Week</span>
+          <strong>{planState.week}</strong>
+        </div>
+        <div className="summary-tile">
+          <span>Meals</span>
+          <strong>{mealCount}</strong>
+        </div>
+      </div>
+
+      <div className="inline-actions" style={{ marginTop: '12px' }}>
+        <button type="button" className="primary-button" onClick={workoutLaunch}>
+          {activeWorkout ? 'Continue workout' : 'Start workout'}
+        </button>
+        <button type="button" className="secondary-button" onClick={onSwitchToFitness}>
+          View plan
+        </button>
+      </div>
+    </section>
+
+    {(todaysWorkout?.winTheDayTargets?.length > 0 || winTheDayChecklist.length > 0) && (
+      <section className="task-card">
+        <SectionHeader eyebrow="Focus" title="Win the day" />
+        <div className="subtle-feed">
+          {winTheDayChecklist.map(item => (
+            <ListRow
+              key={item.id}
+              variant="card"
+              label={`${item.done ? '✓' : '○'} ${item.label}`}
+            />
+          ))}
+          {(todaysWorkout?.winTheDayTargets || []).map(target => (
+            <ListRow
+              key={target}
+              variant="card"
+              label={target}
+              sub={todaysWorkout.label}
+            />
+          ))}
+        </div>
+      </section>
+    )}
+
+    <section className="task-card">
+      <SectionHeader eyebrow="This week" title="Plan at a glance" />
+      <div className="tag-row">
+        {weeklyStrip.map(day => (
+          <span
+            key={day.id}
+            className={`status-chip ${day.status === 'completed' ? 'is-active' : ''}`}
+            title={`${day.label} · ${day.status}`}
+          >
+            {day.day}{' '}
+            {day.status === 'today'
+              ? '•'
+              : day.status === 'completed'
+                ? '✓'
+                : day.status === 'moved'
+                  ? '→'
+                  : day.status === 'missed'
+                    ? '!'
+                    : ''}
+          </span>
+        ))}
+      </div>
+    </section>
+
+    {todaysWorkout?.ex?.length > 0 && (
+      <section className="task-card">
+        <SectionHeader eyebrow="Workout" title="Today’s details" />
+        <div className="subtle-feed">
+          {todaysWorkout.ex.map((item, index) => (
+            <ListRow
+              key={`${item.n}-${index}`}
+              variant="card"
+              label={item.n}
+              sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
+            />
+          ))}
+        </div>
+      </section>
+    )}
+
+    <div className="execution-stack">
+      <section className="task-card execution-summary-card">
         <div className="task-card-header">
           <div>
-            <p className="eyebrow">{formatFullDate(now)}</p>
-            <h2>Today&apos;s Workout</h2>
+            <p className="eyebrow">Workout suggestions</p>
+            <h2>Recovery-aware options</h2>
           </div>
         </div>
+        {todaySuggestions.length > 0 ? (
+          <div className="subtle-feed">
+            {todaySuggestions.map(item => (
+              <ListRow key={item.id} variant="card" label={item.title} sub={item.detail} />
+            ))}
+          </div>
+        ) : (
+          <p className="empty-message">No suggestions. Start with the planned workout.</p>
+        )}
+      </section>
 
-        <div className="execution-hero-copy">
+      <section className="task-card execution-summary-card">
+        <div className="task-card-header">
           <div>
-            <div className="execution-title-row">
-              <strong className="execution-title">{workoutName}</strong>
-              <span className="status-pill">{workoutDuration}</span>
-            </div>
-            <p className="execution-subtitle">{workoutDetail}</p>
+            <p className="eyebrow">Nutrition</p>
+            <h2>Today’s fuel</h2>
           </div>
-          <span className={`status-pill ${workoutStatus === 'Reduced volume' ? 'status-planned' : workoutStatus === 'Recovery day' || workoutStatus === 'Recovery replacement' ? 'pill-warning' : 'status-active'}`}>
-            {workoutStatus}
-          </span>
-        </div>
-
-        <div className="inline-actions">
-          <button type="button" className="primary-button" onClick={workoutLaunch}>
-            {activeWorkout ? 'Continue workout' : 'Start workout'}
-          </button>
-          <button type="button" className="secondary-button" onClick={onSwitchToFitness}>
-            View plan
+          <button
+            type="button"
+            className="ghost-button compact-ghost"
+            onClick={() => onOpenMoreSection?.('meals')}
+          >
+            Open Nutrition
           </button>
         </div>
-        <div className="execution-summary-grid" style={{ marginTop: '12px' }}>
+        <div className="execution-summary-grid">
           <div className="summary-tile">
-            <span>Race countdown</span>
-            <strong>{daysToRace === null ? 'Not set' : `${daysToRace}d`}</strong>
+            <span>Meals logged</span>
+            <strong>{mealCount}</strong>
           </div>
+          <div className="summary-tile">
+            <span>Hydration</span>
+            <strong>{hydrationCount}/{mealPrefs.hydrationGoal}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Latest</span>
+            <strong>{todaysMeals[0]?.name || 'Nothing yet'}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="task-card execution-summary-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Recovery</p>
+            <h2>Readiness check</h2>
+          </div>
+          <button
+            type="button"
+            className="ghost-button compact-ghost"
+            onClick={() => onOpenMoreSection?.('recovery')}
+          >
+            Open Recovery
+          </button>
+        </div>
+        <div className="execution-summary-grid">
           <div className="summary-tile">
             <span>Readiness</span>
             <strong>{readiness.level}</strong>
           </div>
           <div className="summary-tile">
-            <span>Week</span>
-            <strong>{planState.week}</strong>
+            <span>Sleep</span>
+            <strong>{Number.isFinite(energyState.sleepHours) ? `${energyState.sleepHours}h` : '—'}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Energy</span>
+            <strong>{Number.isFinite(energyState.value) ? `${energyState.value}/10` : '—'}</strong>
           </div>
         </div>
+        <p className="empty-message">
+          {readiness.level === 'Low'
+            ? 'Recovery is the right call today.'
+            : readiness.level === 'Moderate'
+              ? 'Reduced volume keeps the day productive.'
+              : 'You are good to push the plan.'}
+        </p>
+      </section>
 
-        {todaysWorkout?.ex?.length > 0 && (
-          <div className="subtle-feed" style={{ marginTop: '12px' }}>
-            {todaysWorkout.ex.map((item, index) => (
+      <section className="task-card execution-summary-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Lifestyle</p>
+            <h2>Habits today</h2>
+          </div>
+          <button
+            type="button"
+            className="ghost-button compact-ghost"
+            onClick={() => onOpenMoreSection?.('lifestyle')}
+          >
+            Open Lifestyle
+          </button>
+        </div>
+        <div className="execution-summary-grid">
+          <div className="summary-tile">
+            <span>Habits total</span>
+            <strong>{habitList.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Completed today</span>
+            <strong>{completedHabits.length}</strong>
+          </div>
+          <div className="summary-tile">
+            <span>Top habit</span>
+            <strong>{habitPreview[0]?.title || 'None yet'}</strong>
+          </div>
+        </div>
+        {habitPreview.length > 0 ? (
+          <div className="subtle-feed">
+            {habitPreview.map(habit => (
               <ListRow
-                key={`${item.n}-${index}`}
+                key={habit.id}
                 variant="card"
-                label={item.n}
-                sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
+                label={habit.title || 'Habit'}
+                sub={habit.frequency || 'daily'}
               />
             ))}
           </div>
+        ) : (
+          <p className="empty-message">
+            Use Lifestyle for routines, repetition, and low-friction structure.
+          </p>
         )}
       </section>
-
-      {(todaysWorkout?.winTheDayTargets?.length > 0 || winTheDayChecklist.length > 0) && (
-        <section className="task-card">
-          <SectionHeader eyebrow="Win the day" title="Do this now" />
-          <div className="subtle-feed">
-            {winTheDayChecklist.map(item => (
-              <ListRow key={item.id} variant="card" label={`${item.done ? '✓' : '○'} ${item.label}`} />
-            ))}
-            {(todaysWorkout?.winTheDayTargets || []).map(target => (
-              <ListRow key={target} variant="card" label={target} sub={todaysWorkout.label} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="task-card">
-        <SectionHeader eyebrow="Weekly strip" title="Planned vs done" />
-        <div className="tag-row">
-          {weeklyStrip.map(day => (
-            <span
-              key={day.id}
-              className={`status-chip ${day.status === 'completed' ? 'is-active' : ''}`}
-              title={`${day.label} · ${day.status}`}
-            >
-              {day.day} {day.status === 'today' ? '•' : day.status === 'completed' ? '✓' : day.status === 'moved' ? '→' : day.status === 'missed' ? '!' : ''}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <div className="execution-stack">
-        <section className="task-card execution-summary-card">
-          <div className="task-card-header">
-            <div>
-              <p className="eyebrow">Workout suggestions</p>
-              <h2>Recovery-aware options</h2>
-            </div>
-          </div>
-          {todaySuggestions.length > 0 ? (
-            <div className="subtle-feed">
-              {todaySuggestions.map(item => (
-                <ListRow key={item.id} variant="card" label={item.title} sub={item.detail} />
-              ))}
-            </div>
-          ) : (
-            <p className="empty-message">No suggestions. Start with the planned workout.</p>
-          )}
-        </section>
-
-        <section className="task-card execution-summary-card">
-          <div className="task-card-header">
-            <div>
-              <p className="eyebrow">Nutrition today</p>
-              <h2>Have you eaten?</h2>
-            </div>
-            <button type="button" className="ghost-button compact-ghost" onClick={() => onOpenMoreSection?.('meals')}>
-              Open Nutrition
-            </button>
-          </div>
-          <div className="execution-summary-grid">
-            <div className="summary-tile">
-              <span>Meals logged</span>
-              <strong>{mealCount}</strong>
-            </div>
-            <div className="summary-tile">
-              <span>Hydration</span>
-              <strong>{hydrationCount}/{mealPrefs.hydrationGoal}</strong>
-            </div>
-            <div className="summary-tile">
-              <span>Latest</span>
-              <strong>{todaysMeals[0]?.name || 'Nothing yet'}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="task-card execution-summary-card">
-          <div className="task-card-header">
-            <div>
-              <p className="eyebrow">Recovery</p>
-              <h2>How are you recovering?</h2>
-            </div>
-            <button type="button" className="ghost-button compact-ghost" onClick={() => onOpenMoreSection?.('health')}>
-              Open Recovery
-            </button>
-          </div>
-          <div className="execution-summary-grid">
-            <div className="summary-tile">
-              <span>Readiness</span>
-              <strong>{readiness.level}</strong>
-            </div>
-            <div className="summary-tile">
-              <span>Sleep</span>
-              <strong>{Number.isFinite(energyState.sleepHours) ? `${energyState.sleepHours}h` : '—'}</strong>
-            </div>
-            <div className="summary-tile">
-              <span>Energy</span>
-              <strong>{Number.isFinite(energyState.value) ? `${energyState.value}/10` : '—'}</strong>
-            </div>
-          </div>
-          <p className="empty-message">{readiness.level === 'Low' ? 'Recovery is the right call today.' : readiness.level === 'Moderate' ? 'Reduced volume keeps the day productive.' : 'You are good to push the plan.'}</p>
-        </section>
-
-        <section className="task-card execution-summary-card">
-          <div className="task-card-header">
-            <div>
-              <p className="eyebrow">Habits / Lifestyle</p>
-              <h2>Habits today</h2>
-            </div>
-            <button type="button" className="ghost-button compact-ghost" onClick={() => onOpenMoreSection?.('habits')}>
-              Open Lifestyle
-            </button>
-          </div>
-          <div className="execution-summary-grid">
-            <div className="summary-tile">
-              <span>Habits total</span>
-              <strong>{habitList.length}</strong>
-            </div>
-            <div className="summary-tile">
-              <span>Completed today</span>
-              <strong>{completedHabits.length}</strong>
-            </div>
-            <div className="summary-tile">
-              <span>Top habit</span>
-              <strong>{habitPreview[0]?.title || 'None yet'}</strong>
-            </div>
-          </div>
-          {habitPreview.length > 0 ? (
-            <div className="subtle-feed">
-              {habitPreview.map(habit => (
-                <ListRow
-                  key={habit.id}
-                  variant="card"
-                  label={habit.title || 'Habit'}
-                  sub={habit.frequency || 'daily'}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="empty-message">Use Lifestyle for routines, repetition, and low-friction structure.</p>
-          )}
-        </section>
-      </div>
-
-      <div className="execution-secondary-actions">
-        <button type="button" className="secondary-button" onClick={onOpenInbox}>
-          Open Inbox
-        </button>
-        <button type="button" className="secondary-button" onClick={() => onOpenMoreSection?.('tasks')}>
-          Open More
-        </button>
-      </div>
     </div>
-  );
+
+    <div className="execution-secondary-actions">
+      <button type="button" className="secondary-button" onClick={onOpenInbox}>
+        Open Inbox
+      </button>
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={() => onOpenMoreSection?.('tasks')}
+      >
+        Open More
+      </button>
+    </div>
+  </div>
+);
 }
 
 function CalendarScreen() {
