@@ -41,6 +41,7 @@ export default function InboxScreen({ onSwitchToTab }) {
   const { inboxItems, setInboxItems, createInboxItem, createTask, setTasks, createNote, setNotes } = useTaskContext();
   const [captureText, setCaptureText] = useState('');
   const [openMenuId, setOpenMenuId] = useState(null);
+  const [viewMode, setViewMode] = useState('inbox');
 
   function handleCapture(e) {
     e.preventDefault();
