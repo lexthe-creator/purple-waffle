@@ -1881,156 +1881,285 @@ function CalendarScreen() {
   }
 
   return (
-    <div className="tab-stack">
-      <Card>
-        <SectionHeader eyebrow="Calendar" title="Weekly planning workspace" />
-        <div className="calendar-nav">
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}>
-            Previous week
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedDate(toDateKey(new Date()))}>
-            Today
-          </button>
-          <button type="button" className="ghost-button compact-ghost" onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}>
-            Next week
-          </button>
-        </div>
-        <p className="empty-message">
-          Planning order: {workCalendarPrefs.planningOrder} · Busy blocks: {workCalendarPrefs.busyBlockBehavior}
-        </p>
-      </Card>
+  <div className="tab-stack calendar-dashboard">
+    <section className="calendar-topbar">
+      <div>
+        <h1 className="calendar-page-title">Calendar</h1>
+      </div>
+    </section>
 
-      <Card>
-        <div className="week-strip calendar-week-strip">
-          {weekDays.map(day => (
+    <section className="calendar-week-header-card">
+      <div className="calendar-week-header-row">
+        <button
+          type="button"
+          className="calendar-nav-pill"
+          onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
+        >
+          Prev
+        </button>
+
+        <div className="calendar-range-title">
+          {formatShortMonthDay(weekDays[0]?.key)} – {formatShortMonthDay(weekDays[6]?.key)}
+        </div>
+
+        <button
+          type="button"
+          className="calendar-nav-pill"
+          onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
+        >
+          Next
+        </button>
+      </div>
+
+      <div className="calendar-day-pill-row">
+        {weekDays.map(day => (
+          <button
+            key={day.key}
+            type="button"
+            className={`calendar-day-pill ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
+            onClick={() => setSelectedDate(day.key)}
+          >
+            <span className="calendar-day-pill-dow">{day.label.slice(0, 1)}</span>
+            <strong>{new Date(`${day.key}T12:00:00`).getDate()}</strong>
+          </button>
+        ))}
+      </div>
+    </section>
+
+    <section className="calendar-selected-header">
+      <div>
+        <h2 className="calendar-selected-title">{formatFullDate(selectedDate)}</h2>
+      </div>
+      <div className="calendar-selected-actions">
+        <button
+          type="button"
+          className="calendar-primary-button"
+          onClick={() => {
+            setEditingItemId(null);
+            setDraftType('busy');
+            setDraftTitle('');
+            setDraftStartTime('09:00');
+            setDraftEndTime('10:00');
+            setDraftNotes('');
+            setDraftPriority(false);
+          }}
+        >
+          + Busy
+        </button>
+        <button
+          type="button"
+          className="calendar-primary-button"
+          onClick={() => {
+            setEditingItemId(null);
+            setDraftType('event');
+            setDraftTitle('');
+            setDraftStartTime('09:00');
+            setDraftEndTime('10:00');
+            setDraftNotes('');
+            setDraftPriority(false);
+          }}
+        >
+          + Event
+        </button>
+      </div>
+    </section>
+
+    <section className="calendar-quick-blocks">
+      <p className="eyebrow">Quick busy blocks</p>
+      <div className="calendar-quick-block-row">
+        <button
+          type="button"
+          className="calendar-quick-chip"
+          onClick={() => {
+            setEditingItemId(null);
+            setDraftType('busy');
+            setDraftTitle('Morning meetings');
+            setDraftStartTime('08:00');
+            setDraftEndTime('11:30');
+            setDraftNotes('');
+            setDraftPriority(true);
+          }}
+        >
+          Morning meetings
+        </button>
+        <button
+          type="button"
+          className="calendar-quick-chip"
+          onClick={() => {
+            setEditingItemId(null);
+            setDraftType('busy');
+            setDraftTitle('Lunch blocked');
+            setDraftStartTime('12:00');
+            setDraftEndTime('13:00');
+            setDraftNotes('');
+            setDraftPriority(false);
+          }}
+        >
+          Lunch blocked
+        </button>
+        <button
+          type="button"
+          className="calendar-quick-chip"
+          onClick={() => {
+            setEditingItemId(null);
+            setDraftType('busy');
+            setDraftTitle('Afternoon block');
+            setDraftStartTime('13:00');
+            setDraftEndTime('17:00');
+            setDraftNotes('');
+            setDraftPriority(false);
+          }}
+        >
+          Afternoon block
+        </button>
+        <button
+          type="button"
+          className="calendar-quick-chip"
+          onClick={() => {
+            setEditingItemId(null);
+            setDraftType('busy');
+            setDraftTitle('All-day hold');
+            setDraftStartTime('08:00');
+            setDraftEndTime('18:00');
+            setDraftNotes('');
+            setDraftPriority(true);
+          }}
+        >
+          All-day hold
+        </button>
+      </div>
+    </section>
+
+    <section className="calendar-sync-card">
+      <h3>Connect Google to sync</h3>
+      <p>
+        Calendar and Tasks integration requires a Google account connection in Settings.
+      </p>
+      <button
+        type="button"
+        className="calendar-sync-button"
+        onClick={() => window.alert('Google Calendar connection setup will live in Settings.')}
+      >
+        Go to Settings - Google
+      </button>
+    </section>
+
+    <section className="calendar-day-content-card">
+      {selectedDayItems.length === 0 ? (
+        <p className="calendar-empty-copy">No events, tasks, or busy blocks. Use the buttons above to add.</p>
+      ) : (
+        <div className="subtle-feed">
+          {selectedDayItems.map(item => (
+            <ListRow
+              key={item.id}
+              variant="card"
+              label={item.title}
+              sub={item.subtitle || item.type}
+              action={item.type === 'plan' ? undefined : (
+                <button
+                  type="button"
+                  className="ghost-button compact-ghost"
+                  onClick={() => {
+                    const match = calendarItems.find(calendarItem => calendarItem.id === item.id);
+                    if (!match) return;
+                    setEditingItemId(match.id);
+                  }}
+                >
+                  Edit
+                </button>
+              )}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+
+    <section className="calendar-pattern-card">
+      <h3>Save this week as a pattern</h3>
+      <div className="calendar-pattern-row">
+        <input
+          className="task-title-input calendar-pattern-input"
+          value={patternName}
+          onChange={event => setPatternName(event.target.value)}
+          placeholder="Pattern name (e.g. Typical Mon)"
+        />
+        <button type="button" className="calendar-primary-button calendar-save-button" onClick={savePattern}>
+          Save
+        </button>
+      </div>
+    </section>
+
+    <section className="calendar-editor-card">
+      <SectionHeader eyebrow={editingItemId ? 'Edit item' : 'Add item'} title="Busy blocks, events, or tasks" />
+      <div className="field-stack">
+        <div className="segmented-control">
+          {['busy', 'event', 'task'].map(type => (
             <button
-              key={day.key}
+              key={type}
               type="button"
-              className={`week-strip-item ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
-              onClick={() => setSelectedDate(day.key)}
+              className={`status-chip ${draftType === type ? 'is-active' : ''}`}
+              onClick={() => setDraftType(type)}
             >
-              <strong>{day.label}</strong>
-              <p>{day.dateLabel}</p>
+              {type}
             </button>
           ))}
         </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="Selected day" title={formatFullDate(selectedDate)} />
-        <div className="subtle-feed">
-          {selectedDayItems.length === 0 ? (
-            <EmptyState title="No items scheduled" description="Add a busy block, event, or weekly pattern." />
-          ) : (
-            selectedDayItems.map(item => (
-              <ListRow
-                key={item.id}
-                variant="card"
-                label={item.title}
-                sub={item.subtitle || item.type}
-                action={item.type === 'plan' ? undefined : (
-                  <button
-                    type="button"
-                    className="ghost-button compact-ghost"
-                    onClick={() => {
-                      const match = calendarItems.find(calendarItem => calendarItem.id === item.id);
-                      if (!match) return;
-                      setEditingItemId(match.id);
-                    }}
-                  >
-                    Edit
-                  </button>
-                )}
-              />
-            ))
-          )}
+        <input
+          className="task-title-input"
+          value={draftTitle}
+          onChange={event => setDraftTitle(event.target.value)}
+          placeholder="Title"
+        />
+        <div className="calendar-time-row">
+          <input className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
+          <input className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
         </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow={editingItemId ? 'Edit item' : 'Add item'} title="Busy blocks, events, or tasks" />
-        <div className="field-stack">
-          <div className="segmented-control">
-            {['busy', 'event', 'task'].map(type => (
-              <button
-                key={type}
-                type="button"
-                className={`status-chip ${draftType === type ? 'is-active' : ''}`}
-                onClick={() => setDraftType(type)}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-          <input
-            className="task-title-input"
-            value={draftTitle}
-            onChange={event => setDraftTitle(event.target.value)}
-            placeholder="Title"
-          />
-          <div className="calendar-time-row">
-            <input className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
-            <input className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
-          </div>
-          <textarea
-            className="task-title-input"
-            rows={3}
-            value={draftNotes}
-            onChange={event => setDraftNotes(event.target.value)}
-            placeholder="Notes"
-          />
-          <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>Priority</span>
-            <input type="checkbox" checked={draftPriority} onChange={event => setDraftPriority(event.target.checked)} />
-          </label>
-          <div className="inline-actions">
-            <button type="button" className="primary-button" onClick={saveCalendarItem}>
-              {editingItemId ? 'Save changes' : 'Add item'}
-            </button>
-            {editingItemId && (
-              <button type="button" className="ghost-button compact-ghost" onClick={resetDraft}>
-                Cancel edit
-              </button>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        <SectionHeader eyebrow="Patterns" title="Save and reapply weekly layouts" />
-        <div className="field-stack">
-          <input
-            className="task-title-input"
-            value={patternName}
-            onChange={event => setPatternName(event.target.value)}
-            placeholder="Pattern name"
-          />
-          <button type="button" className="secondary-button" onClick={savePattern}>
-            Save selected day as pattern
+        <textarea
+          className="task-title-input"
+          rows={3}
+          value={draftNotes}
+          onChange={event => setDraftNotes(event.target.value)}
+          placeholder="Notes"
+        />
+        <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Priority</span>
+          <input type="checkbox" checked={draftPriority} onChange={event => setDraftPriority(event.target.checked)} />
+        </label>
+        <div className="inline-actions">
+          <button type="button" className="primary-button" onClick={saveCalendarItem}>
+            {editingItemId ? 'Save changes' : 'Add item'}
           </button>
-        </div>
-        <div className="subtle-feed">
-          {calendarPatterns.length === 0 ? (
-            <EmptyState title="No saved patterns" description="Capture a repeatable day and reapply it next week." />
-          ) : (
-            calendarPatterns.map(pattern => (
-              <ListRow
-                key={pattern.id}
-                variant="card"
-                label={pattern.name}
-                sub={`${pattern.items.length} items · ${pattern.sourceDate}`}
-                action={(
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => applyPattern(pattern)}>
-                    Apply next week
-                  </button>
-                )}
-              />
-            ))
+          {editingItemId && (
+            <button type="button" className="ghost-button compact-ghost" onClick={resetDraft}>
+              Cancel edit
+            </button>
           )}
         </div>
-      </Card>
-    </div>
-  );
+      </div>
+    </section>
+
+    {calendarPatterns.length > 0 && (
+      <section className="calendar-saved-patterns-card">
+        <SectionHeader eyebrow="Patterns" title="Saved patterns" />
+        <div className="subtle-feed">
+          {calendarPatterns.map(pattern => (
+            <ListRow
+              key={pattern.id}
+              variant="card"
+              label={pattern.name}
+              sub={`${pattern.items.length} items · ${pattern.sourceDate}`}
+              action={(
+                <button type="button" className="ghost-button compact-ghost" onClick={() => applyPattern(pattern)}>
+                  Apply next week
+                </button>
+              )}
+            />
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+);
 }
 
 function NutritionScreen({ now }) {
