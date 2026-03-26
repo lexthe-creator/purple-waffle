@@ -3188,7 +3188,6 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
     recovery: 'Energy, sleep, and recovery defaults.',
     maintenance: 'Home upkeep and recurring chores.',
     insights: 'Weekly review and notes.',
-    inbox: 'Capture and route incoming items.',
   };
 
   return (
@@ -3288,26 +3287,6 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
           </div>
         </Card>
       )}
-      {activeSection === 'inbox' && (
-        <Card>
-          <SectionHeader eyebrow="Inbox" title="Capture and triage" />
-          <div className="subtle-feed">
-            <InboxScreen onSwitchToTab={onSwitchToTab} />
-            {inboxItems.filter(item => item.module === null).slice(0, 4).map(item => (
-              <ListRow
-                key={item.id}
-                variant="card"
-                label={item.text}
-                action={(
-                  <button type="button" className="ghost-button compact-ghost" onClick={() => promoteInboxItem(item.id)}>
-                    Promote
-                  </button>
-                )}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
 
       <Card>
         <SectionHeader eyebrow="Quick" title="Shortcuts" />
@@ -3389,6 +3368,11 @@ function AppShell() {
     setActiveTab('more');
   }
 
+  function openInboxPage() {
+    setActiveTab('inbox');
+    setNotificationCenterOpen(false);
+  }
+
   function openSettingsPage() {
     setActiveTab('settings');
   }
@@ -3459,6 +3443,9 @@ function AppShell() {
     if (activeTab === 'calendar') {
       return <CalendarScreen />;
     }
+    if (activeTab === 'inbox') {
+      return <InboxScreen onSwitchToTab={setActiveTab} />;
+    }
 
     if (activeTab === 'nutrition') {
       return <NutritionScreen now={now} />;
@@ -3482,7 +3469,7 @@ function AppShell() {
         activeWorkoutId={activeWorkoutId}
         onSwitchToFitness={() => setActiveTab('fitness')}
         onOpenMoreSection={openMoreSection}
-        onOpenInbox={() => openMoreSection('inbox')}
+        onOpenInbox={openInboxPage}
         onStartWorkout={startTodayWorkout}
       />
     );
@@ -3506,7 +3493,7 @@ function AppShell() {
         onTabChange={handleTabChange}
         userName="Alexis"
         inboxCount={unreadNotifications.length}
-        onOpenInbox={() => setNotificationCenterOpen(true)}
+        onOpenInbox={openInboxPage}        
         onOpenQuickAdd={openQuickCapture}
         onOpenSettings={openSettingsPage}
       >
@@ -3517,13 +3504,6 @@ function AppShell() {
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
         onSubmit={handleQuickAddSubmit}
-      />
-
-      <InboxView
-        isOpen={notificationCenterOpen}
-        notifications={notifications}
-        onClose={() => setNotificationCenterOpen(false)}
-        onMarkAllRead={markAllNotificationsRead}
       />
 
       <MorningCheckinModal />
