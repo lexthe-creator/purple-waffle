@@ -80,23 +80,41 @@ export default function InboxScreen({ onSwitchToTab }) {
 
   const pendingItems = inboxItems.filter(i => i.module === null);
 
-  return (
+   (
     <div className="tab-stack">
       <section className="inbox-screen">
-        <div className="inbox-header-row">
-          <div>
-            <p className="eyebrow">Inbox</p>
-            <h2 className="inbox-title">
-              {pendingItems.length === 0 ? 'All clear' : `${pendingItems.length} item${pendingItems.length === 1 ? '' : 's'}`}
-            </h2>
-          </div>
-          {pendingItems.length > 0 && (
-            <button type="button" className="ghost-button compact-ghost" onClick={handleClearAll}>
-              Clear all
-            </button>
-          )}
+        {/* Inbox / Task Toggle */}
+              <div className="inbox-toggle">
+          <button
+            type="button"
+            className={viewMode === 'inbox' ? 'active' : ''}
+            onClick={() => setViewMode('inbox')}
+          >
+            Inbox
+          </button>
+          <button
+            type="button"
+            className={viewMode === 'tasks' ? 'active' : ''}
+            onClick={() => setViewMode('tasks')}
+          >
+            Tasks
+          </button>
         </div>
-
+        {viewMode === 'inbox' && (
+          <>
+            <div className="inbox-header-row">
+              <div>
+                <p className="eyebrow">Inbox</p>
+                <h2 className="inbox-title">
+                  {pendingItems.length === 0 ? 'All clear' : `${pendingItems.length} item${pendingItems.length === 1 ? '' : 's'}`}
+                </h2>
+              </div>
+              {pendingItems.length > 0 && (
+                <button type="button" className="ghost-button compact-ghost" onClick={handleClearAll}>
+                  Clear all
+                </button>
+              )}
+            </div>
         {/* Quick capture */}
         <form className="inbox-capture-form" onSubmit={handleCapture}>
           <input
@@ -115,54 +133,57 @@ export default function InboxScreen({ onSwitchToTab }) {
           </button>
         </form>
 
-        {/* Inbox list */}
-        {pendingItems.length === 0 ? (
-          <EmptyState
-            title="Inbox is empty"
-            description="Capture ideas, tasks, or anything on your mind. Triage them when ready."
-          />
-        ) : (
-          <div className="inbox-list">
-            {pendingItems.map(item => (
-              <div key={item.id} className="inbox-item">
-                <p className="inbox-item-text">{item.text}</p>
-                <div className="inbox-item-actions">
-                  <button
-                    type="button"
-                    className="ghost-button compact-ghost"
-                    onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
-                    aria-label="Triage options"
-                    aria-expanded={openMenuId === item.id}
-                  >
-                    Move
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button compact-ghost inbox-delete-btn"
-                    onClick={() => handleDelete(item.id)}
-                    aria-label="Delete item"
-                  >
-                    ✕
-                  </button>
-                </div>
-                {openMenuId === item.id && (
-                  <TriageMenu
-                    item={item}
-                    onAssign={handleAssign}
-                    onDelete={handleDelete}
-                    onClose={() => setOpenMenuId(null)}
-                  />
-                )}
+            {/* Inbox list */}
+            {pendingItems.length === 0 ? (
+              <EmptyState
+                title="Inbox is empty"
+                description="Capture ideas, tasks, or anything on your mind. Triage them when ready."
+              />
+            ) : (
+              <div className="inbox-list">
+                {pendingItems.map(item => (
+                  <div key={item.id} className="inbox-item">
+                    <p className="inbox-item-text">{item.text}</p>
+                    <div className="inbox-item-actions">
+                      <button
+                        type="button"
+                        className="ghost-button compact-ghost"
+                        onClick={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+                        aria-label="Triage options"
+                        aria-expanded={openMenuId === item.id}
+                      >
+                        Move
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button compact-ghost inbox-delete-btn"
+                        onClick={() => handleDelete(item.id)}
+                        aria-label="Delete item"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {openMenuId === item.id && (
+                      <TriageMenu
+                        item={item}
+                        onAssign={handleAssign}
+                        onDelete={handleDelete}
+                        onClose={() => setOpenMenuId(null)}
+                      />
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* Triage hint */}
-        {pendingItems.length > 0 && (
-          <p className="inbox-hint">Tap "Move" to assign an item to a module, or ✕ to delete.</p>
+            {viewMode === 'tasks' && (
+              <div className="tasks-placeholder">
+                <p>No tasks yet</p>
+              </div>
+            )}
+          </>
         )}
-      </section>
-    </div>
-  );
+          </section>
+        </div>
+      );
 }
