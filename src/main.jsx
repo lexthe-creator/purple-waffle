@@ -1516,273 +1516,181 @@ function TodayScreen({
     { id: 'recovery', label: 'Recovery', done: recoveryDone },
   ];
 return (
-  <div className="tab-stack execution-home-stack">
-    <section className="task-card today-hero">
-      <div className="task-card-header">
-        <div>
-          <p className="eyebrow">{formatFullDate(now)}</p>
-          <h2>Today</h2>
-        </div>
-        <span
-          className={`status-pill ${
-            workoutStatus === 'Reduced volume'
-              ? 'status-planned'
-              : workoutStatus === 'Recovery day' || workoutStatus === 'Recovery replacement'
-                ? 'pill-warning'
-                : 'status-active'
-          }`}
-        >
-          {workoutStatus}
+  <div className="tab-stack today-dashboard">
+    <section className="today-topbar">
+      <div>
+        <h1 className="today-page-title">{now.toLocaleDateString('en-US', { weekday: 'long' })}</h1>
+        <p className="today-page-subtitle">
+          {planState.phase?.name || 'Base'} · week {planState.week} · {planState.label || 'week'}
+        </p>
+      </div>
+      <div className="today-race-pill">
+        {daysToRace === null ? 'Race not set' : `${daysToRace}d to race`}
+      </div>
+    </section>
+
+    <section className="task-card today-action-card">
+      <p className="eyebrow">Do this now</p>
+      <button type="button" className="today-primary-action" onClick={workoutLaunch}>
+        <span>{activeWorkout ? 'Continue today’s workout' : `Start today’s ${workoutName.toLowerCase()}`}</span>
+        <span aria-hidden="true">›</span>
+      </button>
+    </section>
+
+    <section className="task-card today-main-workout-card">
+      <div className="today-chip-row">
+        <span className="today-chip today-chip-soft">
+          {planState.phase?.name || 'Base'} · wk {planState.week}
+        </span>
+        <span className="today-chip today-chip-warm">
+          {planState.label || 'Week plan'}
+        </span>
+        <span className="today-chip">
+          {todaysWorkout?.typeLabel || 'Workout'}
         </span>
       </div>
 
-      <div className="execution-hero-copy">
-        <div>
-          <div className="execution-title-row">
-            <strong className="execution-title">{workoutName}</strong>
-            <span className="status-pill">{workoutDuration}</span>
-          </div>
-          <p className="execution-subtitle">{workoutDetail}</p>
-        </div>
-      </div>
+      <h2 className="today-main-title">{workoutName}</h2>
+      <p className="today-main-subtitle">{workoutDetail}</p>
+      <p className="today-main-duration">{workoutDuration}</p>
 
-      <div className="execution-summary-grid" style={{ marginTop: '12px' }}>
-        <div className="summary-tile">
-          <span>Race countdown</span>
-          <strong>{daysToRace === null ? 'Not set' : `${daysToRace}d`}</strong>
-        </div>
-        <div className="summary-tile">
-          <span>Readiness</span>
-          <strong>{readiness.level}</strong>
-        </div>
-        <div className="summary-tile">
-          <span>Week</span>
-          <strong>{planState.week}</strong>
-        </div>
-        <div className="summary-tile">
-          <span>Meals</span>
-          <strong>{mealCount}</strong>
-        </div>
-      </div>
-
-      <div className="inline-actions" style={{ marginTop: '12px' }}>
-        <button type="button" className="primary-button" onClick={workoutLaunch}>
-          {activeWorkout ? 'Continue workout' : 'Start workout'}
+      <div className="today-main-actions">
+        <button type="button" className="today-log-button" onClick={workoutLaunch}>
+          {activeWorkout ? 'Continue workout' : 'Log this workout'}
         </button>
-        <button type="button" className="secondary-button" onClick={onSwitchToFitness}>
-          View plan
+        <button
+          type="button"
+          className="today-secondary-inline"
+          onClick={() => onOpenMoreSection?.('tasks')}
+        >
+          Add to Calendar
         </button>
       </div>
     </section>
 
-    {(todaysWorkout?.winTheDayTargets?.length > 0 || winTheDayChecklist.length > 0) && (
-      <section className="task-card">
-        <SectionHeader eyebrow="Focus" title="Win the day" />
-        <div className="subtle-feed">
-          {winTheDayChecklist.map(item => (
-            <ListRow
-              key={item.id}
-              variant="card"
-              label={`${item.done ? '✓' : '○'} ${item.label}`}
-            />
-          ))}
-          {(todaysWorkout?.winTheDayTargets || []).map(target => (
-            <ListRow
-              key={target}
-              variant="card"
-              label={target}
-              sub={todaysWorkout.label}
-            />
-          ))}
-        </div>
-      </section>
-    )}
+    <section className="today-win-block">
+      <p className="eyebrow">Win the day</p>
 
-    <section className="task-card">
-      <SectionHeader eyebrow="This week" title="Plan at a glance" />
-      <div className="tag-row">
-        {weeklyStrip.map(day => (
-          <span
-            key={day.id}
-            className={`status-chip ${day.status === 'completed' ? 'is-active' : ''}`}
-            title={`${day.label} · ${day.status}`}
-          >
-            {day.day}{' '}
-            {day.status === 'today'
-              ? '•'
-              : day.status === 'completed'
-                ? '✓'
-                : day.status === 'moved'
-                  ? '→'
-                  : day.status === 'missed'
-                    ? '!'
-                    : ''}
-          </span>
-        ))}
+      <div className="today-win-grid">
+        <div className="today-win-card">
+          <div className="today-win-icon">{todayWorkoutDone ? '✓' : '○'}</div>
+          <div>
+            <strong>Workout</strong>
+            <p>{todayWorkoutDone ? 'completed' : 'pending'}</p>
+          </div>
+        </div>
+
+        <div className="today-win-card">
+          <div className="today-win-icon">{proteinGoalMet ? '✓' : '○'}</div>
+          <div>
+            <strong>Protein</strong>
+            <p>
+              {todaysMeals.reduce((total, meal) => total + (Number.isFinite(meal.protein) ? meal.protein : 0), 0)}g
+              {' / '}
+              {mealPrefs.proteinGoal || 150}g
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="today-win-wide">
+        <div className="today-win-icon">{hydrationGoalMet ? '✓' : '○'}</div>
+        <div className="today-win-wide-copy">
+          <div className="today-win-wide-top">
+            <strong>Hydration</strong>
+            <span>{hydrationCount} / {mealPrefs.hydrationGoal}</span>
+          </div>
+          <div className="today-progress-track">
+            <span
+              style={{
+                width: `${Math.min(100, Math.round((hydrationCount / Math.max(mealPrefs.hydrationGoal || 1, 1)) * 100))}%`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="today-win-wide">
+        <div className="today-win-icon">{recoveryDone ? '✓' : '○'}</div>
+        <div className="today-win-wide-copy">
+          <div className="today-win-wide-top">
+            <div>
+              <strong>Recovery</strong>
+              <p>{recoveryDone ? 'logged today' : 'not yet logged today'}</p>
+            </div>
+            <button
+              type="button"
+              className="today-inline-pill-button"
+              onClick={() => onOpenMoreSection?.('recovery')}
+            >
+              start →
+            </button>
+          </div>
+        </div>
       </div>
     </section>
 
-    {todaysWorkout?.ex?.length > 0 && (
-      <section className="task-card">
-        <SectionHeader eyebrow="Workout" title="Today’s details" />
-        <div className="subtle-feed">
-          {todaysWorkout.ex.map((item, index) => (
-            <ListRow
-              key={`${item.n}-${index}`}
-              variant="card"
-              label={item.n}
-              sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
-            />
+    <section className="today-countdown-row">
+      <div className="today-countdown-pill">
+        <strong>{daysToRace === null ? '—' : daysToRace}</strong>
+        <span>{fitnessSettings.raceName ? ` days to ${fitnessSettings.raceName}` : ' days to race'}</span>
+      </div>
+    </section>
+
+    <section className="today-week-section">
+      <div className="today-week-metrics">
+        <div className="today-metric-card today-metric-soft">
+          <strong>
+            {workouts
+              .filter(workout => workout.status === 'completed' && getWorkoutProgramType(workout) === normalizeProgramType(fitnessSettings.programType))
+              .reduce((total, workout) => total + (Number.isFinite(workout.distanceMiles) ? workout.distanceMiles : 0), 0)}
+          </strong>
+          <span>Miles</span>
+        </div>
+
+        <div className="today-metric-card today-metric-blue">
+          <strong>{workouts.filter(workout => workout.status === 'completed' && getWorkoutProgramType(workout) === normalizeProgramType(fitnessSettings.programType)).length}</strong>
+          <span>Sessions</span>
+        </div>
+
+        <div className="today-metric-card today-metric-neutral">
+          <strong>
+            {workouts
+              .filter(workout => workout.status === 'completed' && getWorkoutProgramType(workout) === normalizeProgramType(fitnessSettings.programType))
+              .reduce((total, workout) => total + (Number.isFinite(workout.duration) ? workout.duration : 0), 0)} min
+          </strong>
+          <span>Time</span>
+        </div>
+      </div>
+
+      <div className="today-week-strip-wrap">
+        <div className="today-week-strip-label">this week</div>
+        <div className="today-week-strip-circles">
+          {weeklyStrip.map(day => (
+            <div key={day.id} className="today-week-day">
+              <span className="today-week-letter">{day.day?.slice(0, 1) || '-'}</span>
+              <div className={`today-week-circle ${day.status === 'today' ? 'is-today' : ''} ${day.status === 'completed' ? 'is-complete' : ''}`}>
+                {day.status === 'completed'
+                  ? '✓'
+                  : day.status === 'today'
+                    ? 'R'
+                    : day.status === 'missed'
+                      ? '!'
+                      : '–'}
+              </div>
+            </div>
           ))}
         </div>
-      </section>
-    )}
+      </div>
+    </section>
 
-    <div className="execution-stack">
-      <section className="task-card execution-summary-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Workout suggestions</p>
-            <h2>Recovery-aware options</h2>
-          </div>
-        </div>
-        {todaySuggestions.length > 0 ? (
-          <div className="subtle-feed">
-            {todaySuggestions.map(item => (
-              <ListRow key={item.id} variant="card" label={item.title} sub={item.detail} />
-            ))}
-          </div>
-        ) : (
-          <p className="empty-message">No suggestions. Start with the planned workout.</p>
-        )}
-      </section>
-
-      <section className="task-card execution-summary-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Nutrition</p>
-            <h2>Today’s fuel</h2>
-          </div>
-          <button
-            type="button"
-            className="ghost-button compact-ghost"
-            onClick={() => onOpenMoreSection?.('meals')}
-          >
-            Open Nutrition
-          </button>
-        </div>
-        <div className="execution-summary-grid">
-          <div className="summary-tile">
-            <span>Meals logged</span>
-            <strong>{mealCount}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Hydration</span>
-            <strong>{hydrationCount}/{mealPrefs.hydrationGoal}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Latest</span>
-            <strong>{todaysMeals[0]?.name || 'Nothing yet'}</strong>
-          </div>
-        </div>
-      </section>
-
-      <section className="task-card execution-summary-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Recovery</p>
-            <h2>Readiness check</h2>
-          </div>
-          <button
-            type="button"
-            className="ghost-button compact-ghost"
-            onClick={() => onOpenMoreSection?.('recovery')}
-          >
-            Open Recovery
-          </button>
-        </div>
-        <div className="execution-summary-grid">
-          <div className="summary-tile">
-            <span>Readiness</span>
-            <strong>{readiness.level}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Sleep</span>
-            <strong>{Number.isFinite(energyState.sleepHours) ? `${energyState.sleepHours}h` : '—'}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Energy</span>
-            <strong>{Number.isFinite(energyState.value) ? `${energyState.value}/10` : '—'}</strong>
-          </div>
-        </div>
-        <p className="empty-message">
-          {readiness.level === 'Low'
-            ? 'Recovery is the right call today.'
-            : readiness.level === 'Moderate'
-              ? 'Reduced volume keeps the day productive.'
-              : 'You are good to push the plan.'}
-        </p>
-      </section>
-
-      <section className="task-card execution-summary-card">
-        <div className="task-card-header">
-          <div>
-            <p className="eyebrow">Lifestyle</p>
-            <h2>Habits today</h2>
-          </div>
-          <button
-            type="button"
-            className="ghost-button compact-ghost"
-            onClick={() => onOpenMoreSection?.('lifestyle')}
-          >
-            Open Lifestyle
-          </button>
-        </div>
-        <div className="execution-summary-grid">
-          <div className="summary-tile">
-            <span>Habits total</span>
-            <strong>{habitList.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Completed today</span>
-            <strong>{completedHabits.length}</strong>
-          </div>
-          <div className="summary-tile">
-            <span>Top habit</span>
-            <strong>{habitPreview[0]?.title || 'None yet'}</strong>
-          </div>
-        </div>
-        {habitPreview.length > 0 ? (
-          <div className="subtle-feed">
-            {habitPreview.map(habit => (
-              <ListRow
-                key={habit.id}
-                variant="card"
-                label={habit.title || 'Habit'}
-                sub={habit.frequency || 'daily'}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="empty-message">
-            Use Lifestyle for routines, repetition, and low-friction structure.
-          </p>
-        )}
-      </section>
-    </div>
-
-    <div className="execution-secondary-actions">
-      <button type="button" className="secondary-button" onClick={onOpenInbox}>
-        Open Inbox
-      </button>
-      <button
-        type="button"
-        className="secondary-button"
-        onClick={() => onOpenMoreSection?.('tasks')}
-      >
-        Open More
-      </button>
-    </div>
+    <section className="task-card today-minimum-card">
+      <div>
+        <strong>Minimum movement</strong>
+        <p>Not full capacity today? This still counts.</p>
+      </div>
+      <span aria-hidden="true">›</span>
+    </section>
   </div>
 );
 }
