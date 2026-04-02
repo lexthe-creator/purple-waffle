@@ -5636,3 +5636,80 @@ p {
     align-items: stretch;
   }
 }
+
+.shell-stack {
+  gap: 14px;
+}
+
+.shell-hero {
+  gap: 12px;
+}
+
+.shell-hero h2 {
+  margin: 0;
+  font-size: 1.16rem;
+  line-height: 1.2;
+}
+
+.shell-hero-copy,
+.shell-status-copy,
+.shell-tab-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.shell-tab-panels {
+  display: grid;
+  gap: 12px;
+}
+
+.shell-tab-panel[hidden] {
+  display: none;
+}
+
+.shell-tab-card {
+  gap: 12px;
+}
+
+.shell-tab-card .ui-section-header__title {
+  font-size: 1rem;
+}
+
+.shell-tab-points {
+  display: grid;
+  gap: 8px;
+}
+
+.shell-tab-point {
+  border: 1px solid var(--primary-alpha-sm);
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.shell-status-card {
+  gap: 8px;
+}
+
+.shell-surface-card {
+  gap: 12px;
+}
+
+.shell-surface-page {
+  gap: 12px;
+}
+
+.shell-surface-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.shell-surface-list {
+  display: grid;
+  gap: 10px;
+}

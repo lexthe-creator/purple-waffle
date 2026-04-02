@@ -125,6 +125,7 @@ function createInboxItem(overrides = {}) {
   return {
     id: generateId('inbox'),
     text: '',
+    note: '',
     createdAt: Date.now(),
     module: null, // null | 'task' | 'fitness' | 'calendar' | 'note'
     scheduledDate: null,
@@ -238,6 +239,7 @@ function normalizeInboxItem(item, index) {
   return {
     id: item?.id || generateId('inbox'),
     text: typeof item?.text === 'string' ? item.text : '',
+    note: typeof item?.note === 'string' ? item.note : '',
     createdAt: Number.isFinite(item?.createdAt) ? item.createdAt : Date.now() + index,
     module: ['task', 'fitness', 'calendar', 'note'].includes(item?.module) ? item.module : null,
     scheduledDate: typeof item?.scheduledDate === 'string' ? item.scheduledDate : null,

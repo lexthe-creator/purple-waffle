@@ -8,14 +8,6 @@ function InboxIcon() {
   );
 }
 
-function BrainIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="toolbar-icon">
-      <path d="M9 3.5a3.5 3.5 0 0 0-3.43 4.21A3.99 3.99 0 0 0 6 15.5h.25A3.75 3.75 0 0 0 10 19.25h1V14H9.75a1 1 0 1 1 0-2H11V9.75H9.75a1 1 0 1 1 0-2H11V3.5H9Zm4 0V8h1.25a1 1 0 1 1 0 2H13V12h1.25a1 1 0 1 1 0 2H13v5.25h1a3.75 3.75 0 0 0 3.75-3.75H18a4 4 0 0 0 .43-7.79A3.5 3.5 0 0 0 15 3.5h-2Z" />
-    </svg>
-  );
-}
-
 function SettingsIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="toolbar-icon">
@@ -24,7 +16,7 @@ function SettingsIcon() {
   );
 }
 
-export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickAdd, onOpenSettings }) {
+export default function Header({ userName, inboxCount, onOpenInbox, onOpenSettings }) {
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -58,9 +50,6 @@ export default function Header({ userName, inboxCount, onOpenInbox, onOpenQuickA
         <button type="button" className="icon-button" onClick={onOpenInbox} aria-label={`Open inbox${inboxCount ? ` with ${inboxCount} notifications` : ''}`}>
           <InboxIcon />
           {inboxCount > 0 && <span className="icon-badge">{Math.min(inboxCount, 9)}</span>}
-        </button>
-        <button type="button" className="icon-button filled-icon-button" onClick={onOpenQuickAdd} aria-label="Open quick add">
-          <BrainIcon />
         </button>
         <button type="button" className="icon-button" onClick={onOpenSettings} aria-label="Open settings">
           <SettingsIcon />
