@@ -295,6 +295,215 @@ function SettingsSurface({ onClose, fitnessSettings, notificationPrefs, recovery
   );
 }
 
+function getCalendarItemTypeLabel(type) {
+  switch (type) {
+    case 'busy':
+      return 'Busy block';
+    case 'task':
+      return 'Task';
+    case 'event':
+    default:
+      return 'Event';
+  }
+}
+
+function HomeDashboard({ now }) {
+  const { tasks, workouts, meals, calendarItems } = useTaskContext();
+  const { fitnessSettings, energyState, mealPrefs } = useAppContext();
+  const { profile } = useProfileContext();
+
+  const todayKey = toDateKey(now);
+  const athleteDefaults = profile?.athlete || {};
+  const workoutHistory = useMemo(
+    () => workouts.map(workout => ({
+      ...workout,
+      plannedDate: workout.plannedDate || workout.scheduledDate || null,
+    })),
+    [workouts],
+  );
+  const planState = useMemo(
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
+      today: now,
+      history: workoutHistory,
+      athleteDefaults,
+    }),
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, now, workoutHistory],
+  );
+  const todayWorkoutCard = useMemo(
+    () => getTodayWorkoutCardState({
+      weeklySchedule: planState.sessions,
+      todayKey,
+      programType: fitnessSettings.programType,
+    }),
+    [fitnessSettings.programType, planState.sessions, todayKey],
+  );
+
+  const readiness = useMemo(
+    () => computeRecoveryState(
+      { energyScore: energyState.value, sleepHours: energyState.sleepHours },
+      energyState.value,
+      energyState.sleepHours,
+    ),
+    [energyState.sleepHours, energyState.value],
+  );
+
+  const todaysMeals = useMemo(
+    () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
+    [meals, todayKey],
+  );
+  const todayCalendarItems = useMemo(
+    () => calendarItems
+      .filter(item => item.date === todayKey)
+      .slice()
+      .sort((left, right) => (left.startTime || '').localeCompare(right.startTime || '')),
+    [calendarItems, todayKey],
+  );
+  const openTasks = useMemo(
+    () => tasks
+      .filter(task => task.status !== 'done')
+      .slice()
+      .sort((left, right) => {
+        const leftPriority = left.priority ? 0 : 1;
+        const rightPriority = right.priority ? 0 : 1;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
+        return (left.createdAt || 0) - (right.createdAt || 0);
+      })
+      .slice(0, 3),
+    [tasks],
+  );
+
+  const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
+  const taskCompletionValue = tasks.length > 0 ? `${taskCompletedCount}/${tasks.length}` : '0/0';
+  const calendarStatus = todayWorkoutCard.kind === 'workout' || todayCalendarItems.length > 0
+    ? 'On track'
+    : 'Open';
+  const fitnessStatus = workouts.some(workout => workout.scheduledDate === todayKey && workout.status === 'completed')
+    ? 'Logged'
+    : workouts.some(workout => workout.scheduledDate === todayKey && workout.status === 'active')
+      ? 'In progress'
+      : 'Pending';
+  const nutritionStatus = todaysMeals.length > 0
+    ? 'Logged'
+    : 'Pending';
+
+  const focusTask = openTasks[0] ?? null;
+  const focusLine = focusTask
+    ? `Focus on ${focusTask.title}${todayWorkoutCard.kind === 'workout' ? ' before your workout' : ' before your next schedule block'}.`
+    : 'No open tasks yet. Capture one priority when you are ready.';
+  const focusSubline = focusTask?.notes || `${planState.phase?.name || 'Base'} · week ${planState.week}`;
+  const taskCompletionTrend = tasks.length > 0
+    ? `${taskCompletedCount} done, ${tasks.filter(task => task.status === 'active').length} active`
+    : 'No tasks yet';
+  const calendarTrend = `${todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0)} item${todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0) === 1 ? '' : 's'} scheduled`;
+  const fitnessTrend = todayWorkoutCard.kind === 'workout'
+    ? todayWorkoutCard.title
+    : `Goal: ${getProgramDisplayName(fitnessSettings.programType)}`;
+  const nutritionTrend = todaysMeals.length > 0
+    ? `${todaysMeals.length} log${todaysMeals.length === 1 ? '' : 's'} today`
+    : `Target ${mealPrefs.hydrationGoal || 8} cups hydration`;
+
+  return (
+    <div className="tab-stack home-dashboard">
+      <Card className="home-card home-focus-card">
+        <SectionHeader
+          eyebrow="Home"
+          title="Top tasks and focus"
+          action={<span className={`status-pill ${readiness.level === 'High' ? 'status-active' : readiness.level === 'Moderate' ? 'status-planned' : 'status-missed'}`}>{readiness.level}</span>}
+        />
+        <p className="home-card-copy">{focusLine}</p>
+        <div className="home-meta-row">
+          <span className="status-pill status-planned">{planState.phase?.name || 'Base'} · wk {planState.week}</span>
+          <span className="status-pill">{readiness.sleep}h sleep</span>
+          <span className="status-pill">{focusSubline}</span>
+        </div>
+
+        {openTasks.length === 0 ? (
+          <EmptyState
+            title="No open tasks yet"
+            description="Quick Capture or Inbox will be the right place to add the next priority."
+          />
+        ) : (
+          <div className="home-list">
+            {openTasks.map(task => (
+              <ListRow
+                key={task.id}
+                variant="card"
+                label={task.title || 'Untitled task'}
+                sub={task.notes || `${task.status === 'active' ? 'Active' : 'Planned'} priority`}
+                trailing={(
+                  <span className={`status-pill ${task.priority ? 'status-priority' : task.status === 'active' ? 'status-active' : 'status-planned'}`}>
+                    {task.priority ? 'Priority' : task.status === 'active' ? 'Active' : 'Planned'}
+                  </span>
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="home-card home-schedule-card">
+        <SectionHeader
+          eyebrow="Today"
+          title="Today’s schedule"
+          action={<span className={`status-pill ${calendarStatus === 'On track' ? 'status-active' : 'status-planned'}`}>{calendarStatus}</span>}
+        />
+        <p className="home-card-copy">
+          {todayWorkoutCard.kind === 'workout'
+            ? todayWorkoutCard.helperLine
+            : 'Keep the day quiet and use the schedule card to anchor the next move.'}
+        </p>
+
+        <div className="home-list">
+          {todayWorkoutCard.kind === 'workout' && (
+            <ListRow
+              variant="card"
+              label={todayWorkoutCard.title}
+              sub={todayWorkoutCard.metaLine}
+              trailing={<span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>}
+            />
+          )}
+
+          {todayCalendarItems.map(item => (
+            <ListRow
+              key={item.id}
+              variant="card"
+              label={item.title || 'Untitled item'}
+              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
+              trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
+            />
+          ))}
+
+          {todayWorkoutCard.kind !== 'workout' && todayCalendarItems.length === 0 && (
+            <EmptyState
+              title="No schedule items yet"
+              description="Home will show today’s plan once Calendar or Fitness has something scheduled."
+            />
+          )}
+        </div>
+      </Card>
+
+      <Card className="home-card home-progress-card">
+        <SectionHeader eyebrow="Today" title="Progress snapshot" />
+        <div className="ui-metrics-row home-progress-grid">
+          <MetricBlock value={taskCompletionValue} label="Tasks" trend={taskCompletionTrend} />
+          <MetricBlock value={calendarStatus} label="Calendar" trend={calendarTrend} />
+          <MetricBlock value={fitnessStatus} label="Fitness" trend={fitnessTrend} />
+          <MetricBlock value={nutritionStatus} label="Nutrition" trend={nutritionTrend} />
+        </div>
+        <p className="home-progress-copy">
+          {tasks.length > 0
+            ? `${taskCompletedCount} task${taskCompletedCount === 1 ? '' : 's'} complete, ${todayCalendarItems.length} calendar item${todayCalendarItems.length === 1 ? '' : 's'}, ${todayWorkoutCard.kind === 'workout' ? 'fitness scheduled' : 'fitness open'} and ${todaysMeals.length} meal log${todaysMeals.length === 1 ? '' : 's'}.`
+            : 'Progress stays intentionally lightweight in Phase 2 so the dashboard remains quick to read on mobile.'}
+        </p>
+      </Card>
+    </div>
+  );
+}
+
 function formatDateLabel(value) {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
@@ -3507,6 +3716,12 @@ function AppShell() {
   const { profile } = useProfileContext();
   const [activeTab, setActiveTab] = useState('home');
   const [activeSurface, setActiveSurface] = useState(null);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const unreadNotifications = useMemo(
     () => notifications.filter(notification => !notification.read),
@@ -3565,6 +3780,8 @@ function AppShell() {
       mealPrefs={mealPrefs}
       profile={profile}
     />
+  ) : activeTab === 'home' ? (
+    <HomeDashboard now={now} />
   ) : (
     <div className="tab-stack shell-stack">
       <section className="shell-hero task-card">

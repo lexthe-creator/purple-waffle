@@ -5713,3 +5713,43 @@ p {
   display: grid;
   gap: 10px;
 }
+
+.home-dashboard {
+  gap: 14px;
+}
+
+.home-card {
+  gap: 12px;
+}
+
+.home-card-copy,
+.home-progress-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.home-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-list {
+  display: grid;
+  gap: 10px;
+}
+
+.home-progress-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 901px) {
+  .home-dashboard {
+    gap: 16px;
+  }
+
+  .home-card {
+    padding: 16px 18px;
+  }
+}
