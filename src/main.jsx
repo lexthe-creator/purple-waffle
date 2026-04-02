@@ -113,11 +113,11 @@ const SHELL_TAB_COPY = {
   home: {
     eyebrow: 'Home',
     title: 'Top tasks and focus',
-    description: 'Phase 1 shell placeholder. Home content will be rebuilt in the next phase.',
+    description: 'Home is now anchored by tasks first, schedule second, and a compact status check-in.',
     bullets: [
-      'Priority tasks land here first.',
-      'Today’s focus summary will live here.',
-      'Progress snapshot arrives in Phase 2.',
+      'Top tasks and a main focus item lead the screen.',
+      'Today’s schedule previews calendar and fitness commitments.',
+      'Today status stays compact so action remains primary.',
     ],
   },
   calendar: {
@@ -309,7 +309,7 @@ function getCalendarItemTypeLabel(type) {
 
 function HomeDashboard({ now }) {
   const { tasks, workouts, meals, calendarItems } = useTaskContext();
-  const { fitnessSettings, energyState, mealPrefs } = useAppContext();
+  const { fitnessSettings, energyState } = useAppContext();
   const { profile } = useProfileContext();
 
   const todayKey = toDateKey(now);
@@ -354,6 +354,10 @@ function HomeDashboard({ now }) {
     () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
     [meals, todayKey],
   );
+  const loggedMeals = useMemo(
+    () => todaysMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('planned')),
+    [todaysMeals],
+  );
   const todayCalendarItems = useMemo(
     () => calendarItems
       .filter(item => item.date === todayKey)
@@ -375,49 +379,121 @@ function HomeDashboard({ now }) {
       .slice(0, 3),
     [tasks],
   );
+  const mealSlotProgress = useMemo(
+    () => NUTRITION_SLOTS.map(slot => {
+      const complete = loggedMeals.some(meal => {
+        const tags = Array.isArray(meal.tags) ? meal.tags : [];
+        if (tags.includes(`slot:${slot.id}`)) return true;
+        const haystack = `${meal.name || ''} ${tags.join(' ')}`.toLowerCase();
+        return slot.keywords.some(keyword => haystack.includes(keyword));
+      });
+      return { ...slot, complete };
+    }),
+    [loggedMeals],
+  );
 
   const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
-  const taskCompletionValue = tasks.length > 0 ? `${taskCompletedCount}/${tasks.length}` : '0/0';
-  const calendarStatus = todayWorkoutCard.kind === 'workout' || todayCalendarItems.length > 0
-    ? 'On track'
-    : 'Open';
-  const fitnessStatus = workouts.some(workout => workout.scheduledDate === todayKey && workout.status === 'completed')
-    ? 'Logged'
-    : workouts.some(workout => workout.scheduledDate === todayKey && workout.status === 'active')
-      ? 'In progress'
+  const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
+  const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
+  const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
+  const hasCompletedWorkout = workouts.some(workout => {
+    const scheduledKey = workout.scheduledDate || workout.plannedDate;
+    return scheduledKey === todayKey && workout.status === 'completed';
+  });
+  const fitnessState = hasCompletedWorkout
+    ? 'complete'
+    : todayWorkoutCard.kind === 'workout'
+      ? 'pending'
+      : 'rest';
+  const fitnessStatus = fitnessState === 'complete'
+    ? 'Complete'
+    : fitnessState === 'rest'
+      ? 'Rest'
       : 'Pending';
-  const nutritionStatus = todaysMeals.length > 0
-    ? 'Logged'
-    : 'Pending';
+  const completedMealSlots = mealSlotProgress.filter(slot => slot.complete).length;
 
   const focusTask = openTasks[0] ?? null;
+  const focusTitle = focusTask?.title
+    || (todayWorkoutCard.kind === 'workout' ? todayWorkoutCard.title : 'Choose one clear next step');
   const focusLine = focusTask
-    ? `Focus on ${focusTask.title}${todayWorkoutCard.kind === 'workout' ? ' before your workout' : ' before your next schedule block'}.`
-    : 'No open tasks yet. Capture one priority when you are ready.';
-  const focusSubline = focusTask?.notes || `${planState.phase?.name || 'Base'} · week ${planState.week}`;
-  const taskCompletionTrend = tasks.length > 0
-    ? `${taskCompletedCount} done, ${tasks.filter(task => task.status === 'active').length} active`
-    : 'No tasks yet';
-  const calendarTrend = `${todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0)} item${todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0) === 1 ? '' : 's'} scheduled`;
-  const fitnessTrend = todayWorkoutCard.kind === 'workout'
-    ? todayWorkoutCard.title
-    : `Goal: ${getProgramDisplayName(fitnessSettings.programType)}`;
-  const nutritionTrend = todaysMeals.length > 0
-    ? `${todaysMeals.length} log${todaysMeals.length === 1 ? '' : 's'} today`
-    : `Target ${mealPrefs.hydrationGoal || 8} cups hydration`;
+    ? `Start with ${focusTask.title}${todayWorkoutCard.kind === 'workout' ? ' before training if possible.' : ' before your next schedule block.'}`
+    : todayWorkoutCard.kind === 'workout'
+      ? `Training is the main anchor today. ${todayWorkoutCard.helperLine}`
+      : 'Keep it simple today. Capture one priority when it shows up.';
+  const focusSubline = focusTask?.notes
+    || (todayWorkoutCard.kind === 'workout'
+      ? todayWorkoutCard.metaLine
+      : `${planState.phase?.name || 'Base'} block · week ${planState.week}`);
+  const scheduleIntro = scheduledItemCount > 0
+    ? `${scheduledItemCount} item${scheduledItemCount === 1 ? '' : 's'} are shaping the day.`
+    : 'The day is still open, so this is where upcoming calendar and training items will land.';
+  const taskStatusTone = taskCompletedCount > 0 ? 'status-active' : 'status-planned';
+  const calendarTone = scheduledItemCount > 0 ? 'status-active' : 'status-planned';
+  const readinessState = readiness.level === 'High'
+    ? 'high'
+    : readiness.level === 'Moderate'
+      ? 'moderate'
+      : 'low';
 
   return (
     <div className="tab-stack home-dashboard">
-      <Card className="home-card home-focus-card">
+      <section className="home-status-strip" aria-label="Today status">
+        <div className="home-status-header">
+          <p className="home-status-label">Today status</p>
+          <div className="home-readiness-indicator" aria-label={`Readiness ${readiness.level}`}>
+            <span className={`home-readiness-dot home-readiness-dot--${readinessState}`} aria-hidden="true" />
+            <span className="home-readiness-text">{readiness.level}</span>
+          </div>
+        </div>
+        <div className="home-status-row">
+          <div className="home-status-item">
+            <span className="home-status-item-label">Tasks</span>
+            <strong className="home-status-item-value">{taskCompletionValue}</strong>
+          </div>
+
+          <div className="home-status-item">
+            <span className="home-status-item-label">Calendar</span>
+            <strong className="home-status-item-value">{calendarStatus}</strong>
+          </div>
+
+          <div className="home-status-item">
+            <span className="home-status-item-label">Fitness</span>
+            <strong className="home-status-item-value home-status-inline">
+              <span className={`home-fitness-dot home-fitness-dot--${fitnessState}`} aria-hidden="true" />
+              {fitnessStatus}
+            </strong>
+          </div>
+
+          <div className="home-status-item home-status-item--nutrition">
+            <span className="home-status-item-label">Nutrition</span>
+            <div className="home-nutrition-track" aria-label={`${completedMealSlots} of 4 meals logged`}>
+              {mealSlotProgress.map(slot => (
+                <span
+                  key={slot.id}
+                  className={`home-nutrition-segment ${slot.complete ? 'is-complete' : ''}`}
+                  title={slot.label}
+                >
+                  <span className="sr-only">{slot.label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Card variant="flat" className="home-card home-section home-focus-card">
         <SectionHeader
           eyebrow="Home"
           title="Top tasks and focus"
-          action={<span className={`status-pill ${readiness.level === 'High' ? 'status-active' : readiness.level === 'Moderate' ? 'status-planned' : 'status-missed'}`}>{readiness.level}</span>}
+          action={<span className={`status-pill ${taskStatusTone}`}>{taskCompletionValue}</span>}
         />
-        <p className="home-card-copy">{focusLine}</p>
+        <div className="home-focus-panel">
+          <p className="home-focus-label">Main focus</p>
+          <h3 className="home-focus-title">{focusTitle}</h3>
+          <p className="home-card-copy">{focusLine}</p>
+        </div>
         <div className="home-meta-row">
           <span className="status-pill status-planned">{planState.phase?.name || 'Base'} · wk {planState.week}</span>
-          <span className="status-pill">{readiness.sleep}h sleep</span>
           <span className="status-pill">{focusSubline}</span>
         </div>
 
@@ -445,17 +521,13 @@ function HomeDashboard({ now }) {
         )}
       </Card>
 
-      <Card className="home-card home-schedule-card">
+      <Card variant="flat" className="home-card home-section home-schedule-card">
         <SectionHeader
           eyebrow="Today"
           title="Today’s schedule"
-          action={<span className={`status-pill ${calendarStatus === 'On track' ? 'status-active' : 'status-planned'}`}>{calendarStatus}</span>}
+          action={<span className={`status-pill ${calendarTone}`}>{calendarStatus}</span>}
         />
-        <p className="home-card-copy">
-          {todayWorkoutCard.kind === 'workout'
-            ? todayWorkoutCard.helperLine
-            : 'Keep the day quiet and use the schedule card to anchor the next move.'}
-        </p>
+        <p className="home-card-copy">{scheduleIntro}</p>
 
         <div className="home-list">
           {todayWorkoutCard.kind === 'workout' && (
@@ -486,20 +558,6 @@ function HomeDashboard({ now }) {
         </div>
       </Card>
 
-      <Card className="home-card home-progress-card">
-        <SectionHeader eyebrow="Today" title="Progress snapshot" />
-        <div className="ui-metrics-row home-progress-grid">
-          <MetricBlock value={taskCompletionValue} label="Tasks" trend={taskCompletionTrend} />
-          <MetricBlock value={calendarStatus} label="Calendar" trend={calendarTrend} />
-          <MetricBlock value={fitnessStatus} label="Fitness" trend={fitnessTrend} />
-          <MetricBlock value={nutritionStatus} label="Nutrition" trend={nutritionTrend} />
-        </div>
-        <p className="home-progress-copy">
-          {tasks.length > 0
-            ? `${taskCompletedCount} task${taskCompletedCount === 1 ? '' : 's'} complete, ${todayCalendarItems.length} calendar item${todayCalendarItems.length === 1 ? '' : 's'}, ${todayWorkoutCard.kind === 'workout' ? 'fitness scheduled' : 'fitness open'} and ${todaysMeals.length} meal log${todaysMeals.length === 1 ? '' : 's'}.`
-            : 'Progress stays intentionally lightweight in Phase 2 so the dashboard remains quick to read on mobile.'}
-        </p>
-      </Card>
     </div>
   );
 }

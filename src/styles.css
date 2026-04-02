@@ -1,29 +1,29 @@
 @import './components/ui/primitives.css';
 
 :root {
-  --bg: #F6F3EF;
+  --bg: #FAF7F4;
   --card: #FFFFFF;
-  --surface: #EEF2F5;
-  --border: #E2E6EA;
-  --text: #1F2933;
-  --muted: #6B7280;
-  --primary: #2F3E5C;
-  --primary-soft: #E6EBF2;
+  --surface: #EFEAE6;
+  --border: #E8E2DC;
+  --text: #2F2A26;
+  --muted: #7A736E;
+  --primary: #A5B38C;
+  --primary-soft: rgba(165, 179, 140, 0.15);
   --success: #A5B38C;
-  --success-soft: #EEF2EC;
-  --warning: #E6A84A;
-  --warning-soft: #FDF3E3;
-  --danger: #C65A4B;
-  --shadow: 0 10px 24px rgba(31, 41, 51, 0.08);
-  --shadow-strong: 0 18px 36px rgba(31, 41, 51, 0.12);
+  --success-soft: rgba(165, 179, 140, 0.15);
+  --warning: #DC9B6C;
+  --warning-soft: rgba(220, 155, 108, 0.15);
+  --danger: #DC9B6C;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+  --shadow-strong: 0 10px 20px rgba(0, 0, 0, 0.15);
   --shadow-nav: 0 -10px 28px rgba(31, 41, 51, 0.08);
   --shadow-xs: 0 2px 8px rgba(31, 41, 51, 0.05);
   --shadow-drag: 0 14px 26px rgba(31, 39, 48, 0.14);
   --shadow-desktop: 0 18px 42px rgba(31, 39, 48, 0.12);
   --scrim: rgba(0, 0, 0, 0.45);
   --scrim-strong: rgba(0, 0, 0, 0.65);
-  --header-bg: rgba(246, 243, 239, 0.9);
-  --nav-bg: rgba(255, 255, 255, 0.96);
+  --header-bg: rgba(250, 247, 244, 0.94);
+  --nav-bg: rgba(250, 247, 244, 0.94);
   --white-soft: rgba(255, 255, 255, 0.18);
   --white-soft-border: rgba(255, 255, 255, 0.28);
   --white-soft-4:      rgba(255, 255, 255, 0.75);
@@ -33,30 +33,30 @@
   --white-glass: rgba(255, 255, 255, 0.36);
   --white-glass-2: rgba(255, 255, 255, 0.56);
   --white-glass-3: rgba(255, 255, 255, 0.9);
-  --focus-ring: rgba(47, 64, 90, 0.18);
-  --primary-alpha-xs: rgba(47, 64, 90, 0.07);
-  --primary-alpha-sm: rgba(47, 64, 90, 0.08);
-  --primary-alpha-md: rgba(47, 64, 90, 0.12);
-  --primary-alpha-lg: rgba(47, 64, 90, 0.14);
-  --primary-hover: #3d5070;
-  --danger-soft: #fce8e6;
-  --warning-text: #8a4f10;
-  --warning-dark: #8f5d24;
-  --warning-border: #f0d9a8;
-  --warning-hover: #faecd5;
-  --success-alt: #dff0d8;
-  --success-text: #3a6e30;
-  --surface-alt: #e9e8ec;
-  --border-muted: #bbb;
-  --border-soft: rgba(214, 221, 228, 0.65);
-  --border-mid: rgba(214, 221, 228, 0.75);
-  --border-nav: rgba(214, 221, 228, 0.88);
-  --border-card: rgba(214, 221, 228, 0.9);
-  --border-zone: rgba(214, 221, 228, 0.6);
-  --border-divider: rgba(214, 221, 228, 0.5);
+  --focus-ring: rgba(165, 179, 140, 0.24);
+  --primary-alpha-xs: rgba(165, 179, 140, 0.08);
+  --primary-alpha-sm: rgba(165, 179, 140, 0.12);
+  --primary-alpha-md: rgba(165, 179, 140, 0.18);
+  --primary-alpha-lg: rgba(165, 179, 140, 0.22);
+  --primary-hover: #91A07A;
+  --danger-soft: rgba(220, 155, 108, 0.15);
+  --warning-text: #9A5E3B;
+  --warning-dark: #9A5E3B;
+  --warning-border: rgba(230, 177, 122, 0.28);
+  --warning-hover: rgba(230, 177, 122, 0.18);
+  --success-alt: rgba(165, 179, 140, 0.22);
+  --success-text: #6E7E5A;
+  --surface-alt: #F1ECE8;
+  --border-muted: #D6D0CA;
+  --border-soft: rgba(232, 226, 220, 0.65);
+  --border-mid: rgba(232, 226, 220, 0.78);
+  --border-nav: rgba(232, 226, 220, 0.88);
+  --border-card: rgba(232, 226, 220, 0.72);
+  --border-zone: rgba(232, 226, 220, 0.6);
+  --border-divider: rgba(214, 208, 202, 0.8);
   --black-faint: rgba(0, 0, 0, 0.07);
-  --bg-gradient-start: #f7f4ef;
-  --bg-gradient-end: #efe9e0;
+  --bg-gradient-start: #FAF7F4;
+  --bg-gradient-end: #FAF7F4;
   --shell-width: 1180px;
   --content-max-width: 960px;
   --page-padding-x: 20px;
@@ -78,9 +78,7 @@ body {
 body {
   margin: 0;
   color: var(--text);
-  background:
-    radial-gradient(circle at top, var(--white-glass-3), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(180deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+  background: var(--bg);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -123,8 +121,8 @@ p {
   width: min(100%, var(--shell-width));
   height: 100dvh;
   margin: 0 auto;
-  background: var(--white-glass);
-  backdrop-filter: blur(10px);
+  background: var(--bg);
+  backdrop-filter: none;
   position: relative;
   overflow: hidden;
 }
@@ -160,10 +158,11 @@ p {
 
 .app-header h1 {
   margin: 0;
-  font-size: 1.04rem;
+  font-size: 1.08rem;
   line-height: 1.1;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.02em;
+  color: var(--text);
 }
 
 .app-header h1 span {
@@ -375,8 +374,8 @@ p {
 
 .eyebrow {
   margin: 0;
-  color: var(--muted);
-  font-size: 0.68rem;
+  color: #9C948E;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -750,34 +749,34 @@ p {
 }
 
 .status-pill {
-  padding: 3px 9px;
-  font-size: 0.625rem;
+  padding: 6px 12px;
+  font-size: 12px;
   font-weight: 500;
-  background: var(--card);
+  background: #F1ECE8;
   color: var(--muted);
-  border-color: var(--border);
+  border-color: transparent;
 }
 
 .status-active,
 .status-completed {
-  color: var(--success);
-  background: var(--success-soft);
+  color: #6E7E5A;
+  background: rgba(165, 179, 140, 0.15);
 }
 
 .status-priority {
-  color: var(--primary);
-  background: var(--card);
-  border-color: var(--primary);
+  color: #9A5E3B;
+  background: rgba(220, 155, 108, 0.15);
+  border-color: transparent;
 }
 
 .status-planned {
-  color: var(--primary);
-  background: var(--primary-soft);
+  color: #7A736E;
+  background: #F1ECE8;
 }
 
 .status-missed {
-  color: var(--warning-dark);
-  background: var(--warning-soft);
+  color: #9A5E3B;
+  background: rgba(220, 155, 108, 0.15);
 }
 
 .status-chip,
@@ -1308,11 +1307,11 @@ p {
   height: 56px;
   border: none;
   border-radius: 50%;
-  background: var(--primary);
+  background: #4F4946;
   color: var(--card);
   font-size: 2rem;
   line-height: 1;
-  box-shadow: var(--shadow-strong);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
   cursor: pointer;
 }
 
@@ -5719,14 +5718,33 @@ p {
 }
 
 .home-card {
-  gap: 12px;
+  gap: 10px;
 }
 
-.home-card-copy,
-.home-progress-copy {
+.home-card-copy {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.home-focus-panel {
+  display: grid;
+  gap: 4px;
+}
+
+.home-focus-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.home-focus-title {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.3;
 }
 
 .home-meta-row {
@@ -5740,8 +5758,126 @@ p {
   gap: 10px;
 }
 
-.home-progress-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.home-status-strip {
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #EFEAE6;
+  border-radius: 16px;
+}
+
+.home-status-label {
+  margin: 0;
+  color: #9C948E;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-status-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.home-status-row::-webkit-scrollbar {
+  display: none;
+}
+
+.home-status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  padding: 0 10px;
+}
+
+.home-status-item + .home-status-item {
+  border-left: 1px solid var(--border-divider);
+}
+
+.home-status-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-status-item-label {
+  color: #9C948E;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-status-item-value {
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--text);
+}
+
+.home-status-item--nutrition {
+  gap: 8px;
+}
+
+.home-fitness-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--muted);
+}
+
+.home-fitness-dot--pending {
+  background: var(--danger);
+}
+
+.home-fitness-dot--rest {
+  background: #D6D0CA;
+}
+
+.home-fitness-dot--complete {
+  background: var(--success);
+}
+
+.home-nutrition-track {
+  display: inline-grid;
+  grid-template-columns: repeat(4, 7px);
+  gap: 4px;
+  align-items: center;
+}
+
+.home-nutrition-segment {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #D6D0CA;
+  border: 1px solid transparent;
+}
+
+.home-nutrition-segment.is-complete {
+  background: #A5B38C;
+  border-color: #A5B38C;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (min-width: 901px) {
@@ -5752,4 +5888,237 @@ p {
   .home-card {
     padding: 16px 18px;
   }
+}
+
+/* Visual system override: preserve layout, update only surface styling */
+.app-header {
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border-mid);
+}
+
+.app-page {
+  padding-top: 12px;
+}
+
+.home-dashboard {
+  gap: 10px;
+}
+
+.header-date,
+.ui-section-header__eyebrow,
+.eyebrow {
+  color: #9C948E;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+
+.ui-section-header__title,
+.task-card h2,
+.modal-card h2,
+.home-focus-title,
+.app-header h1 {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ui-card,
+.task-card,
+.modal-card {
+  background: #FFFFFF;
+  border-color: rgba(232, 226, 220, 0.72);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+.ui-list-row--card,
+.summary-tile,
+.metric-card,
+.feed-card,
+.weekly-item,
+.notification-item,
+.workout-step,
+.empty-panel,
+.shell-tab-point,
+.execution-task-item,
+.week-strip-item,
+.calendar-month-control,
+.fitness-subnav {
+  border-color: rgba(232, 226, 220, 0.72);
+}
+
+.ui-list-row__sub,
+.home-card-copy,
+.shell-surface-copy,
+.empty-message,
+.fitness-workout-meta {
+  color: #7A736E;
+}
+
+.status-pill {
+  background: #F1ECE8;
+  border-color: transparent;
+  color: #7A736E;
+  padding: 6px 12px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.status-active,
+.status-completed {
+  background: rgba(165, 179, 140, 0.15);
+  color: #6E7E5A;
+}
+
+.status-planned {
+  background: #F1ECE8;
+  color: #7A736E;
+  opacity: 0.86;
+}
+
+.status-priority,
+.status-missed {
+  background: rgba(220, 155, 108, 0.15);
+  border-color: transparent;
+  color: #9A5E3B;
+  opacity: 1;
+}
+
+.fab-button {
+  background: #4F4946;
+  color: #FFFFFF;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+}
+
+.home-status-strip {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+}
+
+.home-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.home-status-row {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 8px;
+  column-gap: 16px;
+  padding-bottom: 0;
+  width: 100%;
+  align-items: start;
+}
+
+.home-status-item {
+  padding: 0;
+  min-width: 0;
+  align-items: flex-start;
+  justify-self: stretch;
+}
+
+.home-status-item + .home-status-item {
+  border-left: none;
+  padding-left: 0;
+}
+
+.home-status-item-label {
+  color: rgba(122, 115, 110, 0.72);
+}
+
+.home-status-item-value {
+  font-weight: 600;
+}
+
+.home-status-item--nutrition {
+  opacity: 0.76;
+}
+
+.home-readiness-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(122, 115, 110, 0.8);
+  font-size: 0.82rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.home-readiness-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.home-readiness-dot--low {
+  background: #DC9B6C;
+}
+
+.home-readiness-dot--moderate {
+  background: #D6D0CA;
+}
+
+.home-readiness-dot--high {
+  background: #A5B38C;
+}
+
+@media (max-width: 520px) {
+  .app-page {
+    padding-top: 10px;
+  }
+
+  .home-dashboard {
+    gap: 12px;
+  }
+
+  .home-status-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 16px;
+    row-gap: 8px;
+  }
+
+  .home-status-header {
+    align-items: flex-start;
+  }
+
+  .home-status-item {
+    display: grid;
+    gap: 4px;
+    align-content: start;
+  }
+
+  .home-status-item-label {
+    font-size: 10px;
+  }
+
+  .home-status-item-value {
+    font-size: 0.92rem;
+  }
+
+  .home-readiness-indicator {
+    font-size: 0.78rem;
+  }
+}
+
+.home-section.ui-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.home-section + .home-section {
+  position: relative;
+}
+
+.home-section + .home-section::before {
+  content: '';
+  display: block;
+  height: 1px;
+  background: rgba(232, 226, 220, 0.9);
+  margin-bottom: 2px;
 }
