@@ -2246,16 +2246,10 @@ function CalendarScreen() {
         id: item.id,
         type: item.type,
         title: item.title,
-        subtitle: `${item.startTime} - ${item.endTime}${item.priority ? ' · priority' : ''}`,
+        startTime: item.startTime,
+        subtitle: `${item.startTime} – ${item.endTime}${item.priority ? ' · priority' : ''}`,
         notes: item.notes,
       }));
-
-    const taskItems = tasks.slice(0, 6).map(task => ({
-      id: `task-${task.id}`,
-      type: 'task',
-      title: task.title,
-      subtitle: task.status,
-    }));
 
     const mealItems = meals
       .filter(meal => toDateKey(meal.loggedAt) === selectedDate)
@@ -2275,8 +2269,16 @@ function CalendarScreen() {
         subtitle: `${workout.status} · ${workout.duration || 30} min`,
       }));
 
-    return [...calendarDayItems, ...scheduleItems, ...mealItems, ...workoutItems, ...taskItems];
-  }, [calendarItems, meals, planState.sessions, selectedDate, tasks, workouts]);
+    const all = [...calendarDayItems, ...scheduleItems, ...mealItems, ...workoutItems];
+    return all.sort((a, b) => {
+      const aTime = a.startTime ?? null;
+      const bTime = b.startTime ?? null;
+      if (aTime && bTime) return aTime.localeCompare(bTime);
+      if (aTime) return -1;
+      if (bTime) return 1;
+      return 0;
+    });
+  }, [calendarItems, meals, planState.sessions, selectedDate, workouts]);
 
   const selectedCalendarItem = useMemo(
     () => calendarItems.find(item => item.id === editingItemId) ?? null,
@@ -2537,7 +2539,10 @@ function CalendarScreen() {
 
     <section className="calendar-day-content-card">
       {selectedDayItems.length === 0 ? (
-        <p className="calendar-empty-copy">No events, tasks, or busy blocks. Use the buttons above to add.</p>
+        <EmptyState
+          title="Nothing scheduled"
+          description="Use + Busy or + Event above to block time or add an item to this day."
+        />
       ) : (
         <div className="subtle-feed">
           {selectedDayItems.map(item => (
@@ -2546,19 +2551,15 @@ function CalendarScreen() {
               variant="card"
               label={item.title}
               sub={item.subtitle || item.type}
-              action={item.type === 'plan' ? undefined : (
+              action={['busy', 'event', 'task'].includes(item.type) ? (
                 <button
                   type="button"
                   className="ghost-button compact-ghost"
-                  onClick={() => {
-                    const match = calendarItems.find(calendarItem => calendarItem.id === item.id);
-                    if (!match) return;
-                    setEditingItemId(match.id);
-                  }}
+                  onClick={() => setEditingItemId(item.id)}
                 >
                   Edit
                 </button>
-              )}
+              ) : undefined}
             />
           ))}
         </div>
