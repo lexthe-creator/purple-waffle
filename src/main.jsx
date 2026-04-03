@@ -3864,6 +3864,8 @@ function AppShell() {
     />
   ) : activeTab === 'home' ? (
     <HomeDashboard now={now} />
+  ) : activeTab === 'calendar' ? (
+    <CalendarScreen />
   ) : (
     <div className="tab-stack shell-stack">
       <section className="shell-hero task-card">
