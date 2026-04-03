@@ -307,6 +307,8 @@ function getCalendarItemTypeLabel(type) {
   }
 }
 
+const TASK_STATUS_ORDER = { planned: 0, active: 1 };
+
 function HomeDashboard({ now }) {
   const { tasks, setTasks, workouts, meals, calendarItems } = useTaskContext();
   const { fitnessSettings, energyState } = useAppContext();
@@ -361,9 +363,23 @@ function HomeDashboard({ now }) {
   const todayCalendarItems = useMemo(
     () => calendarItems
       .filter(item => item.date === todayKey)
-      .slice()
-      .sort((left, right) => (left.startTime || '').localeCompare(right.startTime || '')),
-    [calendarItems, todayKey],
+      .map(item => {
+        const startAt = parseDateKeyTime(todayKey, item.startTime);
+        const endAt = parseDateKeyTime(todayKey, item.endTime);
+        const isCurrent = startAt instanceof Date && (
+          endAt instanceof Date
+            ? startAt <= now && now < endAt
+            : startAt <= now && now < new Date(startAt.getTime() + 30 * 60 * 1000)
+        );
+        const isUpcoming = startAt instanceof Date && startAt > now;
+        return { ...item, startAt, endAt, isCurrent, isUpcoming };
+      })
+      .sort((left, right) => {
+        if (left.isCurrent !== right.isCurrent) return left.isCurrent ? -1 : 1;
+        if (left.isUpcoming !== right.isUpcoming) return left.isUpcoming ? -1 : 1;
+        return (left.startAt || 0) - (right.startAt || 0);
+      }),
+    [calendarItems, todayKey, now],
   );
   const openTasks = useMemo(
     () => tasks
@@ -373,7 +389,9 @@ function HomeDashboard({ now }) {
         const leftPriority = left.priority ? 0 : 1;
         const rightPriority = right.priority ? 0 : 1;
         if (leftPriority !== rightPriority) return leftPriority - rightPriority;
-        if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
+        const leftOrder = TASK_STATUS_ORDER[left.status] ?? 2;
+        const rightOrder = TASK_STATUS_ORDER[right.status] ?? 2;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
         return (left.createdAt || 0) - (right.createdAt || 0);
       })
       .slice(0, 3),
@@ -397,29 +415,11 @@ function HomeDashboard({ now }) {
   const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
   const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
   const calendarMetricValue = useMemo(() => {
-    const timedItems = todayCalendarItems
-      .map(item => {
-        const startAt = parseDateKeyTime(item.date, item.startTime);
-        const endAt = parseDateKeyTime(item.date, item.endTime);
-        return { ...item, startAt, endAt };
-      })
-      .filter(item => item.startAt instanceof Date)
-      .sort((left, right) => left.startAt - right.startAt);
-
-    const currentItem = timedItems.find(item => {
-      if (!(item.startAt instanceof Date)) return false;
-      if (item.endAt instanceof Date) {
-        return item.startAt <= now && now < item.endAt;
-      }
-      const fallbackEnd = new Date(item.startAt.getTime() + 30 * 60 * 1000);
-      return item.startAt <= now && now < fallbackEnd;
-    });
-
+    const timedItems = todayCalendarItems.filter(item => item.startAt instanceof Date);
+    const currentItem = timedItems.find(item => item.isCurrent);
     if (currentItem) return 'Busy now';
-
-    const nextItem = timedItems.find(item => item.startAt instanceof Date && item.startAt > now);
-    if (!nextItem?.startAt) return 'Open';
-
+    const nextItem = timedItems.find(item => item.isUpcoming);
+    if (!nextItem) return 'Open';
     const minutesUntilNext = Math.round((nextItem.startAt.getTime() - now.getTime()) / (60 * 1000));
     const nextTimeLabel = formatStatusTime(nextItem.startAt);
     return minutesUntilNext <= 90 ? `Next ${nextTimeLabel}` : `Free until ${nextTimeLabel}`;
@@ -518,7 +518,7 @@ function HomeDashboard({ now }) {
                 key={task.id}
                 variant="card"
                 label={task.title || 'Untitled task'}
-                sub={task.notes || `${task.status === 'active' ? 'Active' : 'Planned'} priority`}
+                sub={task.notes || (task.status === 'active' ? 'Active' : 'Planned')}
                 onClick={() =>
                   setTasks(current =>
                     current.map(t =>
@@ -546,7 +546,17 @@ function HomeDashboard({ now }) {
         <p className="home-card-copy">{scheduleIntro}</p>
 
         <div className="home-list">
-          {todayWorkoutCard.kind === 'workout' && (
+          {todayCalendarItems.filter(item => item.isCurrent).map(item => (
+            <ListRow
+              key={item.id}
+              variant="card"
+              label={item.title || ‘Untitled item’}
+              sub={`${item.startTime || ‘—‘} – ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ‘’}`}
+              trailing={<span className="status-pill status-active">Now</span>}
+            />
+          ))}
+
+          {todayWorkoutCard.kind === ‘workout’ && (
             <ListRow
               variant="card"
               label={todayWorkoutCard.title}
@@ -555,17 +565,17 @@ function HomeDashboard({ now }) {
             />
           )}
 
-          {todayCalendarItems.map(item => (
+          {todayCalendarItems.filter(item => !item.isCurrent).map(item => (
             <ListRow
               key={item.id}
               variant="card"
-              label={item.title || 'Untitled item'}
-              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
+              label={item.title || ‘Untitled item’}
+              sub={`${item.startTime || ‘—‘} – ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ‘’}`}
               trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
             />
           ))}
 
-          {todayWorkoutCard.kind !== 'workout' && todayCalendarItems.length === 0 && (
+          {todayWorkoutCard.kind !== ‘workout’ && todayCalendarItems.length === 0 && (
             <EmptyState
               title="No schedule items yet"
               description="Home will show today’s plan once Calendar or Fitness has something scheduled."
