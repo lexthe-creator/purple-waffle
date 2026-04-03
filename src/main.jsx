@@ -308,7 +308,7 @@ function getCalendarItemTypeLabel(type) {
 }
 
 function HomeDashboard({ now }) {
-  const { tasks, workouts, meals, calendarItems } = useTaskContext();
+  const { tasks, setTasks, workouts, meals, calendarItems } = useTaskContext();
   const { fitnessSettings, energyState } = useAppContext();
   const { profile } = useProfileContext();
 
@@ -519,6 +519,13 @@ function HomeDashboard({ now }) {
                 variant="card"
                 label={task.title || 'Untitled task'}
                 sub={task.notes || `${task.status === 'active' ? 'Active' : 'Planned'} priority`}
+                onClick={() =>
+                  setTasks(current =>
+                    current.map(t =>
+                      t.id === task.id ? { ...t, status: t.status === 'done' ? 'active' : 'done' } : t
+                    )
+                  )
+                }
                 trailing={(
                   <span className={`status-pill ${task.priority ? 'status-priority' : task.status === 'active' ? 'status-active' : 'status-planned'}`}>
                     {task.priority ? 'Priority' : task.status === 'active' ? 'Active' : 'Planned'}
