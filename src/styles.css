@@ -1294,6 +1294,67 @@ p {
   gap: 14px;
 }
 
+.quick-add-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+
+.quick-add-tab {
+  flex: 1;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.quick-add-tab.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.quick-add-type-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.quick-add-type-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.quick-add-type-chip.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.quick-add-time-row {
+  display: flex;
+  gap: 12px;
+}
+
+.quick-add-time-row .field-stack {
+  flex: 1;
+}
+
+.quick-add-priority-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
 .full-width {
   width: 100%;
 }

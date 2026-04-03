@@ -551,7 +551,7 @@ function HomeDashboard({ now }) {
               key={item.id}
               variant="card"
               label={item.title ||'Untitled item'}
-              sub={`${item.startTime || ‘—‘} - ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ''}`}
+              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
               trailing={<span className="status-pill status-active">Now</span>}
             />
           ))}
@@ -570,7 +570,7 @@ function HomeDashboard({ now }) {
               key={item.id}
               variant="card"
               label={item.title || 'Untitled item'}
-              sub={`${item.startTime || ‘—‘} - ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ''}`}
+              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
               trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
             />
           ))}
@@ -3802,7 +3802,6 @@ function AppShell() {
     notifications,
     inboxItems,
     setInboxItems,
-    createInboxItem,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -3841,22 +3840,6 @@ function AppShell() {
     setQuickAddOpen(true);
   }
 
-  function handleQuickCaptureSubmit(payload) {
-    const title = payload?.title?.trim() || '';
-    const note = payload?.note?.trim() || '';
-    const text = title || note;
-    if (!text) return;
-
-    setInboxItems(current => [
-      createInboxItem({
-        text,
-        note,
-      }),
-      ...current,
-    ]);
-    setQuickAddOpen(false);
-    setActiveSurface('inbox');
-  }
 
   function handleTabChange(tab) {
     setActiveTab(tab);
@@ -3934,7 +3917,6 @@ function AppShell() {
       <QuickAddModal
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
-        onSubmit={handleQuickCaptureSubmit}
       />
     </>
   );
