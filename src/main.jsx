@@ -550,13 +550,13 @@ function HomeDashboard({ now }) {
             <ListRow
               key={item.id}
               variant="card"
-              label={item.title ||‘Untitled item’}
-              sub={`${item.startTime || ‘—‘} – ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ‘’}`}
+              label={item.title ||'Untitled item'}
+              sub={`${item.startTime || ‘—‘} - ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ''}`}
               trailing={<span className="status-pill status-active">Now</span>}
             />
           ))}
 
-          {todayWorkoutCard.kind === ‘workout’ && (
+          {todayWorkoutCard.kind === 'workout' && (
             <ListRow
               variant="card"
               label={todayWorkoutCard.title}
@@ -569,16 +569,16 @@ function HomeDashboard({ now }) {
             <ListRow
               key={item.id}
               variant="card"
-              label={item.title || ‘Untitled item’}
-              sub={`${item.startTime || ‘—‘} – ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ‘’}`}
+              label={item.title || 'Untitled item'}
+              sub={`${item.startTime || ‘—‘} - ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ''}`}
               trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
             />
           ))}
 
-          {todayWorkoutCard.kind !== ‘workout’ && todayCalendarItems.length === 0 && (
+          {todayWorkoutCard.kind !== 'workout' && todayCalendarItems.length === 0 && (
             <EmptyState
               title="No schedule items yet"
-              description="Home will show today’s plan once Calendar or Fitness has something scheduled."
+              description="Home will show today's plan once Calendar or Fitness has something scheduled."
             />
           )}
         </div>
