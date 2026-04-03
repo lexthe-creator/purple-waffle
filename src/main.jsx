@@ -396,34 +396,54 @@ function HomeDashboard({ now }) {
   const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
   const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
   const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
+  const calendarMetricValue = useMemo(() => {
+    const timedItems = todayCalendarItems
+      .map(item => {
+        const startAt = parseDateKeyTime(item.date, item.startTime);
+        const endAt = parseDateKeyTime(item.date, item.endTime);
+        return { ...item, startAt, endAt };
+      })
+      .filter(item => item.startAt instanceof Date)
+      .sort((left, right) => left.startAt - right.startAt);
+
+    const currentItem = timedItems.find(item => {
+      if (!(item.startAt instanceof Date)) return false;
+      if (item.endAt instanceof Date) {
+        return item.startAt <= now && now < item.endAt;
+      }
+      const fallbackEnd = new Date(item.startAt.getTime() + 30 * 60 * 1000);
+      return item.startAt <= now && now < fallbackEnd;
+    });
+
+    if (currentItem) return 'Busy now';
+
+    const nextItem = timedItems.find(item => item.startAt instanceof Date && item.startAt > now);
+    if (!nextItem?.startAt) return 'Open';
+
+    const minutesUntilNext = Math.round((nextItem.startAt.getTime() - now.getTime()) / (60 * 1000));
+    const nextTimeLabel = formatStatusTime(nextItem.startAt);
+    return minutesUntilNext <= 90 ? `Next ${nextTimeLabel}` : `Free until ${nextTimeLabel}`;
+  }, [now, todayCalendarItems]);
   const hasCompletedWorkout = workouts.some(workout => {
     const scheduledKey = workout.scheduledDate || workout.plannedDate;
     return scheduledKey === todayKey && workout.status === 'completed';
   });
+  const workoutMarkedMissed = todayWorkoutCard.kind === 'workout'
+    && todayWorkoutCard.canStart
+    && !hasCompletedWorkout
+    && now.getHours() >= 18;
   const fitnessState = hasCompletedWorkout
-    ? 'complete'
-    : todayWorkoutCard.kind === 'workout'
-      ? 'pending'
-      : 'rest';
-  const fitnessStatus = fitnessState === 'complete'
-    ? 'Complete'
-    : fitnessState === 'rest'
-      ? 'Rest'
-      : 'Pending';
+    ? 'done'
+    : workoutMarkedMissed
+      ? 'missed'
+      : 'planned';
+  const fitnessStatus = fitnessState === 'done'
+    ? 'Done'
+    : fitnessState === 'missed'
+      ? 'Missed'
+      : 'Planned';
   const completedMealSlots = mealSlotProgress.filter(slot => slot.complete).length;
 
-  const focusTask = openTasks[0] ?? null;
-  const focusTitle = focusTask?.title
-    || (todayWorkoutCard.kind === 'workout' ? todayWorkoutCard.title : 'Choose one clear next step');
-  const focusLine = focusTask
-    ? `Start with ${focusTask.title}${todayWorkoutCard.kind === 'workout' ? ' before training if possible.' : ' before your next schedule block.'}`
-    : todayWorkoutCard.kind === 'workout'
-      ? `Training is the main anchor today. ${todayWorkoutCard.helperLine}`
-      : 'Keep it simple today. Capture one priority when it shows up.';
-  const focusSubline = focusTask?.notes
-    || (todayWorkoutCard.kind === 'workout'
-      ? todayWorkoutCard.metaLine
-      : `${planState.phase?.name || 'Base'} block · week ${planState.week}`);
   const scheduleIntro = scheduledItemCount > 0
     ? `${scheduledItemCount} item${scheduledItemCount === 1 ? '' : 's'} are shaping the day.`
     : 'The day is still open, so this is where upcoming calendar and training items will land.';
@@ -438,12 +458,10 @@ function HomeDashboard({ now }) {
   return (
     <div className="tab-stack home-dashboard">
       <section className="home-status-strip" aria-label="Today status">
-        <div className="home-status-header">
-          <p className="home-status-label">Today status</p>
-          <div className="home-readiness-indicator" aria-label={`Readiness ${readiness.level}`}>
-            <span className={`home-readiness-dot home-readiness-dot--${readinessState}`} aria-hidden="true" />
-            <span className="home-readiness-text">{readiness.level}</span>
-          </div>
+        <p className="home-status-label">Today status</p>
+        <div className="home-readiness-indicator" aria-label={`Readiness ${readiness.level}`}>
+          <span className={`home-readiness-dot home-readiness-dot--${readinessState}`} aria-hidden="true" />
+          <span className="home-readiness-text">{readiness.level} readiness</span>
         </div>
         <div className="home-status-row">
           <div className="home-status-item">
@@ -453,7 +471,7 @@ function HomeDashboard({ now }) {
 
           <div className="home-status-item">
             <span className="home-status-item-label">Calendar</span>
-            <strong className="home-status-item-value">{calendarStatus}</strong>
+            <strong className="home-status-item-value">{calendarMetricValue}</strong>
           </div>
 
           <div className="home-status-item">
@@ -484,18 +502,9 @@ function HomeDashboard({ now }) {
       <Card variant="flat" className="home-card home-section home-focus-card">
         <SectionHeader
           eyebrow="Home"
-          title="Top tasks and focus"
+          title="Today’s tasks and focus"
           action={<span className={`status-pill ${taskStatusTone}`}>{taskCompletionValue}</span>}
         />
-        <div className="home-focus-panel">
-          <p className="home-focus-label">Main focus</p>
-          <h3 className="home-focus-title">{focusTitle}</h3>
-          <p className="home-card-copy">{focusLine}</p>
-        </div>
-        <div className="home-meta-row">
-          <span className="status-pill status-planned">{planState.phase?.name || 'Base'} · wk {planState.week}</span>
-          <span className="status-pill">{focusSubline}</span>
-        </div>
 
         {openTasks.length === 0 ? (
           <EmptyState
@@ -590,6 +599,21 @@ function formatShortTime(value) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function formatStatusTime(value) {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat('en-US', date.getMinutes() === 0
+    ? { hour: 'numeric' }
+    : { hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
+function parseDateKeyTime(dateKey, timeValue) {
+  if (typeof dateKey !== 'string' || typeof timeValue !== 'string' || !timeValue.trim()) return null;
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = timeValue.split(':').map(Number);
+  if ([year, month, day, hours, minutes].some(value => Number.isNaN(value))) return null;
+  return new Date(year, month - 1, day, hours, minutes);
 }
 
 function startOfDay(value) {
