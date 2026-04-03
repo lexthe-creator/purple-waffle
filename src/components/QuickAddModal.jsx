@@ -18,12 +18,7 @@ const SUBMIT_LABELS = {
   meal: 'Log meal',
 };
 
-function getTodayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-export default function QuickAddModal({ isOpen, onClose }) {
+export default function QuickAddModal({ isOpen, onClose, todayKey }) {
   const {
     createTask, setTasks,
     createCalendarItem, setCalendarItems,
@@ -86,8 +81,6 @@ export default function QuickAddModal({ isOpen, onClose }) {
 
   function handleSubmit(event) {
     event.preventDefault();
-
-    const todayKey = getTodayKey();
 
     if (activeType === 'task') {
       const title = taskTitle.trim();

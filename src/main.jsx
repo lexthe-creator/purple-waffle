@@ -3917,6 +3917,7 @@ function AppShell() {
       <QuickAddModal
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
+        todayKey={toDateKey(now)}
       />
     </>
   );
