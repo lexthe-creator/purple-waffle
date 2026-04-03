@@ -551,7 +551,7 @@ function HomeDashboard({ now }) {
               key={item.id}
               variant="card"
               label={item.title || ‘Untitled item’}
-              sub={`${item.startTime || ‘—‘} – ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ‘’}`}
+              sub={`${item.startTime || ‘-’} - ${item.endTime || ‘-’}${item.notes ? ‘ - ‘ + item.notes : ‘’}`}
               trailing={<span className="status-pill status-active">Now</span>}
             />
           ))}
@@ -570,7 +570,7 @@ function HomeDashboard({ now }) {
               key={item.id}
               variant="card"
               label={item.title || ‘Untitled item’}
-              sub={`${item.startTime || ‘—‘} – ${item.endTime || ‘—‘}${item.notes ? ` · ${item.notes}` : ‘’}`}
+              sub={`${item.startTime || ‘-’} - ${item.endTime || ‘-’}${item.notes ? ‘ - ‘ + item.notes : ‘’}`}
               trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
             />
           ))}
