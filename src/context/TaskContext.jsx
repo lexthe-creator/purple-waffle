@@ -359,6 +359,7 @@ export function TaskProvider({ children }) {
       createHabit,
       calendarItems,
       setCalendarItems,
+      createCalendarItem,
       inboxItems,
       setInboxItems,
       createInboxItem,

@@ -3802,7 +3802,6 @@ function AppShell() {
     notifications,
     inboxItems,
     setInboxItems,
-    createInboxItem,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -3841,22 +3840,6 @@ function AppShell() {
     setQuickAddOpen(true);
   }
 
-  function handleQuickCaptureSubmit(payload) {
-    const title = payload?.title?.trim() || '';
-    const note = payload?.note?.trim() || '';
-    const text = title || note;
-    if (!text) return;
-
-    setInboxItems(current => [
-      createInboxItem({
-        text,
-        note,
-      }),
-      ...current,
-    ]);
-    setQuickAddOpen(false);
-    setActiveSurface('inbox');
-  }
 
   function handleTabChange(tab) {
     setActiveTab(tab);
@@ -3934,7 +3917,7 @@ function AppShell() {
       <QuickAddModal
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
-        onSubmit={handleQuickCaptureSubmit}
+        todayKey={toDateKey(now)}
       />
     </>
   );
