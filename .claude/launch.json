@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "/Users/charlicealexispugh/.nvm/versions/node/v25.8.1/bin/node",
+      "runtimeArgs": ["/Users/charlicealexispugh/Documents/GitHub/purple-waffle/node_modules/.bin/vite"],
+      "port": 5173
+    }
+  ]
+}
