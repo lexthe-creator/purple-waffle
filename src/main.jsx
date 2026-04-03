@@ -4,11 +4,8 @@ import AppFrame from './components/AppFrame.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
-import InboxView from './views/InboxView.jsx';
-import InboxScreen from './views/InboxScreen.jsx';
 import FinanceScreen from './views/FinanceScreen.jsx';
 import HomeScreen from './views/HomeScreen.jsx';
-import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import { TaskProvider, useTaskContext } from './context/TaskContext.jsx';
 import { AppProvider, useAppContext } from './context/AppContext.jsx';
 import { ProfileProvider, useProfileContext } from './context/ProfileContext.jsx';
@@ -41,8 +38,8 @@ import './styles.css';
 
 const ROOT_TABS = [
   {
-    id: 'today',
-    label: 'Today',
+    id: 'home',
+    label: 'Home',
     iconPath: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
   },
   {
@@ -112,6 +109,485 @@ const WEEKDAY_INDEX = {
   Saturday: 6,
 };
 
+const SHELL_TAB_COPY = {
+  home: {
+    eyebrow: 'Home',
+    title: 'Top tasks and focus',
+    description: 'Home is now anchored by tasks first, schedule second, and a compact status check-in.',
+    bullets: [
+      'Top tasks and a main focus item lead the screen.',
+      'Today’s schedule previews calendar and fitness commitments.',
+      'Today status stays compact so action remains primary.',
+    ],
+  },
+  calendar: {
+    eyebrow: 'Calendar',
+    title: 'Today’s schedule',
+    description: 'Phase 1 shell placeholder. Calendar structure stays stable for the later rebuild.',
+    bullets: [
+      'Agenda and day planning go here.',
+      'Busy blocks stay visible in one place.',
+      'Home will read from this flow later.',
+    ],
+  },
+  fitness: {
+    eyebrow: 'Fitness',
+    title: 'Workout space',
+    description: 'Phase 1 shell placeholder. Fitness logic stays out of scope for this pass.',
+    bullets: [
+      'Workout surfaces mount here later.',
+      'Logging remains untouched for now.',
+      'Phase 5 will fill this tab in.',
+    ],
+  },
+  nutrition: {
+    eyebrow: 'Nutrition',
+    title: 'Nutrition space',
+    description: 'Phase 1 shell placeholder. Nutrition support stays as shell only for now.',
+    bullets: [
+      'Meal logging lands here later.',
+      'Daily totals are deferred to Phase 6.',
+      'Home only needs indicator status later.',
+    ],
+  },
+  more: {
+    eyebrow: 'More',
+    title: 'Remaining surfaces',
+    description: 'Phase 1 shell placeholder. More will hold the remaining app areas after the shell is stable.',
+    bullets: [
+      'Inbox and Settings remain top-right utilities.',
+      'Additional areas stay grouped here later.',
+      'No deeper module logic yet.',
+    ],
+  },
+};
+
+const SHELL_SURFACE_COPY = {
+  inbox: {
+    eyebrow: 'Inbox',
+    title: 'Quick capture inbox',
+    description: 'Quick Capture opens here during Phase 1. Capture and sorting logic comes later.',
+    bullets: [
+      'Anything captured lands here first.',
+      'Organization rules are deferred to Phase 3.',
+      'This surface keeps the shell route stable.',
+    ],
+  },
+  settings: {
+    eyebrow: 'Settings',
+    title: 'App settings',
+    description: 'Settings stay reachable from the header, but the detailed setup flow is not being rebuilt yet.',
+    bullets: [
+      'Preferences remain as a shell surface.',
+      'Fitness and nutrition settings stay out of scope here.',
+      'Phase 7 can expand this area later.',
+    ],
+  },
+};
+
+function ShellTabPanel({ active, eyebrow, title, description, bullets }) {
+  return (
+    <section className={`shell-tab-panel${active ? ' is-active' : ''}`} hidden={!active} aria-hidden={!active}>
+      <Card className="shell-tab-card">
+        <SectionHeader eyebrow={eyebrow} title={title} />
+        <p className="shell-tab-copy">{description}</p>
+        <div className="shell-tab-points">
+          {bullets.map(point => (
+            <div key={point} className="shell-tab-point">
+              {point}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function InboxSurface({ inboxItems, onClose }) {
+  const copy = SHELL_SURFACE_COPY.inbox;
+  const items = Array.isArray(inboxItems) ? inboxItems : [];
+
+  return (
+    <div className="tab-stack shell-surface-page">
+      <Card className="shell-surface-card">
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">{copy.eyebrow}</p>
+            <h2>{copy.title}</h2>
+          </div>
+          <button type="button" className="ghost-button compact-ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <p className="shell-surface-copy">{copy.description}</p>
+
+        {items.length === 0 ? (
+          <EmptyState
+            title="Inbox is empty"
+            description="Quick Capture items will land here first. Later phases will add review, assignment, and conversion."
+          />
+        ) : (
+          <div className="shell-surface-list">
+            {items.map(item => (
+              <ListRow
+                key={item.id}
+                variant="card"
+                label={item.text || 'Captured item'}
+                sub={item.note || 'Ready for later review'}
+                trailing={<span className="status-pill status-planned">Captured</span>}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="shell-surface-card">
+        <SectionHeader eyebrow="Flow" title="Capture now, organize later" />
+        <div className="shell-tab-points">
+          {copy.bullets.map(point => (
+            <div key={point} className="shell-tab-point">
+              {point}
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function SettingsSurface({ onClose, fitnessSettings, notificationPrefs, recoveryInputs, mealPrefs, profile }) {
+  const copy = SHELL_SURFACE_COPY.settings;
+  const fitnessLevel = profile?.athlete?.fitnessLevel || 'unspecified';
+
+  return (
+    <div className="tab-stack shell-surface-page">
+      <Card className="shell-surface-card">
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">{copy.eyebrow}</p>
+            <h2>{copy.title}</h2>
+          </div>
+          <button type="button" className="ghost-button compact-ghost" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <p className="shell-surface-copy">{copy.description}</p>
+
+        <div className="ui-metrics-row">
+          <MetricBlock value={fitnessSettings.programType || 'hyrox'} label="Program" />
+          <MetricBlock value={fitnessSettings.trainingDays || '4-day'} label="Training" />
+          <MetricBlock value={notificationPrefs.morningReminder ? 'On' : 'Off'} label="Morning reminder" />
+          <MetricBlock value={fitnessLevel} label="Fitness level" />
+        </div>
+      </Card>
+
+      <Card className="shell-surface-card">
+        <SectionHeader eyebrow="Shell" title="Settings stays lightweight in Phase 1" />
+        <div className="shell-surface-list">
+          <ListRow variant="card" label="Recovery" sub={recoveryInputs.preferredSession || 'fullbody'} />
+          <ListRow variant="card" label="Hydration goal" sub={`${mealPrefs.hydrationGoal || 8} cups`} />
+          <ListRow variant="card" label="Notes" sub="Detailed settings rebuild comes later." />
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function getCalendarItemTypeLabel(type) {
+  switch (type) {
+    case 'busy':
+      return 'Busy block';
+    case 'task':
+      return 'Task';
+    case 'event':
+    default:
+      return 'Event';
+  }
+}
+
+const TASK_STATUS_ORDER = { planned: 0, active: 1 };
+
+function HomeDashboard({ now }) {
+  const { tasks, setTasks, workouts, meals, calendarItems } = useTaskContext();
+  const { fitnessSettings, energyState } = useAppContext();
+  const { profile } = useProfileContext();
+
+  const todayKey = toDateKey(now);
+  const athleteDefaults = profile?.athlete || {};
+  const workoutHistory = useMemo(
+    () => workouts.map(workout => ({
+      ...workout,
+      plannedDate: workout.plannedDate || workout.scheduledDate || null,
+    })),
+    [workouts],
+  );
+  const planState = useMemo(
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
+      today: now,
+      history: workoutHistory,
+      athleteDefaults,
+    }),
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, now, workoutHistory],
+  );
+  const todayWorkoutCard = useMemo(
+    () => getTodayWorkoutCardState({
+      weeklySchedule: planState.sessions,
+      todayKey,
+      programType: fitnessSettings.programType,
+    }),
+    [fitnessSettings.programType, planState.sessions, todayKey],
+  );
+
+  const readiness = useMemo(
+    () => computeRecoveryState(
+      { energyScore: energyState.value, sleepHours: energyState.sleepHours },
+      energyState.value,
+      energyState.sleepHours,
+    ),
+    [energyState.sleepHours, energyState.value],
+  );
+
+  const todaysMeals = useMemo(
+    () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
+    [meals, todayKey],
+  );
+  const loggedMeals = useMemo(
+    () => todaysMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('planned')),
+    [todaysMeals],
+  );
+  const todayCalendarItems = useMemo(
+    () => calendarItems
+      .filter(item => item.date === todayKey)
+      .map(item => {
+        const startAt = parseDateKeyTime(todayKey, item.startTime);
+        const endAt = parseDateKeyTime(todayKey, item.endTime);
+        const isCurrent = startAt instanceof Date && (
+          endAt instanceof Date
+            ? startAt <= now && now < endAt
+            : startAt <= now && now < new Date(startAt.getTime() + 30 * 60 * 1000)
+        );
+        const isUpcoming = startAt instanceof Date && startAt > now;
+        return { ...item, startAt, endAt, isCurrent, isUpcoming };
+      })
+      .sort((left, right) => {
+        if (left.isCurrent !== right.isCurrent) return left.isCurrent ? -1 : 1;
+        if (left.isUpcoming !== right.isUpcoming) return left.isUpcoming ? -1 : 1;
+        return (left.startAt || 0) - (right.startAt || 0);
+      }),
+    [calendarItems, todayKey, now],
+  );
+  const openTasks = useMemo(
+    () => tasks
+      .filter(task => task.status !== 'done')
+      .slice()
+      .sort((left, right) => {
+        const leftPriority = left.priority ? 0 : 1;
+        const rightPriority = right.priority ? 0 : 1;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        const leftOrder = TASK_STATUS_ORDER[left.status] ?? 2;
+        const rightOrder = TASK_STATUS_ORDER[right.status] ?? 2;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return (left.createdAt || 0) - (right.createdAt || 0);
+      })
+      .slice(0, 3),
+    [tasks],
+  );
+  const mealSlotProgress = useMemo(
+    () => NUTRITION_SLOTS.map(slot => {
+      const complete = loggedMeals.some(meal => {
+        const tags = Array.isArray(meal.tags) ? meal.tags : [];
+        if (tags.includes(`slot:${slot.id}`)) return true;
+        const haystack = `${meal.name || ''} ${tags.join(' ')}`.toLowerCase();
+        return slot.keywords.some(keyword => haystack.includes(keyword));
+      });
+      return { ...slot, complete };
+    }),
+    [loggedMeals],
+  );
+
+  const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
+  const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
+  const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
+  const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
+  const calendarMetricValue = useMemo(() => {
+    const timedItems = todayCalendarItems.filter(item => item.startAt instanceof Date);
+    const currentItem = timedItems.find(item => item.isCurrent);
+    if (currentItem) return 'Busy now';
+    const nextItem = timedItems.find(item => item.isUpcoming);
+    if (!nextItem) return 'Open';
+    const minutesUntilNext = Math.round((nextItem.startAt.getTime() - now.getTime()) / (60 * 1000));
+    const nextTimeLabel = formatStatusTime(nextItem.startAt);
+    return minutesUntilNext <= 90 ? `Next ${nextTimeLabel}` : `Free until ${nextTimeLabel}`;
+  }, [now, todayCalendarItems]);
+  const hasCompletedWorkout = workouts.some(workout => {
+    const scheduledKey = workout.scheduledDate || workout.plannedDate;
+    return scheduledKey === todayKey && workout.status === 'completed';
+  });
+  const workoutMarkedMissed = todayWorkoutCard.kind === 'workout'
+    && todayWorkoutCard.canStart
+    && !hasCompletedWorkout
+    && now.getHours() >= 18;
+  const fitnessState = hasCompletedWorkout
+    ? 'done'
+    : workoutMarkedMissed
+      ? 'missed'
+      : 'planned';
+  const fitnessStatus = fitnessState === 'done'
+    ? 'Done'
+    : fitnessState === 'missed'
+      ? 'Missed'
+      : 'Planned';
+  const completedMealSlots = mealSlotProgress.filter(slot => slot.complete).length;
+
+  const scheduleIntro = scheduledItemCount > 0
+    ? `${scheduledItemCount} item${scheduledItemCount === 1 ? '' : 's'} are shaping the day.`
+    : 'The day is still open, so this is where upcoming calendar and training items will land.';
+  const taskStatusTone = taskCompletedCount > 0 ? 'status-active' : 'status-planned';
+  const calendarTone = scheduledItemCount > 0 ? 'status-active' : 'status-planned';
+  const readinessState = readiness.level === 'High'
+    ? 'high'
+    : readiness.level === 'Moderate'
+      ? 'moderate'
+      : 'low';
+
+  return (
+    <div className="tab-stack home-dashboard">
+      <section className="home-status-strip" aria-label="Today status">
+        <p className="home-status-label">Today status</p>
+        <div className="home-readiness-indicator" aria-label={`Readiness ${readiness.level}`}>
+          <span className={`home-readiness-dot home-readiness-dot--${readinessState}`} aria-hidden="true" />
+          <span className="home-readiness-text">{readiness.level} readiness</span>
+        </div>
+        <div className="home-status-row">
+          <div className="home-status-item">
+            <span className="home-status-item-label">Tasks</span>
+            <strong className="home-status-item-value">{taskCompletionValue}</strong>
+          </div>
+
+          <div className="home-status-item">
+            <span className="home-status-item-label">Calendar</span>
+            <strong className="home-status-item-value">{calendarMetricValue}</strong>
+          </div>
+
+          <div className="home-status-item">
+            <span className="home-status-item-label">Fitness</span>
+            <strong className="home-status-item-value home-status-inline">
+              <span className={`home-fitness-dot home-fitness-dot--${fitnessState}`} aria-hidden="true" />
+              {fitnessStatus}
+            </strong>
+          </div>
+
+          <div className="home-status-item home-status-item--nutrition">
+            <span className="home-status-item-label">Nutrition</span>
+            <div className="home-nutrition-track" aria-label={`${completedMealSlots} of 4 meals logged`}>
+              {mealSlotProgress.map(slot => (
+                <span
+                  key={slot.id}
+                  className={`home-nutrition-segment ${slot.complete ? 'is-complete' : ''}`}
+                  title={slot.label}
+                >
+                  <span className="sr-only">{slot.label}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Card variant="flat" className="home-card home-section home-focus-card">
+        <SectionHeader
+          eyebrow="Home"
+          title="Today’s tasks and focus"
+          action={<span className={`status-pill ${taskStatusTone}`}>{taskCompletionValue}</span>}
+        />
+
+        {openTasks.length === 0 ? (
+          <EmptyState
+            title="No open tasks yet"
+            description="Quick Capture or Inbox will be the right place to add the next priority."
+          />
+        ) : (
+          <div className="home-list">
+            {openTasks.map(task => (
+              <ListRow
+                key={task.id}
+                variant="card"
+                label={task.title || 'Untitled task'}
+                sub={task.notes || (task.status === 'active' ? 'Active' : 'Planned')}
+                onClick={() =>
+                  setTasks(current =>
+                    current.map(t =>
+                      t.id === task.id ? { ...t, status: t.status === 'done' ? 'active' : 'done' } : t
+                    )
+                  )
+                }
+                trailing={(
+                  <span className={`status-pill ${task.priority ? 'status-priority' : task.status === 'active' ? 'status-active' : 'status-planned'}`}>
+                    {task.priority ? 'Priority' : task.status === 'active' ? 'Active' : 'Planned'}
+                  </span>
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card variant="flat" className="home-card home-section home-schedule-card">
+        <SectionHeader
+          eyebrow="Today"
+          title="Today’s schedule"
+          action={<span className={`status-pill ${calendarTone}`}>{calendarStatus}</span>}
+        />
+        <p className="home-card-copy">{scheduleIntro}</p>
+
+        <div className="home-list">
+          {todayCalendarItems.filter(item => item.isCurrent).map(item => (
+            <ListRow
+              key={item.id}
+              variant="card"
+              label={item.title ||'Untitled item'}
+              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
+              trailing={<span className="status-pill status-active">Now</span>}
+            />
+          ))}
+
+          {todayWorkoutCard.kind === 'workout' && (
+            <ListRow
+              variant="card"
+              label={todayWorkoutCard.title}
+              sub={todayWorkoutCard.metaLine}
+              trailing={<span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>}
+            />
+          )}
+
+          {todayCalendarItems.filter(item => !item.isCurrent).map(item => (
+            <ListRow
+              key={item.id}
+              variant="card"
+              label={item.title || 'Untitled item'}
+              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
+              trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
+            />
+          ))}
+
+          {todayWorkoutCard.kind !== 'workout' && todayCalendarItems.length === 0 && (
+            <EmptyState
+              title="No schedule items yet"
+              description="Home will show today's plan once Calendar or Fitness has something scheduled."
+            />
+          )}
+        </div>
+      </Card>
+
+    </div>
+  );
+}
+
 function formatDateLabel(value) {
   return new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
@@ -140,6 +616,21 @@ function formatShortTime(value) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value));
+}
+
+function formatStatusTime(value) {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat('en-US', date.getMinutes() === 0
+    ? { hour: 'numeric' }
+    : { hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
+function parseDateKeyTime(dateKey, timeValue) {
+  if (typeof dateKey !== 'string' || typeof timeValue !== 'string' || !timeValue.trim()) return null;
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = timeValue.split(':').map(Number);
+  if ([year, month, day, hours, minutes].some(value => Number.isNaN(value))) return null;
+  return new Date(year, month - 1, day, hours, minutes);
 }
 
 function startOfDay(value) {
@@ -3308,46 +3799,22 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
 
 function AppShell() {
   const {
-    setNotifications,
-    createNotification,
-    createTask,
-    createMeal,
-    createNote,
-    createWorkout,
-    createExercise,
     notifications,
-    calendarItems,
-    setCalendarItems,
-    setTasks,
-    setMeals,
-    setNotes,
-    workouts,
-    setWorkouts,
     inboxItems,
+    setInboxItems,
   } = useTaskContext();
   const {
     quickAddOpen,
     setQuickAddOpen,
-    notificationCenterOpen,
-    setNotificationCenterOpen,
-    showMorningCheckin,
-    setShowMorningCheckin,
-    energyState,
+    notificationPrefs,
+    recoveryInputs,
+    mealPrefs,
     fitnessSettings,
   } = useAppContext();
-  const [activeTab, setActiveTab] = useState('today');
-  const [activeWorkoutId, setActiveWorkoutId] = useState(null);
+  const { profile } = useProfileContext();
+  const [activeTab, setActiveTab] = useState('home');
+  const [activeSurface, setActiveSurface] = useState(null);
   const [now, setNow] = useState(() => new Date());
-  const [moreSection, setMoreSection] = useState('tasks');
-
-  useEffect(() => {
-    const lastCheckIn = energyState.lastCheckIn;
-    const alreadyCheckedIn = lastCheckIn && sameDay(new Date(lastCheckIn), now);
-    if (!alreadyCheckedIn && !showMorningCheckin) {
-      setShowMorningCheckin(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
@@ -3359,131 +3826,79 @@ function AppShell() {
     [notifications],
   );
 
-  function markAllNotificationsRead() {
-    setNotifications(current => current.map(notification => ({ ...notification, read: true })));
-  }
-
-  function openMoreSection(section) {
-    setMoreSection(section);
-    setActiveTab('more');
-  }
-
   function openInboxPage() {
-    setActiveTab('inbox');
-    setNotificationCenterOpen(false);
+    setQuickAddOpen(false);
+    setActiveSurface('inbox');
   }
 
   function openSettingsPage() {
-    setActiveTab('settings');
-  }
-
-  function handleQuickAddSubmit(payload) {
-    const { type, title, notes, tags, duration, content } = payload;
-
-    if (type === 'task') {
-      setTasks(current => [createTask({ title, notes, status: 'active', priority: true }), ...current]);
-      setNotifications(current => [createNotification({ title: 'Task captured', detail: title }), ...current]);
-      return;
-    }
-
-    if (type === 'meal') {
-      setMeals(current => [createMeal({ name: title, tags }), ...current]);
-      setNotifications(current => [createNotification({ title: 'Meal captured', detail: title }), ...current]);
-      return;
-    }
-
-    if (type === 'workout') {
-      setWorkouts(current => [createWorkout({ name: title, duration: Number.isFinite(duration) ? duration : 30, status: 'planned', exercises: [createExercise({ name: 'Warm-up', detail: '5 min mobility' }), createExercise({ name: 'Main set', detail: 'Start with intent' }), createExercise({ name: 'Cooldown', detail: 'Breathe and reset' })] }), ...current]);
-      setNotifications(current => [createNotification({ title: 'Workout captured', detail: title }), ...current]);
-      return;
-    }
-
-    setNotes(current => [createNote({ content: content || title || notes }), ...current]);
-    setNotifications(current => [createNotification({ title: 'Note captured', detail: content || title || notes }), ...current]);
-  }
-
-  function startTodayWorkout(session) {
-    const existingTodayWorkout = workouts.find(workout => workout.scheduledDate === toDateKey(now) && !['completed', 'skipped'].includes(workout.status));
-    if (existingTodayWorkout) {
-      const startedAt = Date.now();
-      setWorkouts(current => current.map(workout => (
-        workout.id === existingTodayWorkout.id
-          ? { ...workout, status: 'active', startedAt }
-          : workout.status === 'active'
-            ? { ...workout, status: 'planned' }
-            : workout
-      )));
-      setActiveWorkoutId(existingTodayWorkout.id);
-      setActiveTab('fitness');
-      return;
-    }
-
-    if (!session) {
-      setActiveTab('fitness');
-      return;
-    }
-
-    const sessionWorkout = createWorkoutFromSession({
-      createWorkout,
-      createExercise,
-      session,
-      settings: fitnessSettings,
-      todayKey: toDateKey(now),
-    });
-
-    setWorkouts(current => [
-      { ...sessionWorkout, status: 'active', startedAt: Date.now() },
-      ...current.map(workout => (workout.status === 'active' ? { ...workout, status: 'planned' } : workout)),
-    ]);
-    setActiveWorkoutId(sessionWorkout.id);
-    setActiveTab('fitness');
-  }
-
-  const primaryScreen = useMemo(() => {
-    if (activeTab === 'calendar') {
-      return <CalendarScreen />;
-    }
-    if (activeTab === 'inbox') {
-      return <InboxScreen onSwitchToTab={setActiveTab} />;
-    }
-
-    if (activeTab === 'nutrition') {
-      return <NutritionScreen now={now} />;
-    }
-
-    if (activeTab === 'fitness') {
-      return <FitnessScreen now={now} activeWorkoutId={activeWorkoutId} onStartWorkout={setActiveWorkoutId} />;
-    }
-
-    if (activeTab === 'more') {
-      return <MoreScreen initialSection={moreSection} onSwitchToTab={setActiveTab} now={now} />;
-    }
-
-    if (activeTab === 'settings') {
-      return <SettingsScreen />;
-    }
-
-    return (
-      <TodayScreen
-        now={now}
-        activeWorkoutId={activeWorkoutId}
-        onSwitchToFitness={() => setActiveTab('fitness')}
-        onOpenMoreSection={openMoreSection}
-        onOpenInbox={openInboxPage}
-        onStartWorkout={startTodayWorkout}
-      />
-    );
-  }, [activeTab, activeWorkoutId, moreSection, now, workouts, createWorkout, createExercise, fitnessSettings]);
-
-  function handleTabChange(tab) {
-    setActiveTab(tab);
-    if (tab !== 'more') return;
-    setMoreSection(prev => prev || 'tasks');
+    setQuickAddOpen(false);
+    setActiveSurface('settings');
   }
 
   function openQuickCapture() {
     setQuickAddOpen(true);
   }
+
+
+  function handleTabChange(tab) {
+    setActiveTab(tab);
+    setActiveSurface(null);
+    setQuickAddOpen(false);
+  }
+
+  const activeCopy = SHELL_TAB_COPY[activeTab] ?? SHELL_TAB_COPY.home;
+  const shellContent = activeSurface === 'inbox' ? (
+    <InboxSurface
+      inboxItems={inboxItems}
+      onClose={() => setActiveSurface(null)}
+    />
+  ) : activeSurface === 'settings' ? (
+    <SettingsSurface
+      onClose={() => setActiveSurface(null)}
+      fitnessSettings={fitnessSettings}
+      notificationPrefs={notificationPrefs}
+      recoveryInputs={recoveryInputs}
+      mealPrefs={mealPrefs}
+      profile={profile}
+    />
+  ) : activeTab === 'home' ? (
+    <HomeDashboard now={now} />
+  ) : (
+    <div className="tab-stack shell-stack">
+      <section className="shell-hero task-card">
+        <p className="eyebrow">Phase 1 shell</p>
+        <h2>Stable navigation and layout are locked</h2>
+        <p className="shell-hero-copy">
+          This rebuild branch keeps the app shell fixed so later phases can fill in real Home, Calendar, Fitness, and Nutrition content without changing navigation.
+        </p>
+      </section>
+
+      <div className="shell-tab-panels">
+        {Object.entries(SHELL_TAB_COPY).map(([tabId, copy]) => (
+          <ShellTabPanel
+            key={tabId}
+            active={tabId === activeTab}
+            eyebrow={copy.eyebrow}
+            title={copy.title}
+            description={copy.description}
+            bullets={copy.bullets}
+          />
+        ))}
+      </div>
+
+      <section className="task-card shell-status-card">
+        <div className="task-card-header">
+          <div>
+            <p className="eyebrow">Current tab</p>
+            <h2>{activeCopy.title}</h2>
+          </div>
+          <span className="status-pill status-planned">Mounted</span>
+        </div>
+        <p className="shell-status-copy">{activeCopy.description}</p>
+      </section>
+    </div>
+  );
 
   return (
     <>
@@ -3493,20 +3908,17 @@ function AppShell() {
         onTabChange={handleTabChange}
         userName="Alexis"
         inboxCount={unreadNotifications.length}
-        onOpenInbox={openInboxPage}        
+        onOpenInbox={openInboxPage}
         onOpenQuickAdd={openQuickCapture}
         onOpenSettings={openSettingsPage}
       >
-        {primaryScreen}
+        {shellContent}
       </AppFrame>
-
       <QuickAddModal
         isOpen={quickAddOpen}
         onClose={() => setQuickAddOpen(false)}
-        onSubmit={handleQuickAddSubmit}
+        todayKey={toDateKey(now)}
       />
-
-      <MorningCheckinModal />
     </>
   );
 }

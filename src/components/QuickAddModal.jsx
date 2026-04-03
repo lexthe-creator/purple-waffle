@@ -1,73 +1,65 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { routeCapture } from '../utils/routeCapture.js';
+import { useTaskContext } from '../context/TaskContext';
 
-const TYPES = ['task', 'meal', 'workout', 'note'];
+const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-const INITIAL_STATE = {
-  type: 'task',
-  title: '',
-  notes: '',
-  tags: '',
-  duration: '',
-  content: '',
+const TYPE_TABS = [
+  { id: 'task', label: 'Task' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'workout', label: 'Workout' },
+  { id: 'meal', label: 'Meal' },
+];
+
+const SUBMIT_LABELS = {
+  task: 'Add task',
+  schedule: 'Add to schedule',
+  workout: 'Add workout',
+  meal: 'Log meal',
 };
 
-export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
-  const [type, setType] = useState(INITIAL_STATE.type);
-  const [title, setTitle] = useState(INITIAL_STATE.title);
-  const [notes, setNotes] = useState(INITIAL_STATE.notes);
-  const [tags, setTags] = useState(INITIAL_STATE.tags);
-  const [duration, setDuration] = useState(INITIAL_STATE.duration);
-  const [content, setContent] = useState(INITIAL_STATE.content);
-  const [notesOpen, setNotesOpen] = useState(false);
+export default function QuickAddModal({ isOpen, onClose, todayKey }) {
+  const {
+    createTask, setTasks,
+    createCalendarItem, setCalendarItems,
+    createWorkout, setWorkouts,
+    createMeal, setMeals,
+  } = useTaskContext();
 
-  // Command bar state
-  const [commandText, setCommandText] = useState('');
+  const [activeType, setActiveType] = useState('task');
 
-  const commandRef = useRef(null);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskPriority, setTaskPriority] = useState(false);
+
+  const [schedTitle, setSchedTitle] = useState('');
+  const [schedType, setSchedType] = useState('event');
+  const [schedStart, setSchedStart] = useState('09:00');
+  const [schedEnd, setSchedEnd] = useState('10:00');
+
+  const [workoutName, setWorkoutName] = useState('Workout');
+
+  const [mealName, setMealName] = useState('');
+  const [mealSlot, setMealSlot] = useState('');
+
   const titleRef = useRef(null);
-  const contentRef = useRef(null);
-
-  // Routing suggestion from command bar
-  const routeSuggestion = useMemo(
-    () => commandText.trim() ? routeCapture(commandText) : null,
-    [commandText],
-  );
-
-  // Auto-select type from routing suggestion (only when user hasn't manually switched)
-  const [manualType, setManualType] = useState(false);
-  useEffect(() => {
-    if (routeSuggestion && !manualType) {
-      setType(routeSuggestion.type);
-    }
-  }, [routeSuggestion, manualType]);
 
   useEffect(() => {
     if (!isOpen) {
-      setType(INITIAL_STATE.type);
-      setTitle(INITIAL_STATE.title);
-      setNotes(INITIAL_STATE.notes);
-      setTags(INITIAL_STATE.tags);
-      setDuration(INITIAL_STATE.duration);
-      setContent(INITIAL_STATE.content);
-      setNotesOpen(false);
-      setCommandText('');
-      setManualType(false);
+      setActiveType('task');
+      setTaskTitle('');
+      setTaskPriority(false);
+      setSchedTitle('');
+      setSchedType('event');
+      setSchedStart('09:00');
+      setSchedEnd('10:00');
+      setWorkoutName('Workout');
+      setMealName('');
+      setMealSlot('');
       return undefined;
     }
 
-    setTitle(INITIAL_STATE.title);
-    setNotes(INITIAL_STATE.notes);
-    setTags(INITIAL_STATE.tags);
-    setDuration(INITIAL_STATE.duration);
-    setContent(INITIAL_STATE.content);
-    setNotesOpen(false);
-    setCommandText('');
-    setManualType(false);
-
     const frame = window.requestAnimationFrame(() => {
-      commandRef.current?.focus();
+      titleRef.current?.focus();
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -84,166 +76,187 @@ export default function QuickAddModal({ isOpen, onClose, onSubmit }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  const config = useMemo(() => {
-    if (type === 'task') {
-      return { placeholder: 'What needs attention?', submitLabel: 'Save task' };
-    }
-    if (type === 'meal') {
-      return { placeholder: 'What did you eat?', submitLabel: 'Save meal' };
-    }
-    if (type === 'workout') {
-      return { placeholder: 'Workout name', submitLabel: 'Save workout' };
-    }
-    return { placeholder: 'Capture the thought…', submitLabel: 'Save note' };
-  }, [type]);
-
   if (!isOpen) return null;
   if (typeof document === 'undefined') return null;
 
   function handleSubmit(event) {
     event.preventDefault();
 
-    // Use commandText as title/content if specific fields are empty
-    const resolvedTitle = title.trim() || commandText.trim();
-    const resolvedContent = content.trim() || (type === 'note' ? commandText.trim() : '');
+    if (activeType === 'task') {
+      const title = taskTitle.trim();
+      if (!title) return;
+      setTasks(current => [createTask({ title, priority: taskPriority }), ...current]);
+    } else if (activeType === 'schedule') {
+      const title = schedTitle.trim();
+      if (!title) return;
+      setCalendarItems(current => [
+        createCalendarItem({ title, type: schedType, date: todayKey, startTime: schedStart, endTime: schedEnd }),
+        ...current,
+      ]);
+    } else if (activeType === 'workout') {
+      const name = workoutName.trim() || 'Workout';
+      setWorkouts(current => [
+        createWorkout({ name, scheduledDate: todayKey, plannedDate: todayKey }),
+        ...current,
+      ]);
+    } else if (activeType === 'meal') {
+      const name = mealName.trim();
+      if (!name) return;
+      const tags = mealSlot ? [`slot:${mealSlot}`] : [];
+      setMeals(current => [createMeal({ name, tags }), ...current]);
+    }
 
-    if (type !== 'note' && !resolvedTitle) return;
-    if (type === 'note' && !resolvedContent) return;
-
-    onSubmit({
-      type,
-      title: resolvedTitle,
-      notes: notes.trim(),
-      tags: tags.split(',').map(tag => tag.trim()).filter(Boolean),
-      duration: Number.parseInt(duration, 10),
-      content: resolvedContent,
-    });
     onClose();
-  }
-
-  function handleMainKeyDown(event) {
-    if (event.key === 'Enter' && !event.shiftKey && type !== 'note') {
-      event.preventDefault();
-      handleSubmit(event);
-    }
-  }
-
-  function handleCommandKeyDown(event) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSubmit(event);
-    }
-  }
-
-  function handleManualTypeSwitch(newType) {
-    setType(newType);
-    setManualType(true);
   }
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card quick-capture-card" onClick={event => event.stopPropagation()}>
         <div className="modal-header">
-          <h2 style={{ margin: 0, fontSize: 'var(--fs-md)' }}>Capture</h2>
+          <div>
+            <p className="eyebrow">Quick Add</p>
+          </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close quick add">
-            ×
+            &times;
           </button>
         </div>
 
-        {/* Command bar */}
-        <div style={{ position: 'relative', marginBottom: '8px' }}>
-          <input
-            ref={commandRef}
-            className="brain-dump-input quick-capture-input"
-            value={commandText}
-            onChange={event => setCommandText(event.target.value)}
-            onKeyDown={handleCommandKeyDown}
-            placeholder="Type anything to capture…"
-          />
-          {routeSuggestion && (
-            <span
-              className="status-chip is-active"
-              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', pointerEvents: 'none' }}
-            >
-              → {routeSuggestion.label}
-            </span>
-          )}
-        </div>
-
-        <form className="quick-add-form" onSubmit={handleSubmit}>
-          {type === 'note' ? (
-            <textarea
-              ref={contentRef}
-              className="brain-dump-input quick-add-textarea quick-capture-input"
-              value={content}
-              onChange={event => setContent(event.target.value)}
-              placeholder={config.placeholder}
-            />
-          ) : (
-            <input
-              ref={titleRef}
-              className="brain-dump-input quick-capture-input"
-              value={title}
-              onChange={event => setTitle(event.target.value)}
-              onKeyDown={handleMainKeyDown}
-              placeholder={config.placeholder}
-            />
-          )}
-
-          {type === 'task' && (
-            <div className="inline-collapse">
-              <button type="button" className="ghost-button compact-ghost" onClick={() => setNotesOpen(current => !current)}>
-                {notesOpen ? 'Hide notes' : 'Add notes'}
-              </button>
-              {notesOpen && (
-                <textarea
-                  className="notes-textarea"
-                  value={notes}
-                  onChange={event => setNotes(event.target.value)}
-                  placeholder="Optional notes"
-                />
-              )}
-            </div>
-          )}
-
-          {type === 'meal' && (
-            <input
-              className="brain-dump-input"
-              value={tags}
-              onChange={event => setTags(event.target.value)}
-              placeholder="Tags: protein, carbs, quick…"
-            />
-          )}
-
-          {type === 'workout' && (
-            <input
-              className="brain-dump-input"
-              type="number"
-              min="1"
-              value={duration}
-              onChange={event => setDuration(event.target.value)}
-              placeholder="Duration in minutes"
-            />
-          )}
-
-          <button type="submit" className="primary-button full-width">
-            {config.submitLabel}
-          </button>
-        </form>
-
-        {/* Type switcher — secondary, below the form */}
-        <div className="segmented-control capture-type-switcher" role="tablist" aria-label="Capture type">
-          {TYPES.map(item => (
+        <div className="quick-add-tabs" role="tablist">
+          {TYPE_TABS.map(({ id, label }) => (
             <button
-              key={item}
+              key={id}
               type="button"
-              className={`segment-button ${item === type ? 'is-active' : ''}`}
-              onClick={() => handleManualTypeSwitch(item)}
+              role="tab"
+              aria-selected={activeType === id}
+              className={`quick-add-tab${activeType === id ? ' is-active' : ''}`}
+              onClick={() => setActiveType(id)}
             >
-              {item}
+              {label}
             </button>
           ))}
         </div>
+
+        <form className="quick-add-form" onSubmit={handleSubmit}>
+          {activeType === 'task' && (
+            <>
+              <label className="field-stack compact-field">
+                <span>Task</span>
+                <input
+                  ref={titleRef}
+                  className="brain-dump-input quick-capture-input"
+                  value={taskTitle}
+                  onChange={e => setTaskTitle(e.target.value)}
+                  placeholder="What needs to get done?"
+                />
+              </label>
+              <label className="field-stack compact-field quick-add-priority-row">
+                <input
+                  type="checkbox"
+                  checked={taskPriority}
+                  onChange={e => setTaskPriority(e.target.checked)}
+                />
+                <span>Priority</span>
+              </label>
+            </>
+          )}
+
+          {activeType === 'schedule' && (
+            <>
+              <label className="field-stack compact-field">
+                <span>Title</span>
+                <input
+                  ref={titleRef}
+                  className="brain-dump-input quick-capture-input"
+                  value={schedTitle}
+                  onChange={e => setSchedTitle(e.target.value)}
+                  placeholder="Meeting, block, or event name"
+                />
+              </label>
+              <div className="field-stack compact-field">
+                <span>Type</span>
+                <div className="quick-add-type-row">
+                  {['event', 'busy'].map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      className={`quick-add-type-chip${schedType === t ? ' is-active' : ''}`}
+                      onClick={() => setSchedType(t)}
+                    >
+                      {t === 'event' ? 'Event' : 'Busy block'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="quick-add-time-row">
+                <label className="field-stack compact-field">
+                  <span>Start</span>
+                  <input
+                    type="time"
+                    className="quick-capture-input"
+                    value={schedStart}
+                    onChange={e => setSchedStart(e.target.value)}
+                  />
+                </label>
+                <label className="field-stack compact-field">
+                  <span>End</span>
+                  <input
+                    type="time"
+                    className="quick-capture-input"
+                    value={schedEnd}
+                    onChange={e => setSchedEnd(e.target.value)}
+                  />
+                </label>
+              </div>
+            </>
+          )}
+
+          {activeType === 'workout' && (
+            <label className="field-stack compact-field">
+              <span>Session name</span>
+              <input
+                ref={titleRef}
+                className="brain-dump-input quick-capture-input"
+                value={workoutName}
+                onChange={e => setWorkoutName(e.target.value)}
+                placeholder="Workout name"
+              />
+            </label>
+          )}
+
+          {activeType === 'meal' && (
+            <>
+              <label className="field-stack compact-field">
+                <span>Item</span>
+                <input
+                  ref={titleRef}
+                  className="brain-dump-input quick-capture-input"
+                  value={mealName}
+                  onChange={e => setMealName(e.target.value)}
+                  placeholder="What did you eat or plan to eat?"
+                />
+              </label>
+              <div className="field-stack compact-field">
+                <span>Slot (optional)</span>
+                <div className="quick-add-type-row">
+                  {MEAL_SLOTS.map(slot => (
+                    <button
+                      key={slot}
+                      type="button"
+                      className={`quick-add-type-chip${mealSlot === slot ? ' is-active' : ''}`}
+                      onClick={() => setMealSlot(prev => (prev === slot ? '' : slot))}
+                    >
+                      {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          <button type="submit" className="primary-button full-width">
+            {SUBMIT_LABELS[activeType]}
+          </button>
+        </form>
       </div>
     </div>,
     document.body,

@@ -46,7 +46,6 @@ export default function AppFrame({
         userName={userName}
         inboxCount={inboxCount}
         onOpenInbox={onOpenInbox}
-        onOpenQuickAdd={onOpenQuickAdd}
         onOpenSettings={onOpenSettings}
       />
 
@@ -58,7 +57,8 @@ export default function AppFrame({
         type="button"
         className="fab-button"
         onClick={onOpenQuickAdd}
-        aria-label="Open quick capture"
+        aria-label="Quick Capture"
+        title="Quick Capture"
       >
         +
       </button>
