@@ -2871,10 +2871,12 @@ p {
 
 .home-status-strip {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   padding: 0;
   background: transparent;
   border-radius: 0;
+  width: 100%;
+  justify-items: center;
 }
 
 .home-status-label {
@@ -2884,34 +2886,31 @@ p {
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-}
-
-.home-status-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  text-align: center;
 }
 
 .home-status-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(8.5rem, 9rem));
+  justify-content: center;
   align-items: start;
-  row-gap: 8px;
-  column-gap: 16px;
-  overflow: visible;
-  padding-bottom: 0;
-  width: 100%;
+  row-gap: 10px;
+  column-gap: 18px;
+  width: max-content;
+  max-width: 100%;
+  justify-self: center;
 }
 
 .home-status-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
+  display: grid;
+  gap: 4px;
   padding: 0;
   min-width: 0;
-  justify-self: stretch;
-  align-items: flex-start;
+  width: max-content;
+  max-width: 100%;
+  align-content: start;
+  justify-items: start;
+  justify-self: center;
 }
 
 .home-status-item + .home-status-item {
@@ -2920,7 +2919,7 @@ p {
 }
 
 .home-status-inline {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
 }
@@ -2934,14 +2933,16 @@ p {
 }
 
 .home-status-item-value {
+  display: inline-flex;
+  align-items: center;
   font-size: 0.95rem;
   line-height: 1;
   color: var(--text);
 }
 
 .home-status-item--nutrition {
-  gap: 8px;
-  opacity: 0.76;
+  gap: 6px;
+  opacity: 0.94;
 }
 
 .home-fitness-dot {
@@ -2969,6 +2970,7 @@ p {
   grid-template-columns: repeat(4, 7px);
   gap: 4px;
   align-items: center;
+  min-height: 15px;
 }
 
 .home-nutrition-segment {
@@ -2992,6 +2994,7 @@ p {
   font-size: 0.82rem;
   line-height: 1;
   white-space: nowrap;
+  justify-self: center;
 }
 
 .home-readiness-dot {
@@ -3033,6 +3036,11 @@ p {
   .home-card {
     padding: 16px 18px;
   }
+  .home-status-row {
+    grid-template-columns: repeat(2, minmax(9rem, 10rem));
+    row-gap: 12px;
+    column-gap: 20px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -3045,14 +3053,13 @@ p {
   }
 
   .home-status-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(8rem, 8.75rem));
+    justify-content: center;
     column-gap: 16px;
-    row-gap: 8px;
-  }
-
-  .home-status-header {
-    align-items: flex-start;
+    row-gap: 10px;
+    width: max-content;
+    max-width: 100%;
+    justify-self: center;
   }
 
   .home-status-item {
