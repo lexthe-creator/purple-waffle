@@ -307,6 +307,8 @@ function getCalendarItemTypeLabel(type) {
   }
 }
 
+const TASK_STATUS_ORDER = { planned: 0, active: 1 };
+
 function HomeDashboard({ now }) {
   const { tasks, setTasks, workouts, meals, calendarItems } = useTaskContext();
   const { fitnessSettings, energyState } = useAppContext();
@@ -373,7 +375,9 @@ function HomeDashboard({ now }) {
         const leftPriority = left.priority ? 0 : 1;
         const rightPriority = right.priority ? 0 : 1;
         if (leftPriority !== rightPriority) return leftPriority - rightPriority;
-        if (left.status !== right.status) return left.status === 'active' ? -1 : 1;
+        const leftOrder = TASK_STATUS_ORDER[left.status] ?? 2;
+        const rightOrder = TASK_STATUS_ORDER[right.status] ?? 2;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
         return (left.createdAt || 0) - (right.createdAt || 0);
       })
       .slice(0, 3),
@@ -518,7 +522,7 @@ function HomeDashboard({ now }) {
                 key={task.id}
                 variant="card"
                 label={task.title || 'Untitled task'}
-                sub={task.notes || `${task.status === 'active' ? 'Active' : 'Planned'} priority`}
+                sub={task.notes || (task.status === 'active' ? 'Active' : 'Planned')}
                 onClick={() =>
                   setTasks(current =>
                     current.map(t =>
