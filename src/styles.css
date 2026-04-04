@@ -2602,7 +2602,7 @@ p {
 /* CALENDAR DASHBOARD REFRESH */
 
 .calendar-dashboard {
-  gap: 16px;
+  gap: 10px;
   padding-bottom: 120px;
 }
 
@@ -2616,7 +2616,7 @@ p {
 
 .calendar-page-title {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: var(--fs-xl);
   line-height: 1;
   letter-spacing: -0.03em;
 }
@@ -2709,7 +2709,7 @@ p {
 }
 
 .calendar-selected-title {
-  font-size: 1.35rem;
+  font-size: var(--fs-lg);
   letter-spacing: -0.03em;
 }
 
@@ -2797,7 +2797,19 @@ p {
   }
 
   .calendar-day-pill-row {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  .calendar-day-pill {
+    flex: 0 0 auto;
+    width: calc((100% - 6 * 8px) / 7);
+    min-width: 40px;
+    scroll-snap-align: start;
   }
 
   .calendar-selected-actions {
