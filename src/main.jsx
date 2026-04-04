@@ -2385,18 +2385,20 @@ function CalendarScreen() {
       <div className="calendar-week-header-row">
         <button
           type="button"
+          aria-label="Previous week"
           className="calendar-nav-pill"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
         >
           Prev
         </button>
 
-        <div className="calendar-range-title">
+        <div className="calendar-range-title" aria-hidden="true">
           {formatShortMonthDay(weekDays[0]?.key)} – {formatShortMonthDay(weekDays[6]?.key)}
         </div>
 
         <button
           type="button"
+          aria-label="Next week"
           className="calendar-nav-pill"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
         >
@@ -2404,22 +2406,30 @@ function CalendarScreen() {
         </button>
       </div>
 
-      <div className="calendar-day-pill-row">
+      <div className="calendar-day-pill-row" role="listbox" aria-label="Select a day">
         {weekDays.map(day => (
           <button
             key={day.key}
             type="button"
+            role="option"
+            aria-selected={selectedDate === day.key}
+            aria-current={day.isToday ? 'date' : undefined}
+            aria-label={new Date(`${day.key}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             className={`calendar-day-pill ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
             onClick={() => setSelectedDate(day.key)}
           >
-            <span className="calendar-day-pill-dow">{day.label.slice(0, 1)}</span>
-            <strong>{new Date(`${day.key}T12:00:00`).getDate()}</strong>
+            <span className="calendar-day-pill-dow" aria-hidden="true">{day.label.slice(0, 1)}</span>
+            <strong aria-hidden="true">{new Date(`${day.key}T12:00:00`).getDate()}</strong>
           </button>
         ))}
       </div>
     </section>
 
-    <section className="calendar-selected-header">
+    <span className="sr-only" aria-live="polite" aria-atomic="true">
+      {formatFullDate(selectedDate)} selected
+    </span>
+
+    <section className="calendar-week-header-card calendar-selected-header">
       <div>
         <h2 className="calendar-selected-title">{formatFullDate(selectedDate)}</h2>
       </div>
@@ -2427,30 +2437,14 @@ function CalendarScreen() {
         <button
           type="button"
           className="calendar-primary-button"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('busy');
-            setDraftTitle('');
-            setDraftStartTime('09:00');
-            setDraftEndTime('10:00');
-            setDraftNotes('');
-            setDraftPriority(false);
-          }}
+          onClick={() => { resetDraft(); setDraftType('busy'); }}
         >
           + Busy
         </button>
         <button
           type="button"
           className="calendar-primary-button"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('event');
-            setDraftTitle('');
-            setDraftStartTime('09:00');
-            setDraftEndTime('10:00');
-            setDraftNotes('');
-            setDraftPriority(false);
-          }}
+          onClick={() => { resetDraft(); setDraftType('event'); }}
         >
           + Event
         </button>
@@ -2459,64 +2453,32 @@ function CalendarScreen() {
 
     <section className="calendar-quick-blocks">
       <p className="eyebrow">Quick busy blocks</p>
-      <div className="calendar-quick-block-row">
+      <div role="group" aria-label="Quick busy block templates" className="calendar-quick-block-row">
         <button
           type="button"
           className="calendar-quick-chip"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('busy');
-            setDraftTitle('Morning meetings');
-            setDraftStartTime('08:00');
-            setDraftEndTime('11:30');
-            setDraftNotes('');
-            setDraftPriority(true);
-          }}
+          onClick={() => { resetDraft(); setDraftTitle('Morning meetings'); setDraftStartTime('08:00'); setDraftEndTime('11:30'); setDraftPriority(true); }}
         >
           Morning meetings
         </button>
         <button
           type="button"
           className="calendar-quick-chip"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('busy');
-            setDraftTitle('Lunch blocked');
-            setDraftStartTime('12:00');
-            setDraftEndTime('13:00');
-            setDraftNotes('');
-            setDraftPriority(false);
-          }}
+          onClick={() => { resetDraft(); setDraftTitle('Lunch blocked'); setDraftStartTime('12:00'); setDraftEndTime('13:00'); }}
         >
           Lunch blocked
         </button>
         <button
           type="button"
           className="calendar-quick-chip"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('busy');
-            setDraftTitle('Afternoon block');
-            setDraftStartTime('13:00');
-            setDraftEndTime('17:00');
-            setDraftNotes('');
-            setDraftPriority(false);
-          }}
+          onClick={() => { resetDraft(); setDraftTitle('Afternoon block'); setDraftStartTime('13:00'); setDraftEndTime('17:00'); }}
         >
           Afternoon block
         </button>
         <button
           type="button"
           className="calendar-quick-chip"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('busy');
-            setDraftTitle('All-day hold');
-            setDraftStartTime('08:00');
-            setDraftEndTime('18:00');
-            setDraftNotes('');
-            setDraftPriority(true);
-          }}
+          onClick={() => { resetDraft(); setDraftTitle('All-day hold'); setDraftStartTime('08:00'); setDraftEndTime('18:00'); setDraftPriority(true); }}
         >
           All-day hold
         </button>
@@ -2554,6 +2516,7 @@ function CalendarScreen() {
               action={['busy', 'event', 'task'].includes(item.type) ? (
                 <button
                   type="button"
+                  aria-label={`Edit ${item.title}`}
                   className="ghost-button compact-ghost"
                   onClick={() => setEditingItemId(item.id)}
                 >
@@ -2570,6 +2533,7 @@ function CalendarScreen() {
       <h3>Save this week as a pattern</h3>
       <div className="calendar-pattern-row">
         <input
+          aria-label="Pattern name"
           className="task-title-input calendar-pattern-input"
           value={patternName}
           onChange={event => setPatternName(event.target.value)}
@@ -2584,11 +2548,13 @@ function CalendarScreen() {
     <section className="calendar-editor-card">
       <SectionHeader eyebrow={editingItemId ? 'Edit item' : 'Add item'} title="Busy blocks, events, or tasks" />
       <div className="field-stack">
-        <div className="segmented-control">
+        <div role="radiogroup" aria-label="Item type" className="segmented-control">
           {['busy', 'event', 'task'].map(type => (
             <button
               key={type}
               type="button"
+              role="radio"
+              aria-checked={draftType === type}
               className={`status-chip ${draftType === type ? 'is-active' : ''}`}
               onClick={() => setDraftType(type)}
             >
@@ -2597,16 +2563,18 @@ function CalendarScreen() {
           ))}
         </div>
         <input
+          aria-label="Item title"
           className="task-title-input"
           value={draftTitle}
           onChange={event => setDraftTitle(event.target.value)}
           placeholder="Title"
         />
         <div className="calendar-time-row">
-          <input className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
-          <input className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
+          <input aria-label="Start time" className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
+          <input aria-label="End time" className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
         </div>
         <textarea
+          aria-label="Notes"
           className="task-title-input"
           rows={3}
           value={draftNotes}
