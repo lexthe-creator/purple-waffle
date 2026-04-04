@@ -1279,8 +1279,26 @@ p {
 }
 
 .modal-header {
+  display: flex;
   justify-content: space-between;
   align-items: flex-start;
+}
+
+/* Calendar bottom sheet — always anchored to bottom */
+.calendar-sheet-backdrop {
+  align-items: flex-end;
+  padding: 0;
+}
+
+.calendar-sheet-card {
+  width: 100%;
+  max-width: var(--shell-width);
+  border-radius: 20px 20px 0 0;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+}
+
+.calendar-pattern-expandable {
+  opacity: 0.8;
 }
 
 .segmented-control {

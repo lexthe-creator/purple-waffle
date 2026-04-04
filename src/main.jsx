@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import AppFrame from './components/AppFrame.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
@@ -2198,6 +2199,7 @@ function CalendarScreen() {
   const [draftNotes, setDraftNotes] = useState('');
   const [draftPriority, setDraftPriority] = useState(false);
   const [patternName, setPatternName] = useState('Weekly pattern');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { calendarPatterns, setCalendarPatterns, workCalendarPrefs } = useAppContext();
 
   const planState = useMemo(
@@ -2296,6 +2298,15 @@ function CalendarScreen() {
     }
   }, [selectedCalendarItem]);
 
+  useEffect(() => {
+    if (!sheetOpen) return;
+    function onKeyDown(event) {
+      if (event.key === 'Escape') resetDraft();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sheetOpen]);
+
   function resetDraft() {
     setEditingItemId(null);
     setDraftType('busy');
@@ -2304,6 +2315,18 @@ function CalendarScreen() {
     setDraftEndTime('10:00');
     setDraftNotes('');
     setDraftPriority(false);
+    setSheetOpen(false);
+  }
+
+  function openAddSheet() {
+    setEditingItemId(null);
+    setDraftType('busy');
+    setDraftTitle('');
+    setDraftStartTime('09:00');
+    setDraftEndTime('10:00');
+    setDraftNotes('');
+    setDraftPriority(false);
+    setSheetOpen(true);
   }
 
   function saveCalendarItem() {
@@ -2423,38 +2446,6 @@ function CalendarScreen() {
       <div>
         <h2 className="calendar-selected-title">{formatFullDate(selectedDate)}</h2>
       </div>
-      <div className="calendar-selected-actions">
-        <button
-          type="button"
-          className="calendar-primary-button"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('busy');
-            setDraftTitle('');
-            setDraftStartTime('09:00');
-            setDraftEndTime('10:00');
-            setDraftNotes('');
-            setDraftPriority(false);
-          }}
-        >
-          + Busy
-        </button>
-        <button
-          type="button"
-          className="calendar-primary-button"
-          onClick={() => {
-            setEditingItemId(null);
-            setDraftType('event');
-            setDraftTitle('');
-            setDraftStartTime('09:00');
-            setDraftEndTime('10:00');
-            setDraftNotes('');
-            setDraftPriority(false);
-          }}
-        >
-          + Event
-        </button>
-      </div>
     </section>
 
     <section className="calendar-quick-blocks">
@@ -2471,6 +2462,7 @@ function CalendarScreen() {
             setDraftEndTime('11:30');
             setDraftNotes('');
             setDraftPriority(true);
+            setSheetOpen(true);
           }}
         >
           Morning meetings
@@ -2486,6 +2478,7 @@ function CalendarScreen() {
             setDraftEndTime('13:00');
             setDraftNotes('');
             setDraftPriority(false);
+            setSheetOpen(true);
           }}
         >
           Lunch blocked
@@ -2501,6 +2494,7 @@ function CalendarScreen() {
             setDraftEndTime('17:00');
             setDraftNotes('');
             setDraftPriority(false);
+            setSheetOpen(true);
           }}
         >
           Afternoon block
@@ -2516,6 +2510,7 @@ function CalendarScreen() {
             setDraftEndTime('18:00');
             setDraftNotes('');
             setDraftPriority(true);
+            setSheetOpen(true);
           }}
         >
           All-day hold
@@ -2541,7 +2536,7 @@ function CalendarScreen() {
       {selectedDayItems.length === 0 ? (
         <EmptyState
           title="Nothing scheduled"
-          description="Use + Busy or + Event above to block time or add an item to this day."
+          description="Tap + to add a busy block, event, or task to this day."
         />
       ) : (
         <div className="subtle-feed">
@@ -2555,7 +2550,7 @@ function CalendarScreen() {
                 <button
                   type="button"
                   className="ghost-button compact-ghost"
-                  onClick={() => setEditingItemId(item.id)}
+                  onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
                 >
                   Edit
                 </button>
@@ -2566,8 +2561,9 @@ function CalendarScreen() {
       )}
     </section>
 
-    <section className="calendar-pattern-card">
-      <h3>Save this week as a pattern</h3>
+    <FloatingActionButton icon="+" onClick={openAddSheet} />
+
+    <ExpandablePanel header="Save as pattern" className="calendar-pattern-expandable">
       <div className="calendar-pattern-row">
         <input
           className="task-title-input calendar-pattern-input"
@@ -2579,56 +2575,7 @@ function CalendarScreen() {
           Save
         </button>
       </div>
-    </section>
-
-    <section className="calendar-editor-card">
-      <SectionHeader eyebrow={editingItemId ? 'Edit item' : 'Add item'} title="Busy blocks, events, or tasks" />
-      <div className="field-stack">
-        <div className="segmented-control">
-          {['busy', 'event', 'task'].map(type => (
-            <button
-              key={type}
-              type="button"
-              className={`status-chip ${draftType === type ? 'is-active' : ''}`}
-              onClick={() => setDraftType(type)}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-        <input
-          className="task-title-input"
-          value={draftTitle}
-          onChange={event => setDraftTitle(event.target.value)}
-          placeholder="Title"
-        />
-        <div className="calendar-time-row">
-          <input className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
-          <input className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
-        </div>
-        <textarea
-          className="task-title-input"
-          rows={3}
-          value={draftNotes}
-          onChange={event => setDraftNotes(event.target.value)}
-          placeholder="Notes"
-        />
-        <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>Priority</span>
-          <input type="checkbox" checked={draftPriority} onChange={event => setDraftPriority(event.target.checked)} />
-        </label>
-        <div className="inline-actions">
-          <button type="button" className="primary-button" onClick={saveCalendarItem}>
-            {editingItemId ? 'Save changes' : 'Add item'}
-          </button>
-          {editingItemId && (
-            <button type="button" className="ghost-button compact-ghost" onClick={resetDraft}>
-              Cancel edit
-            </button>
-          )}
-        </div>
-      </div>
-    </section>
+    </ExpandablePanel>
 
     {calendarPatterns.length > 0 && (
       <section className="calendar-saved-patterns-card">
@@ -2649,6 +2596,98 @@ function CalendarScreen() {
           ))}
         </div>
       </section>
+    )}
+
+    {sheetOpen && createPortal(
+      <div
+        className="modal-backdrop calendar-sheet-backdrop"
+        onClick={resetDraft}
+      >
+        <div
+          className="modal-card calendar-sheet-card"
+          onClick={event => event.stopPropagation()}
+        >
+          <div className="modal-header">
+            <h2 style={{ margin: 0 }}>{editingItemId ? 'Edit item' : 'Add item'}</h2>
+            <button type="button" className="ghost-button compact-ghost" onClick={resetDraft}>✕</button>
+          </div>
+
+          <div className="segmented-control">
+            {['busy', 'event', 'task'].map(type => (
+              <button
+                key={type}
+                type="button"
+                className={`status-chip ${draftType === type ? 'is-active' : ''}`}
+                onClick={() => setDraftType(type)}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+
+          <input
+            className="task-title-input"
+            value={draftTitle}
+            onChange={event => setDraftTitle(event.target.value)}
+            placeholder="Title"
+            autoFocus
+          />
+
+          <div className="calendar-time-row">
+            <input
+              className="task-title-input"
+              type="time"
+              value={draftStartTime}
+              onChange={event => setDraftStartTime(event.target.value)}
+            />
+            <input
+              className="task-title-input"
+              type="time"
+              value={draftEndTime}
+              onChange={event => setDraftEndTime(event.target.value)}
+            />
+          </div>
+
+          <ExpandablePanel header="More details">
+            <div className="field-stack">
+              <textarea
+                className="task-title-input"
+                rows={3}
+                value={draftNotes}
+                onChange={event => setDraftNotes(event.target.value)}
+                placeholder="Notes"
+              />
+              <label
+                className="field-stack compact-field"
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <span>Priority</span>
+                <input
+                  type="checkbox"
+                  checked={draftPriority}
+                  onChange={event => setDraftPriority(event.target.checked)}
+                />
+              </label>
+            </div>
+          </ExpandablePanel>
+
+          <div className="inline-actions">
+            <button type="button" className="primary-button" onClick={saveCalendarItem}>
+              {editingItemId ? 'Save changes' : 'Add item'}
+            </button>
+            {editingItemId && (
+              <button
+                type="button"
+                className="ghost-button compact-ghost"
+                onClick={() => deleteCalendarItem(editingItemId)}
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body,
     )}
   </div>
 );
