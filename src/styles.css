@@ -2866,6 +2866,95 @@ p {
     font-size: var(--fs-md);
   }
 }
+/* ── Calendar redesign: contextual header ─────────────────── */
+.cal-header {
+  display: grid;
+  gap: 2px;
+  padding: 4px 2px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cal-header-primary {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.cal-header-secondary {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ── Calendar agenda card (primary section) ───────────────── */
+.cal-agenda-card {
+  /* inherits home-card + home-section visual language */
+}
+
+/* ── Google sync status module ────────────────────────────── */
+.cal-sync-card {
+  /* inherits home-card + home-section visual language */
+}
+
+.cal-sync-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.cal-sync-status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.cal-sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cal-sync-dot--off {
+  background: var(--text-secondary);
+  opacity: 0.4;
+}
+
+.cal-sync-dot--on {
+  background: var(--success-text);
+}
+
+.cal-sync-dot--error {
+  background: var(--accent-danger);
+}
+
+.cal-sync-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cal-sync-desc {
+  margin: var(--sp-2) 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── Responsive adjustments ───────────────────────────────── */
+@media (max-width: 520px) {
+  .cal-header-primary {
+    font-size: var(--fs-lg);
+  }
+}
+
 .shell-stack {
   gap: 14px;
 }
