@@ -2567,60 +2567,7 @@ function CalendarScreen() {
           Save
         </button>
       </div>
-    </section>
-
-    <section className="calendar-editor-card">
-      <SectionHeader eyebrow={editingItemId ? 'Edit item' : 'Add item'} title="Busy blocks, events, or tasks" />
-      <div className="field-stack">
-        <div role="radiogroup" aria-label="Item type" className="segmented-control">
-          {['busy', 'event', 'task'].map(type => (
-            <button
-              key={type}
-              type="button"
-              role="radio"
-              aria-checked={draftType === type}
-              className={`status-chip ${draftType === type ? 'is-active' : ''}`}
-              onClick={() => setDraftType(type)}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-        <input
-          aria-label="Item title"
-          className="task-title-input"
-          value={draftTitle}
-          onChange={event => setDraftTitle(event.target.value)}
-          placeholder="Title"
-        />
-        <div className="calendar-time-row">
-          <input aria-label="Start time" className="task-title-input" type="time" value={draftStartTime} onChange={event => setDraftStartTime(event.target.value)} />
-          <input aria-label="End time" className="task-title-input" type="time" value={draftEndTime} onChange={event => setDraftEndTime(event.target.value)} />
-        </div>
-        <textarea
-          aria-label="Notes"
-          className="task-title-input"
-          rows={3}
-          value={draftNotes}
-          onChange={event => setDraftNotes(event.target.value)}
-          placeholder="Notes"
-        />
-        <label className="field-stack compact-field" style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>Priority</span>
-          <input type="checkbox" checked={draftPriority} onChange={event => setDraftPriority(event.target.checked)} />
-        </label>
-        <div className="inline-actions">
-          <button type="button" className="primary-button" onClick={saveCalendarItem}>
-            {editingItemId ? 'Save changes' : 'Add item'}
-          </button>
-          {editingItemId && (
-            <button type="button" className="ghost-button compact-ghost" onClick={resetDraft}>
-              Cancel edit
-            </button>
-          )}
-        </div>
-      </div>
-    </section>
+    </ExpandablePanel>
 
     {calendarPatterns.length > 0 && (
       <section className="calendar-saved-patterns-card">
