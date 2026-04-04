@@ -34,7 +34,7 @@ import {
   getRecoveryAwareWorkoutSuggestions,
   resolveWeeklyTrainingPlan,
 } from './data/hubData.js';
-import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, ExpandablePanel } from './components/ui/index.js';
+import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, ExpandablePanel, FloatingActionButton } from './components/ui/index.js';
 import './styles.css';
 
 const ROOT_TABS = [
