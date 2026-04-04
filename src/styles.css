@@ -2789,11 +2789,19 @@ p {
 }
 
 @media (max-width: 720px) {
-  .calendar-week-header-row,
+  /* Only stack the selected-header and pattern-row — keep week nav as a row */
   .calendar-selected-header,
   .calendar-pattern-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* Shrink nav pills so they stay inline with the date range on small screens */
+  .calendar-nav-pill {
+    min-width: 72px;
+    min-height: 40px;
+    padding: 0 14px;
+    font-size: var(--fs-sm);
   }
 
   .calendar-day-pill-row {
@@ -2818,6 +2826,45 @@ p {
 
   .calendar-selected-actions .calendar-primary-button {
     flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .calendar-page-title {
+    font-size: var(--fs-md);
+  }
+
+  .calendar-range-title,
+  .calendar-selected-title {
+    font-size: var(--fs-base);
+    font-weight: 600;
+  }
+
+  .calendar-primary-button,
+  .calendar-sync-button {
+    min-height: 40px;
+    padding: 0 16px;
+    font-size: var(--fs-base);
+  }
+
+  .calendar-day-pill {
+    min-height: 56px;
+  }
+
+  .calendar-sync-card {
+    padding: 20px 16px;
+  }
+
+  .calendar-sync-card h3 {
+    font-size: var(--fs-md);
+  }
+
+  .calendar-sync-card p {
+    font-size: var(--fs-base);
+  }
+
+  .calendar-pattern-card h3 {
+    font-size: var(--fs-md);
   }
 }
 .shell-stack {
