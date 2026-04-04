@@ -2723,6 +2723,10 @@ p {
   background: var(--primary-soft);
 }
 
+.calendar-day-pill.is-today strong {
+  color: var(--primary);
+}
+
 .calendar-day-pill-dow {
   font-size: var(--fs-2xs);
   text-transform: uppercase;
@@ -2775,8 +2779,6 @@ p {
 
 .calendar-sync-card {
   text-align: center;
-  background: var(--surface);
-  padding: var(--sp-6) var(--sp-5);
 }
 
 .calendar-sync-card h3 {
@@ -2852,8 +2854,16 @@ p {
     min-height: 56px;
   }
 
-  .calendar-sync-card {
-    padding: var(--sp-5) var(--sp-4);
+  .calendar-sync-card h3 {
+    font-size: var(--fs-md);
+  }
+
+  .calendar-sync-card p {
+    font-size: var(--fs-base);
+  }
+
+  .calendar-pattern-card h3 {
+    font-size: var(--fs-md);
   }
 }
 .shell-stack {
