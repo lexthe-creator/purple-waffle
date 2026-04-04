@@ -34,7 +34,7 @@ import {
   getRecoveryAwareWorkoutSuggestions,
   resolveWeeklyTrainingPlan,
 } from './data/hubData.js';
-import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, ExpandablePanel, FloatingActionButton } from './components/ui/index.js';
+import { Card, SectionHeader, MetricBlock, ListRow, EmptyState, ExpandablePanel } from './components/ui/index.js';
 import './styles.css';
 
 const ROOT_TABS = [
@@ -595,6 +595,36 @@ function formatDateLabel(value) {
     month: 'short',
     day: 'numeric',
   }).format(new Date(value));
+}
+
+function getContextualDateLabel(dateKey) {
+  const todayK = toDateKey(new Date());
+  const tomorrowK = toDateKey(addDays(new Date(), 1));
+  const yesterdayK = toDateKey(addDays(new Date(), -1));
+
+  const targetDate = new Date(`${dateKey}T12:00:00`);
+  const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'long' });
+  const monthDay = targetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
+  if (dateKey === todayK) return { primary: 'Today', secondary: `${weekday}, ${monthDay}` };
+  if (dateKey === tomorrowK) return { primary: 'Tomorrow', secondary: `${weekday}, ${monthDay}` };
+  if (dateKey === yesterdayK) return { primary: 'Yesterday', secondary: `${weekday}, ${monthDay}` };
+
+  const nowMidnight = new Date();
+  nowMidnight.setHours(0, 0, 0, 0);
+  const targetMidnight = new Date(`${dateKey}T00:00:00`);
+  const diffDays = Math.round((targetMidnight - nowMidnight) / (1000 * 60 * 60 * 24));
+
+  if (diffDays >= 2 && diffDays <= 6) return { primary: weekday, secondary: monthDay };
+  if (diffDays >= 7 && diffDays <= 13) return { primary: 'Next week', secondary: `${weekday}, ${monthDay}` };
+  return { primary: weekday, secondary: `${weekday}, ${monthDay}` };
+}
+
+function getItemStatusTone(itemType) {
+  if (itemType === 'busy') return 'status-priority';
+  if (itemType === 'event') return 'status-active';
+  if (itemType === 'workout') return 'status-active';
+  return 'status-planned';
 }
 
 function formatFullDate(value) {
@@ -2287,6 +2317,12 @@ function CalendarScreen() {
     [calendarItems, editingItemId],
   );
 
+  const contextLabel = useMemo(() => getContextualDateLabel(selectedDate), [selectedDate]);
+  const agendaStatus = selectedDayItems.length > 0
+    ? `${selectedDayItems.length} item${selectedDayItems.length === 1 ? '' : 's'}`
+    : 'Open';
+  const agendaStatusTone = selectedDayItems.length > 0 ? 'status-active' : 'status-planned';
+
   useEffect(() => {
     if (selectedCalendarItem) {
       setDraftType(selectedCalendarItem.type);
@@ -2398,12 +2434,14 @@ function CalendarScreen() {
 
   return (
   <div className="tab-stack calendar-dashboard">
-    <section className="calendar-topbar">
-      <div>
-        <h1 className="calendar-page-title">Calendar</h1>
-      </div>
+
+    {/* Selected-date-aware contextual header */}
+    <section className="cal-header">
+      <p className="cal-header-primary">{contextLabel.primary}</p>
+      <p className="cal-header-secondary">{contextLabel.secondary}</p>
     </section>
 
+    {/* Week strip */}
     <section className="calendar-week-header-card">
       <div className="calendar-week-header-row">
         <button
@@ -2412,7 +2450,7 @@ function CalendarScreen() {
           className="calendar-nav-pill"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
         >
-          Prev
+          ← Prev
         </button>
 
         <div className="calendar-range-title" aria-hidden="true">
@@ -2425,7 +2463,7 @@ function CalendarScreen() {
           className="calendar-nav-pill"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
         >
-          Next
+          Next →
         </button>
       </div>
 
@@ -2452,90 +2490,31 @@ function CalendarScreen() {
       {formatFullDate(selectedDate)} selected
     </span>
 
-    <section className="calendar-week-header-card calendar-selected-header">
-      <div>
-        <h2 className="calendar-selected-title">{formatFullDate(selectedDate)}</h2>
-      </div>
-      <div className="calendar-selected-actions">
-        <button
-          type="button"
-          className="calendar-primary-button"
-          onClick={() => { resetDraft(); setDraftType('busy'); }}
-        >
-          + Busy
-        </button>
-        <button
-          type="button"
-          className="calendar-primary-button"
-          onClick={() => { resetDraft(); setDraftType('event'); }}
-        >
-          + Event
-        </button>
-      </div>
-    </section>
-
-    <section className="calendar-quick-blocks">
-      <p className="eyebrow">Quick busy blocks</p>
-      <div role="group" aria-label="Quick busy block templates" className="calendar-quick-block-row">
-        <button
-          type="button"
-          className="calendar-quick-chip"
-          onClick={() => { resetDraft(); setDraftTitle('Morning meetings'); setDraftStartTime('08:00'); setDraftEndTime('11:30'); setDraftPriority(true); }}
-        >
-          Morning meetings
-        </button>
-        <button
-          type="button"
-          className="calendar-quick-chip"
-          onClick={() => { resetDraft(); setDraftTitle('Lunch blocked'); setDraftStartTime('12:00'); setDraftEndTime('13:00'); }}
-        >
-          Lunch blocked
-        </button>
-        <button
-          type="button"
-          className="calendar-quick-chip"
-          onClick={() => { resetDraft(); setDraftTitle('Afternoon block'); setDraftStartTime('13:00'); setDraftEndTime('17:00'); }}
-        >
-          Afternoon block
-        </button>
-        <button
-          type="button"
-          className="calendar-quick-chip"
-          onClick={() => { resetDraft(); setDraftTitle('All-day hold'); setDraftStartTime('08:00'); setDraftEndTime('18:00'); setDraftPriority(true); }}
-        >
-          All-day hold
-        </button>
-      </div>
-    </section>
-
-    <section className="calendar-sync-card">
-      <h3>Connect Google to sync</h3>
-      <p>
-        Calendar and Tasks integration requires a Google account connection in Settings.
-      </p>
-      <button
-        type="button"
-        className="calendar-sync-button"
-        onClick={() => window.alert('Google Calendar connection setup will live in Settings.')}
-      >
-        Go to Settings - Google
-      </button>
-    </section>
-
-    <section className="calendar-day-content-card">
-      {selectedDayItems.length === 0 ? (
-        <EmptyState
-          title="Nothing scheduled"
-          description="Tap + to add a busy block, event, or task to this day."
-        />
-      ) : (
-        <div className="subtle-feed">
-          {selectedDayItems.map(item => (
+    {/* Primary agenda card – main feature of the page */}
+    <Card variant="flat" className="home-card home-section cal-agenda-card">
+      <SectionHeader
+        eyebrow={contextLabel.primary}
+        title="Day schedule"
+        action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
+      />
+      <div className="home-list">
+        {selectedDayItems.length === 0 ? (
+          <EmptyState
+            title="Nothing scheduled"
+            description="Tap + to add a busy block, event, or task to this day."
+          />
+        ) : (
+          selectedDayItems.map(item => (
             <ListRow
               key={item.id}
               variant="card"
               label={item.title}
               sub={item.subtitle || item.type}
+              trailing={
+                <span className={`status-pill ${getItemStatusTone(item.type)}`}>
+                  {getCalendarItemTypeLabel(item.type)}
+                </span>
+              }
               action={['busy', 'event', 'task'].includes(item.type) ? (
                 <button
                   type="button"
@@ -2547,13 +2526,30 @@ function CalendarScreen() {
                 </button>
               ) : undefined}
             />
-          ))}
+          ))
+        )}
+      </div>
+    </Card>
+
+    {/* Google sync – connection status module, visually secondary */}
+    <Card variant="flat" className="home-card home-section cal-sync-card">
+      <div className="cal-sync-row">
+        <div className="cal-sync-status">
+          <span className="cal-sync-dot cal-sync-dot--off" aria-hidden="true" />
+          <span className="cal-sync-title">Google not connected</span>
         </div>
-      )}
-    </section>
+        <button
+          type="button"
+          className="ghost-button compact-ghost"
+          onClick={() => window.alert('Google Calendar connection setup will live in Settings.')}
+        >
+          Go to Settings
+        </button>
+      </div>
+      <p className="cal-sync-desc">Connect Google Calendar in Settings to import events automatically.</p>
+    </Card>
 
-    <FloatingActionButton icon="+" onClick={openAddSheet} />
-
+    {/* Pattern utility – demoted, collapsed by default */}
     <ExpandablePanel header="Save as pattern" className="calendar-pattern-expandable">
       <div className="calendar-pattern-row">
         <input
@@ -2588,6 +2584,20 @@ function CalendarScreen() {
           ))}
         </div>
       </section>
+    )}
+
+    {/* Single FAB – rendered via portal so it sits above AppFrame's generic FAB */}
+    {createPortal(
+      <button
+        type="button"
+        className="fab-button"
+        onClick={openAddSheet}
+        aria-label="Add calendar item"
+        title="Add calendar item"
+      >
+        +
+      </button>,
+      document.body,
     )}
 
     {sheetOpen && createPortal(
