@@ -2645,8 +2645,8 @@ p {
 .calendar-day-content-card,
 .calendar-editor-card,
 .calendar-saved-patterns-card {
-  background: var(--card);
-  border: 1px solid var(--border-card);
+  background: color-mix(in srgb, var(--surface) 78%, white 22%);
+  border: 1px solid rgba(214, 221, 228, 0.86);
   border-radius: var(--r-xl);
   padding: var(--sp-4) var(--sp-5);
   box-shadow: var(--sh-sm);
@@ -2668,8 +2668,8 @@ p {
 .calendar-range-title,
 .calendar-selected-title {
   margin: 0;
-  font-size: var(--fs-lg);
-  font-weight: 700;
+  font-size: var(--fs-md);
+  font-weight: 600;
   color: var(--text-primary);
 }
 
@@ -2688,7 +2688,7 @@ p {
   min-width: 80px;
   padding: 0 var(--sp-5);
   background: var(--primary-soft);
-  color: var(--text-primary);
+  color: var(--primary);
   font-size: var(--fs-sm);
 }
 
@@ -2701,7 +2701,7 @@ p {
 .calendar-day-pill {
   min-height: 64px;
   border-radius: var(--r-xl);
-  border: 1px solid var(--border-card);
+  border: 1px solid rgba(214, 221, 228, 0.9);
   background: var(--card);
   color: var(--text-secondary);
   display: flex;
@@ -2719,8 +2719,13 @@ p {
 }
 
 .calendar-day-pill.is-active {
-  border: 2px solid var(--primary);
-  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 55%, white 45%);
+  background: color-mix(in srgb, var(--primary-soft) 72%, white 28%);
+  box-shadow: var(--sh-sm);
+}
+
+.calendar-day-pill.is-today {
+  border-color: color-mix(in srgb, var(--primary) 24%, white 76%);
 }
 
 .calendar-day-pill.is-today strong {
@@ -2775,23 +2780,6 @@ p {
   font-size: var(--fs-sm);
   font-weight: 500;
   cursor: pointer;
-}
-
-.calendar-sync-card {
-  text-align: center;
-}
-
-.calendar-sync-card h3 {
-  margin: 0 0 var(--sp-2);
-  font-size: var(--fs-md);
-  font-weight: 600;
-}
-
-.calendar-sync-card p {
-  margin: 0 auto var(--sp-4);
-  max-width: 36rem;
-  color: var(--muted);
-  font-size: var(--fs-sm);
 }
 
 .calendar-empty-copy {
@@ -2854,24 +2842,15 @@ p {
     min-height: 56px;
   }
 
-  .calendar-sync-card h3 {
-    font-size: var(--fs-md);
-  }
-
-  .calendar-sync-card p {
-    font-size: var(--fs-base);
-  }
-
-  .calendar-pattern-card h3 {
-    font-size: var(--fs-md);
+  .calendar-pattern-row {
+    align-items: stretch;
   }
 }
 /* ── Calendar redesign: contextual header ─────────────────── */
 .cal-header {
   display: grid;
-  gap: 2px;
-  padding: 4px 2px 10px;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
+  padding: 2px 2px 8px;
 }
 
 .cal-header-primary {
@@ -2893,17 +2872,58 @@ p {
 
 /* ── Calendar agenda card (primary section) ───────────────── */
 .cal-agenda-card {
-  /* inherits home-card + home-section visual language */
+  gap: 12px;
+}
+
+.cal-agenda-copy {
+  margin-top: -2px;
+}
+
+.cal-agenda-row {
+  align-items: flex-start;
+}
+
+.cal-agenda-row .ui-list-row__label {
+  white-space: normal;
+}
+
+.cal-agenda-row .ui-list-row__sub {
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+.cal-row-trailing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* ── Google sync status module ────────────────────────────── */
 .cal-sync-card {
-  /* inherits home-card + home-section visual language */
+  text-align: left;
+}
+
+.cal-utility-card.ui-card {
+  gap: 12px;
+  background: color-mix(in srgb, var(--surface) 78%, white 22%);
+  border-color: rgba(214, 221, 228, 0.9);
+  box-shadow: var(--sh-sm);
+}
+
+.cal-utility-card.is-attention.ui-card {
+  background: color-mix(in srgb, var(--card) 86%, var(--primary-soft) 14%);
+  border-color: color-mix(in srgb, var(--primary) 20%, rgba(214, 221, 228, 0.9) 80%);
+}
+
+.cal-utility-card.is-quiet.ui-card {
+  box-shadow: none;
 }
 
 .cal-sync-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--sp-3);
   flex-wrap: wrap;
@@ -2941,6 +2961,13 @@ p {
   color: var(--text-primary);
 }
 
+.cal-sync-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .cal-sync-desc {
   margin: var(--sp-2) 0 0;
   font-size: var(--fs-sm);
@@ -2948,10 +2975,40 @@ p {
   line-height: 1.5;
 }
 
+.cal-utility-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.cal-utility-title {
+  margin: 4px 0 0;
+  font-size: var(--fs-md);
+  line-height: 1.2;
+}
+
+.calendar-pattern-expandable {
+  opacity: 1;
+}
+
+.cal-pattern-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 /* ── Responsive adjustments ───────────────────────────────── */
 @media (max-width: 520px) {
   .cal-header-primary {
     font-size: var(--fs-lg);
+  }
+
+  .cal-row-trailing,
+  .cal-sync-actions,
+  .cal-utility-header {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 

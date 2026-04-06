@@ -38,6 +38,7 @@ export default function AppFrame({
   onOpenInbox,
   onOpenQuickAdd,
   onOpenSettings,
+  showQuickAddFab = true,
   children,
 }) {
   return (
@@ -53,15 +54,17 @@ export default function AppFrame({
         <div className="app-page">{children}</div>
       </main>
 
-      <button
-        type="button"
-        className="fab-button"
-        onClick={onOpenQuickAdd}
-        aria-label="Quick Capture"
-        title="Quick Capture"
-      >
-        +
-      </button>
+      {showQuickAddFab && (
+        <button
+          type="button"
+          className="fab-button"
+          onClick={onOpenQuickAdd}
+          aria-label="Quick Capture"
+          title="Quick Capture"
+        >
+          +
+        </button>
+      )}
 
       <BottomNav tabs={tabs} activeTab={activeTab} onChange={onTabChange} />
     </div>
