@@ -2755,12 +2755,12 @@ function CalendarScreen({ onOpenSettings }) {
 
     {/* Selected-date-aware contextual header */}
     <section className="cal-header">
-      <p className="cal-header-primary">{contextLabel.primary}</p>
-      <p className="cal-header-secondary">{contextLabel.secondary}</p>
+      <SectionHeader eyebrow="Calendar" title={contextLabel.primary} />
+      <p className="home-card-copy cal-header-secondary">{contextLabel.secondary}</p>
     </section>
 
     {/* Week strip */}
-    <section className="calendar-week-header-card">
+    <Card variant="flat" className="home-card home-section calendar-week-header-card">
       <div className="calendar-week-header-row">
         <button
           type="button"
@@ -2802,14 +2802,14 @@ function CalendarScreen({ onOpenSettings }) {
           </button>
         ))}
       </div>
-    </section>
+    </Card>
 
     <span className="sr-only" aria-live="polite" aria-atomic="true">
       {formatFullDate(selectedDate)} selected
     </span>
 
     {/* Primary agenda card – main feature of the page */}
-      <Card variant="flat" className="home-card home-section cal-agenda-card">
+    <Card variant="flat" className="home-card home-section cal-agenda-card">
       <SectionHeader
         eyebrow="Agenda"
         title={`${exactSelectedDate} agenda`}
@@ -2830,21 +2830,17 @@ function CalendarScreen({ onOpenSettings }) {
               className="cal-agenda-row"
               label={item.title}
               sub={item.subtitle || item.type}
+              onClick={['busy', 'event', 'task'].includes(item.type)
+                ? () => {
+                  setEditingItemId(item.id);
+                  setSheetOpen(true);
+                }
+                : undefined}
               trailing={
                 <div className="cal-row-trailing">
                   <span className={`status-pill ${getItemStatusTone(item.type)}`}>
                     {getCalendarItemTypeLabel(item.type)}
                   </span>
-                  {['busy', 'event', 'task'].includes(item.type) && (
-                    <button
-                      type="button"
-                      aria-label={`Edit ${item.title}`}
-                      className="ghost-button compact-ghost"
-                      onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
-                    >
-                      Edit
-                    </button>
-                  )}
                 </div>
               }
             />
@@ -2855,8 +2851,8 @@ function CalendarScreen({ onOpenSettings }) {
 
     {/* Google sync – connection status module, visually secondary */}
     <Card
-      variant={syncCardState.needsAttention ? 'default' : 'tinted'}
-      className={`home-card cal-sync-card cal-utility-card ${syncCardState.needsAttention ? 'is-attention' : 'is-quiet'}`}
+      variant="flat"
+      className={`home-card home-section cal-sync-card cal-utility-card ${syncCardState.needsAttention ? 'is-attention' : 'is-quiet'}`}
     >
       <div className="cal-sync-row">
         <div className="cal-sync-status">
@@ -2878,7 +2874,7 @@ function CalendarScreen({ onOpenSettings }) {
     </Card>
 
     {/* Pattern utility – demoted, collapsed by default */}
-    <Card variant="tinted" className="home-card cal-pattern-card cal-utility-card">
+    <Card variant="flat" className="home-card home-section cal-pattern-card cal-utility-card">
       <ExpandablePanel
         header={(
           <div className="cal-utility-header">
@@ -3770,53 +3766,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     upsertNotification('Session skipped', session.label || session.title);
   }
 
-  function updateWeeklySessionStatus(session, nextStatus) {
-    const existingWorkout = getWorkoutRecordForDate(workouts, session.dateKey);
-    if (nextStatus === 'completed') {
-      if (existingWorkout) {
-        updateWorkoutById(existingWorkout.id, workout => ({
-          ...workout,
-          status: 'completed',
-          completedAt: Date.now(),
-          workoutLog: mergeWorkoutLog(workout, {
-            completionLoggedAt: Date.now(),
-            completionSource: 'manual_completion',
-          }),
-        }));
-        upsertNotification('Workout completed', session.label || session.title || 'Workout');
-        setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
-        return;
-      }
-      const completedWorkout = createWorkoutFromSession({
-        createWorkout,
-        createExercise,
-        session,
-        settings: fitnessSettings,
-        todayKey: session.dateKey,
-      });
-      appendWorkout({ ...completedWorkout, status: 'completed', completedAt: Date.now() });
-      upsertNotification('Workout completed', session.label || session.title || 'Workout');
-      setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
-      return;
-    }
-    if (nextStatus === 'skipped') {
-      if (existingWorkout) {
-        updateWorkoutById(existingWorkout.id, workout => ({
-          ...workout,
-          status: 'skipped',
-          workoutLog: mergeWorkoutLog(workout, {
-            completionLoggedAt: Date.now(),
-            completionSource: 'missed_cutoff',
-          }),
-        }));
-        setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
-        upsertNotification('Session skipped', session.label || session.title || 'Workout');
-        return;
-      }
-      skipMissedSession(session);
-    }
-  }
-
   return (
     <div className="tab-stack fitness-stack">
       {activeWorkout && (
@@ -3831,7 +3780,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
       {!activeWorkout && (
         <>
-          <section className="task-card fitness-hero-card">
+          <Card variant="flat" className="home-card home-section fitness-hero-card">
             {!hasGeneratedSchedule ? (
               <EmptyState
                 title={programEmptyState.title}
@@ -3964,16 +3913,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </div>
               </>
             )}
-          </section>
+          </Card>
 
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">This Week</p>
-                <h2>{planState.label}</h2>
-                <p className="empty-message">Tap any day to load that workout into the hero above.</p>
-              </div>
-            </div>
+          <Card variant="flat" className="home-card home-section fitness-week-card">
+            <SectionHeader eyebrow="This Week" title={planState.label} />
+            <p className="home-card-copy">Tap any day to load that workout into the detail section above.</p>
             <div className="fitness-week-grid" role="list" aria-label="Weekly workout plan">
               {weekDays.map(({ key, dayLabel, session, isToday, tileStatus }) => (
                 <button
@@ -4022,21 +3966,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                       <span className={`status-pill ${day.stateMeta.className}`}>{day.stateMeta.label}</span>
                     </div>
                   </button>
-                  {selectedDateKey === day.key && day.session && day.key <= todayKey && day.stateMeta.state !== 'done' && (
-                    <div className="tag-row fitness-week-actions">
-                      {day.isToday && (
-                        <button type="button" className="status-chip is-active" onClick={startSelectedWorkout}>
-                          {day.workoutRecord?.status === 'active' ? 'Resume' : 'Start'}
-                        </button>
-                      )}
-                      <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(day.session, 'completed')}>
-                        Mark done
-                      </button>
-                      <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(day.session, 'skipped')}>
-                        Skip
-                      </button>
-                    </div>
-                  )}
                 </article>
               ))}
             </div>
@@ -4064,10 +3993,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 )}
               </div>
             )}
-          </section>
+          </Card>
 
-          <section className="task-card fitness-nav-card">
-            <p className="eyebrow">Fitness Views</p>
+          <Card variant="flat" className="home-card home-section fitness-nav-card">
+            <SectionHeader eyebrow="Fitness" title="Views" />
             <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness internal navigation">
               {FITNESS_SUBTABS.map(tab => (
                 <button
@@ -4082,17 +4011,12 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </button>
               ))}
             </div>
-          </section>
+          </Card>
 
           {activeSubTab === 'today' && (
             <>
-              <section className="task-card">
-                <div className="task-card-header">
-                  <div>
-                    <p className="eyebrow">Daily check-in</p>
-                    <h2>Open the day with recovery context</h2>
-                  </div>
-                </div>
+              <Card variant="flat" className="home-card home-section fitness-support-card">
+                <SectionHeader eyebrow="Daily check-in" title="Open the day with recovery context" />
                 <div className="fitness-checkin-grid">
                   <label className="field-stack compact-field">
                     <span>Mood</span>
@@ -4162,16 +4086,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                     </div>
                   </div>
                 )}
-              </section>
+              </Card>
 
               {unacknowledgedMisses.length > 0 && (
-                <section className="task-card">
-                  <div className="task-card-header">
-                    <div>
-                      <p className="eyebrow">Missed session</p>
-                      <h2>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</h2>
-                    </div>
-                  </div>
+                <Card variant="flat" className="home-card home-section fitness-support-card">
+                  <SectionHeader eyebrow="Missed session" title={unacknowledgedMisses[0].label || unacknowledgedMisses[0].title} />
                   <article className="feed-card">
                     <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
                     <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
@@ -4185,7 +4104,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                       </button>
                     </div>
                   </article>
-                </section>
+                </Card>
               )}
             </>
           )}
@@ -4193,15 +4112,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         {activeSubTab === 'library' && (
           <>
             {!hasGeneratedSchedule ? (
-              <section className="task-card">
+              <Card variant="flat" className="home-card home-section fitness-support-card">
                 <EmptyState
                   title={programEmptyState.title}
                   description={programEmptyState.description}
                 />
-              </section>
+              </Card>
             ) : (
               <>
-                <section className="task-card">
+                <Card variant="flat" className="home-card home-section fitness-support-card">
                   <SectionHeader eyebrow="Workout Library" title={activeProgramName} />
                   {librarySections.length > 0 ? (
                     <div className="subtle-feed">
@@ -4229,7 +4148,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                         : programEmptyState.description}
                     />
                   )}
-                </section>
+                </Card>
               </>
             )}
           </>
@@ -4237,7 +4156,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
         {activeSubTab === 'logging' && (
           <>
-            <section className="task-card">
+            <Card variant="flat" className="home-card home-section fitness-support-card">
               <SectionHeader eyebrow="Logging" title="Recent completed workouts" />
               <div className="subtle-feed">
                 {recentCompletedWorkouts.length > 0 ? (
@@ -4253,7 +4172,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                   <EmptyState title="No completed workouts yet" description="Finished sessions will appear here once you log them." />
                 )}
               </div>
-            </section>
+            </Card>
           </>
         )}
       </>
