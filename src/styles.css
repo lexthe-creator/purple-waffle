@@ -300,19 +300,12 @@ p {
 }
 
 .fitness-stack {
-  gap: 12px;
+  gap: 10px;
+  padding-bottom: 120px;
 }
 
 .fitness-nav-card {
-  gap: 14px;
-}
-
-.fitness-nav-card .task-card-header h2 {
-  font-size: 1.34rem;
-}
-
-.fitness-nav-card .empty-message {
-  margin-top: 2px;
+  gap: 10px;
 }
 
 .fitness-subnav {
@@ -549,9 +542,12 @@ p {
 
 /* ── Fitness Hero Card ── */
 .fitness-hero-card {
-  gap: 14px;
-  border-color: var(--primary-alpha-md);
-  box-shadow: var(--shadow-strong);
+  gap: 16px;
+  border-color: var(--border-card);
+  box-shadow: var(--shadow);
+  background:
+    linear-gradient(180deg, rgba(246, 243, 239, 0.92) 0%, rgba(246, 243, 239, 0) 36%),
+    var(--card);
 }
 
 .fitness-hero-header {
@@ -561,12 +557,43 @@ p {
   gap: 10px;
 }
 
+.fitness-hero-lockup,
+.fitness-hero-copy {
+  display: grid;
+  gap: 4px;
+}
+
 .fitness-hero-eyebrow {
   margin: 0 0 6px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.fitness-hero-date {
+  display: grid;
+  gap: 2px;
+}
+
+.fitness-hero-date strong {
+  font-size: 1.08rem;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.fitness-hero-date span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.fitness-hero-kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -593,14 +620,18 @@ p {
 }
 
 .fitness-week-tile {
+  appearance: none;
+  width: 100%;
   border: 1px solid var(--primary-alpha-sm);
   background: var(--surface);
   border-radius: var(--r-lg);
-  padding: 8px 4px;
+  padding: 10px 6px;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   text-align: center;
   min-width: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .fitness-week-tile--today {
@@ -620,6 +651,11 @@ p {
 
 .fitness-week-tile--rest {
   opacity: 0.55;
+}
+
+.fitness-week-tile--selected {
+  border-color: rgba(79, 73, 70, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(79, 73, 70, 0.16);
 }
 
 .fitness-week-tile__day {
@@ -678,7 +714,36 @@ p {
 
 /* ── Fitness Week Sessions List ── */
 .fitness-week-sessions {
-  margin-top: 4px;
+  margin-top: 8px;
+}
+
+.fitness-week-session-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.fitness-week-session-card.is-selected {
+  border-color: rgba(79, 73, 70, 0.24);
+  background: rgba(246, 243, 239, 0.72);
+}
+
+.fitness-week-session-button {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.fitness-week-session-button strong {
+  display: block;
+}
+
+.fitness-week-actions {
+  padding: 0 12px 12px;
+  flex-wrap: wrap;
 }
 
 .fitness-week-session-row {
@@ -3557,6 +3622,10 @@ p {
     row-gap: 12px;
     column-gap: 20px;
   }
+
+  .fitness-week-grid {
+    gap: 8px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -3594,6 +3663,30 @@ p {
 
   .home-readiness-indicator {
     font-size: 0.78rem;
+  }
+
+  .fitness-hero-headline {
+    font-size: 1.32rem;
+  }
+
+  .fitness-hero-date strong {
+    font-size: 1rem;
+  }
+
+  .fitness-workout-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fitness-week-grid {
+    gap: 6px;
+  }
+
+  .fitness-week-tile {
+    padding: 10px 4px;
+  }
+
+  .fitness-week-tile__name {
+    font-size: 0.58rem;
   }
 }
 
