@@ -368,8 +368,21 @@ function normalizeTrainingDays(value, programType) {
 function normalizeWorkoutStatus(status) {
   if (workoutStatuses.includes(status)) return status;
   if (status === 'active') return 'planned';
+  if (status === 'missed') return 'skipped';
   if (status === 'done') return 'completed';
   return 'planned';
+}
+
+function getWorkoutLifecycleStatus(status) {
+  if (status === 'completed') return 'done';
+  if (status === 'skipped') return 'missed';
+  return 'planned';
+}
+
+function getWorkoutStatusLabel(status) {
+  if (status === 'completed') return 'Done';
+  if (status === 'skipped') return 'Missed';
+  return 'Planned';
 }
 
 function getProgramDisplayName(programType) {
@@ -377,6 +390,22 @@ function getProgramDisplayName(programType) {
   if (normalized === '5k') return '5K run builder';
   if (normalized === 'strength_block') return 'Strength Block plan';
   return 'HYROX 32-week plan';
+}
+
+function summarizeWorkoutContent(content) {
+  const blocks = Array.isArray(content?.blocks) ? content.blocks : [];
+  const exercises = blocks.flatMap(block => Array.isArray(block.exercises) ? block.exercises : []);
+
+  return {
+    blockCount: blocks.length,
+    exerciseCount: exercises.length,
+    hasIntervals: exercises.some(exercise => Boolean(exercise.interval)),
+    hasTimedEfforts: exercises.some(exercise => Boolean(exercise.timedEffort || exercise.duration)),
+    hasNotes: Boolean(
+      (Array.isArray(content?.notes) && content.notes.length > 0)
+      || exercises.some(exercise => Boolean(exercise.note || exercise.cue))
+    ),
+  };
 }
 
 export function normalizeFitnessSettings(raw) {
@@ -436,6 +465,7 @@ export function normalizeWorkoutRecord(raw, index = 0) {
   const scheduledDate = normalizeDateKey(src.scheduledDate);
   const plannedDate = normalizeDateKey(src.plannedDate, scheduledDate);
   const programType = normalizeProgramType(src.programType || src.programId);
+  const normalizedStatus = normalizeWorkoutStatus(src.status);
   const exercises = Array.isArray(src.exercises)
     ? src.exercises.map((exercise, exerciseIndex) => normalizeWorkoutExercise(exercise, exerciseIndex))
     : Array.isArray(src.ex)
@@ -449,6 +479,13 @@ export function normalizeWorkoutRecord(raw, index = 0) {
   const date = normalizeDateKey(src.date, plannedDate || scheduledDate);
   const programWeek = Number.isFinite(src.programWeek) ? src.programWeek : (Number.isFinite(src.week) ? src.week : 1);
   const plannedTime = normalizeText(src.plannedTime || src.time);
+  const content = normalizeWorkoutContent(src.content, {
+    exercises,
+    source: src.programType || src.programId ? 'program' : 'manual',
+    notes: [src.objective, src.detail, src.shortVersionRule].filter(Boolean),
+  });
+  const contentSummary = summarizeWorkoutContent(content);
+  const plannedLabel = [plannedTime, duration ? `${duration} min` : null].filter(Boolean).join(' · ') || null;
 
   return {
     id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `workout-${index}-${Date.now()}`,
@@ -459,7 +496,9 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     type: typeof src.type === 'string' && src.type.length > 0
       ? src.type
       : (programType === '5k' ? 'run' : programType === 'strength_block' ? 'strength' : 'hyrox'),
-    status: normalizeWorkoutStatus(src.status),
+    status: normalizedStatus,
+    lifecycleStatus: getWorkoutLifecycleStatus(normalizedStatus),
+    statusLabel: getWorkoutStatusLabel(normalizedStatus),
     scheduledDate,
     plannedDate,
     date,
@@ -467,6 +506,7 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     duration,
     plannedDurationMinutes: duration,
     plannedTime,
+    plannedLabel,
     distanceMiles: Number.isFinite(src.distanceMiles) ? src.distanceMiles : 0,
     phase: typeof src.phase === 'string' && src.phase.length > 0 ? src.phase : 'Base',
     week: programWeek,
@@ -474,11 +514,9 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     frequency: src.frequency === '5-day' ? '5-day' : '4-day',
     anchorDay: ['Sunday', 'Monday', 'Wednesday'].includes(src.anchorDay) ? src.anchorDay : 'Monday',
     exercises,
-    content: normalizeWorkoutContent(src.content, {
-      exercises,
-      source: src.programType || src.programId ? 'program' : 'manual',
-      notes: [src.objective, src.detail, src.shortVersionRule].filter(Boolean),
-    }),
+    content,
+    contentSummary,
+    notes: Array.isArray(content.notes) ? content.notes : [],
     source: normalizeWorkoutSource(src.source, {
       origin: src.programType || src.programId ? 'program' : 'manual',
       importKey: src.workoutKey || src.id,

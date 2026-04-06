@@ -37,8 +37,10 @@ test('normalizeWorkoutRecord builds future-ready workout structure', () => {
   const normalized = normalizeWorkoutRecord({
     name: 'Tempo Builder',
     programName: '5K run builder',
+    programType: '5k',
     week: 4,
     duration: 45,
+    plannedTime: '06:30',
     scheduledDate: '2026-04-06',
     status: 'done',
     exercises: [
@@ -51,6 +53,13 @@ test('normalizeWorkoutRecord builds future-ready workout structure', () => {
   assert.equal(normalized.plannedDurationMinutes, 45);
   assert.equal(normalized.date, '2026-04-06');
   assert.equal(normalized.status, 'completed');
+  assert.equal(normalized.lifecycleStatus, 'done');
+  assert.equal(normalized.statusLabel, 'Done');
+  assert.equal(normalized.plannedLabel, '06:30 · 45 min');
   assert.equal(normalized.content.blocks.length, 2);
   assert.equal(normalized.content.blocks[1].exercises[0].interval, '4 min on / 2 min easy');
+  assert.equal(normalized.contentSummary.blockCount, 2);
+  assert.equal(normalized.contentSummary.exerciseCount, 2);
+  assert.equal(normalized.contentSummary.hasIntervals, true);
+  assert.equal(normalized.source.origin, 'program');
 });

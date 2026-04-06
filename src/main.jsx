@@ -1228,16 +1228,32 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
     : (Number.isFinite(workout.duration) ? workout.duration : null);
 
   return {
+    name: workout.name || workout.label || workout.title || 'Workout',
+    typeLabel: getProgramWorkoutTypeLabel(workout),
     programName: workout.programName || programNameFallback || getProgramDisplayName(workout.programType || workout.programId),
     programWeek: Number.isFinite(workout.programWeek) ? workout.programWeek : (Number.isFinite(workout.week) ? workout.week : null),
+    dateKey: dateValue,
     dateLabel: workout.dateLabel || (dateValue ? formatDateLabel(dateValue) : null),
-    scheduleLabel: [
+    scheduleLabel: workout.plannedLabel || [
       workout.plannedTime || workout.time || null,
       duration ? `${duration} min` : null,
     ].filter(Boolean).join(' · '),
-    statusLabel: getWorkoutLifecycleLabel(workout.status),
+    statusLabel: workout.statusLabel || getWorkoutLifecycleLabel(workout.status),
     notes: Array.isArray(content.notes) ? content.notes : [],
     blocks: Array.isArray(content.blocks) ? content.blocks : [],
+    contentSummary: workout.contentSummary || {
+      blockCount: Array.isArray(content.blocks) ? content.blocks.length : 0,
+      exerciseCount: Array.isArray(content.blocks)
+        ? content.blocks.reduce((total, block) => total + (Array.isArray(block.exercises) ? block.exercises.length : 0), 0)
+        : 0,
+      hasIntervals: Array.isArray(content.blocks)
+        ? content.blocks.some(block => Array.isArray(block.exercises) && block.exercises.some(exercise => Boolean(exercise.interval)))
+        : false,
+      hasTimedEfforts: Array.isArray(content.blocks)
+        ? content.blocks.some(block => Array.isArray(block.exercises) && block.exercises.some(exercise => Boolean(exercise.timedEffort || exercise.duration)))
+        : false,
+      hasNotes: Array.isArray(content.notes) ? content.notes.length > 0 : false,
+    },
   };
 }
 
@@ -3509,10 +3525,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     ),
     [activeProgramName, selectedWorkoutSource],
   );
-  const selectedWorkoutTypeLabel = useMemo(
-    () => getProgramWorkoutTypeLabel(selectedWorkoutSource || selectedDay?.session),
-    [selectedDay, selectedWorkoutSource],
-  );
   const selectedStateMeta = selectedDay?.stateMeta ?? {
     state: 'rest',
     label: 'Rest',
@@ -3771,14 +3783,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </div>
                 <div className="fitness-hero-copy">
                   <p className="fitness-hero-kicker">{activeProgramName} · {programPhase}</p>
-                  <h2 className="fitness-hero-headline">{selectedDay.session.label || selectedDay.session.title}</h2>
+                  <h2 className="fitness-hero-headline">{selectedWorkoutDetails?.name || selectedDay.session.label || selectedDay.session.title}</h2>
                   <p className="fitness-hero-meta">{selectedSummary}</p>
                 </div>
                 <div className="fitness-workout-structure">
                   <div className="fitness-workout-meta-grid">
                     <div className="fitness-workout-meta-card">
                       <span>Workout type</span>
-                      <strong>{selectedWorkoutTypeLabel}</strong>
+                      <strong>{selectedWorkoutDetails?.typeLabel || getProgramWorkoutTypeLabel(selectedDay.session)}</strong>
                     </div>
                     <div className="fitness-workout-meta-card">
                       <span>Program</span>
@@ -3796,6 +3808,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                       <span>Planned time</span>
                       <strong>{selectedTiming || 'Scheduled'}</strong>
                     </div>
+                    {selectedWorkoutDetails?.contentSummary?.exerciseCount > 0 && (
+                      <div className="fitness-workout-meta-card fitness-workout-meta-card--wide">
+                        <span>Structure</span>
+                        <strong>
+                          {`${selectedWorkoutDetails.contentSummary.blockCount} block${selectedWorkoutDetails.contentSummary.blockCount === 1 ? '' : 's'} · ${selectedWorkoutDetails.contentSummary.exerciseCount} exercise${selectedWorkoutDetails.contentSummary.exerciseCount === 1 ? '' : 's'}`}
+                        </strong>
+                      </div>
+                    )}
                   </div>
                   {selectedWorkoutDetails?.notes?.length > 0 && selectedWorkoutDetails.notes[0] !== selectedDay.session.detail && (
                     <p className="fitness-structured-note">{selectedWorkoutDetails.notes[0]}</p>
