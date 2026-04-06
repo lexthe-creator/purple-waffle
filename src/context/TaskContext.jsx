@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { normalizeWorkoutRecord } from '../data/workoutSystemState.js';
+import {
+  buildWorkoutContentFromExercises,
+  normalizeWorkoutExercise,
+  normalizeWorkoutRecord,
+} from '../data/workoutSystemState.js';
 
 const TASKS_STORAGE_KEY = 'purple-waffle-dashboard-v2';
 
@@ -62,14 +66,27 @@ function createExercise(overrides = {}) {
     detail: '',
     sets: null,
     reps: null,
+    interval: null,
+    timedEffort: null,
     duration: null,
+    rest: null,
+    distance: null,
+    effort: null,
+    note: null,
+    cue: null,
     completed: false,
     ...overrides,
   };
 }
 
 function createWorkout(overrides = {}) {
-  return {
+  const seedExercises = [
+    createExercise({ name: 'Warm-up', detail: '5 min mobility', timedEffort: '5 min', cue: 'Move through full range' }),
+    createExercise({ name: 'Main set', detail: '3 rounds', sets: 3, note: 'Stay smooth between efforts' }),
+    createExercise({ name: 'Cooldown', detail: 'Stretch + breathe', timedEffort: '5 min', cue: 'Bring breathing back down' }),
+  ];
+
+  const baseWorkout = {
     id: generateId('workout'),
     name: 'Focus Session',
     programId: 'hyrox',
@@ -78,23 +95,61 @@ function createWorkout(overrides = {}) {
     status: 'planned',
     scheduledDate: null,
     plannedDate: null,
+    date: null,
     sessionOffset: null,
     duration: 30,
+    plannedDurationMinutes: 30,
+    plannedTime: null,
     distanceMiles: 0,
     phase: 'Base',
     week: 1,
+    programWeek: 1,
     frequency: '4-day',
     anchorDay: 'Monday',
-    exercises: [
-      createExercise({ name: 'Warm-up', detail: '5 min mobility' }),
-      createExercise({ name: 'Main set', detail: '3 rounds' }),
-      createExercise({ name: 'Cooldown', detail: 'Stretch + breathe' }),
-    ],
+    exercises: seedExercises,
+    content: buildWorkoutContentFromExercises(seedExercises, {
+      source: 'manual',
+      notes: ['Built to support program imports later.'],
+    }),
+    source: {
+      origin: 'manual',
+      importKey: null,
+      templateId: null,
+      libraryId: null,
+      sessionType: null,
+    },
     workoutLog: null,
     startedAt: null,
     completedAt: null,
     createdAt: Date.now(),
+  };
+
+  const workout = {
+    ...baseWorkout,
     ...overrides,
+  };
+
+  const resolvedExercises = Array.isArray(workout.exercises) ? workout.exercises : seedExercises;
+
+  return {
+    ...workout,
+    exercises: resolvedExercises,
+    date: workout.date || workout.plannedDate || workout.scheduledDate || null,
+    plannedDurationMinutes: Number.isFinite(workout.plannedDurationMinutes)
+      ? workout.plannedDurationMinutes
+      : (Number.isFinite(workout.duration) ? workout.duration : 30),
+    duration: Number.isFinite(workout.duration)
+      ? workout.duration
+      : (Number.isFinite(workout.plannedDurationMinutes) ? workout.plannedDurationMinutes : 30),
+    programWeek: Number.isFinite(workout.programWeek)
+      ? workout.programWeek
+      : (Number.isFinite(workout.week) ? workout.week : 1),
+    week: Number.isFinite(workout.week)
+      ? workout.week
+      : (Number.isFinite(workout.programWeek) ? workout.programWeek : 1),
+    content: workout.content || buildWorkoutContentFromExercises(resolvedExercises, {
+      source: workout.programType || workout.programId ? 'program' : 'manual',
+    }),
   };
 }
 
@@ -194,15 +249,10 @@ function normalizeNote(note, index) {
 }
 
 function normalizeExercise(exercise, index) {
-  return {
+  return normalizeWorkoutExercise({
+    ...exercise,
     id: exercise?.id || generateId(`exercise-${index}`),
-    name: typeof exercise?.name === 'string' ? exercise.name : `Exercise ${index + 1}`,
-    detail: typeof exercise?.detail === 'string' ? exercise.detail : '',
-    sets: Number.isFinite(exercise?.sets) ? exercise.sets : null,
-    reps: typeof exercise?.reps === 'string' ? exercise.reps : null,
-    duration: typeof exercise?.duration === 'string' ? exercise.duration : null,
-    completed: exercise?.completed === true,
-  };
+  }, index);
 }
 
 function normalizeWorkout(workout, index) {

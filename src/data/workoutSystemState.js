@@ -95,6 +95,208 @@ function normalizeStringArray(value, fallback = []) {
   return Array.isArray(value) ? value.filter(item => typeof item === 'string') : [...fallback];
 }
 
+function normalizeText(value, fallback = null) {
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  return fallback;
+}
+
+function normalizeStringList(value) {
+  return Array.isArray(value)
+    ? value.filter(item => typeof item === 'string' && item.trim().length > 0).map(item => item.trim())
+    : [];
+}
+
+function normalizeNumericField(...values) {
+  for (const value of values) {
+    if (Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function inferWorkoutBlockType(name, index, totalCount) {
+  const label = String(name || '').toLowerCase();
+  if (label.includes('warm')) return 'warmup';
+  if (label.includes('cool')) return 'cooldown';
+  if (label.includes('recover')) return 'recovery';
+  if (label.includes('interval')) return 'intervals';
+  if (label.includes('tempo')) return 'timed-effort';
+  if (index === 0 && totalCount > 1) return 'warmup';
+  if (index === totalCount - 1 && totalCount > 1) return 'cooldown';
+  return 'main';
+}
+
+export function normalizeWorkoutExercise(raw, index = 0) {
+  const src = isPlainObject(raw) ? raw : {};
+  const name = normalizeText(src.name || src.n, `Exercise ${index + 1}`);
+  const detail = normalizeText(src.detail || src.details || src.description);
+
+  return {
+    id: normalizeText(src.id, `exercise-${index}`),
+    name,
+    detail,
+    sets: normalizeNumericField(src.sets, src.s),
+    reps: normalizeText(src.reps || src.r),
+    interval: normalizeText(src.interval),
+    timedEffort: normalizeText(src.timedEffort || src.time || src.duration),
+    duration: normalizeText(src.duration),
+    rest: normalizeText(src.rest),
+    distance: normalizeText(src.distance),
+    effort: normalizeText(src.effort),
+    note: normalizeText(src.note),
+    cue: normalizeText(src.cue),
+    completed: src.completed === true,
+  };
+}
+
+function normalizeWorkoutBlock(raw, index = 0) {
+  const src = isPlainObject(raw) ? raw : {};
+  const exercises = Array.isArray(src.exercises)
+    ? src.exercises.map((exercise, exerciseIndex) => normalizeWorkoutExercise(exercise, exerciseIndex))
+    : [];
+  const title = normalizeText(src.title || src.name, `Block ${index + 1}`);
+  const blockNotes = normalizeStringList(src.notes);
+  const detail = normalizeText(src.detail || src.details);
+
+  if (detail && blockNotes.length === 0) {
+    blockNotes.push(detail);
+  }
+
+  return {
+    id: normalizeText(src.id || src.blockId, `block-${index}`),
+    title,
+    type: normalizeText(src.type || src.blockType, inferWorkoutBlockType(title, index, exercises.length)),
+    format: normalizeText(src.format),
+    duration: normalizeText(src.duration)
+      || (Number.isFinite(src.durationMinutes) ? `${src.durationMinutes} min` : null),
+    repeat: normalizeNumericField(src.repeat, src.rounds),
+    notes: blockNotes,
+    exercises,
+  };
+}
+
+export function buildWorkoutContentFromExercises(exercises, options = {}) {
+  const normalizedExercises = Array.isArray(exercises)
+    ? exercises.map((exercise, index) => normalizeWorkoutExercise(exercise, index))
+    : [];
+
+  return {
+    version: 1,
+    source: options.source || 'manual',
+    blocks: normalizedExercises.map((exercise, index) => ({
+      id: `block-${exercise.id || index}`,
+      title: exercise.name || `Block ${index + 1}`,
+      type: inferWorkoutBlockType(exercise.name, index, normalizedExercises.length),
+      format: null,
+      duration: exercise.timedEffort || exercise.duration || null,
+      repeat: exercise.sets,
+      notes: [exercise.detail, exercise.note, exercise.cue].filter(Boolean),
+      exercises: [exercise],
+    })),
+    notes: normalizeStringList(options.notes),
+  };
+}
+
+export function buildWorkoutContentFromSession(session) {
+  const src = isPlainObject(session) ? session : {};
+  const sourceNotes = [
+    normalizeText(src.objective),
+    normalizeText(src.shortVersionRule),
+    normalizeText(src.detail),
+  ].filter(Boolean);
+
+  if (Array.isArray(src.content?.blocks) && src.content.blocks.length > 0) {
+    return {
+      version: Number.isFinite(src.content.version) ? src.content.version : 1,
+      source: normalizeText(src.content.source, 'program'),
+      blocks: src.content.blocks.map((block, index) => normalizeWorkoutBlock(block, index)),
+      notes: normalizeStringList(src.content.notes).length > 0 ? normalizeStringList(src.content.notes) : sourceNotes,
+    };
+  }
+
+  if (Array.isArray(src.structure) && src.structure.length > 0) {
+    return {
+      version: 1,
+      source: 'program',
+      blocks: src.structure.map((block, index) => {
+        const blockTitle = normalizeText(block?.name, `Block ${index + 1}`);
+        const detail = normalizeText(block?.details);
+        const selectedMovementName = normalizeText(block?.selectedMovement?.displayName);
+        const exerciseName = selectedMovementName || blockTitle;
+        const blockNotes = [
+          detail,
+          Array.isArray(block?.stationsUsed) && block.stationsUsed.length > 0
+            ? `Stations: ${block.stationsUsed.join(', ')}`
+            : null,
+        ].filter(Boolean);
+
+        return normalizeWorkoutBlock({
+          id: block?.blockId || `block-${index}`,
+          title: blockTitle,
+          type: inferWorkoutBlockType(blockTitle, index, src.structure.length),
+          duration: Number.isFinite(block?.durationMinutes) ? `${block.durationMinutes} min` : null,
+          notes: blockNotes,
+          exercises: [
+            {
+              id: block?.blockId || `exercise-${index}`,
+              name: exerciseName,
+              detail,
+              sets: block?.rounds,
+              interval: src?.sessionType?.includes('interval') ? detail : null,
+              timedEffort: Number.isFinite(block?.durationMinutes) ? `${block.durationMinutes} min` : null,
+              effort: normalizeText(src?.intensity),
+              note: blockNotes[1] || null,
+              cue: selectedMovementName && selectedMovementName !== blockTitle ? `Selected movement: ${selectedMovementName}` : null,
+            },
+          ],
+        }, index);
+      }),
+      notes: sourceNotes,
+    };
+  }
+
+  return buildWorkoutContentFromExercises(src.exercises || src.ex, {
+    source: src.programType || src.programId ? 'program' : 'manual',
+    notes: sourceNotes,
+  });
+}
+
+function normalizeWorkoutContent(raw, fallback = {}) {
+  const src = isPlainObject(raw) ? raw : null;
+
+  if (src) {
+    return {
+      version: Number.isFinite(src.version) ? src.version : 1,
+      source: normalizeText(src.source, fallback.source || 'manual'),
+      blocks: Array.isArray(src.blocks)
+        ? src.blocks.map((block, index) => normalizeWorkoutBlock(block, index))
+        : [],
+      notes: normalizeStringList(src.notes),
+    };
+  }
+
+  return buildWorkoutContentFromExercises(fallback.exercises, {
+    source: fallback.source || 'manual',
+    notes: fallback.notes,
+  });
+}
+
+function normalizeWorkoutSource(raw, fallback = {}) {
+  const src = isPlainObject(raw) ? raw : {};
+
+  return {
+    origin: normalizeText(src.origin, fallback.origin || 'manual'),
+    importKey: normalizeText(src.importKey || src.sessionKey || fallback.importKey),
+    templateId: normalizeText(src.templateId || src.warmupTemplateId || fallback.templateId),
+    libraryId: normalizeText(src.libraryId || src.workoutId || fallback.libraryId),
+    sessionType: normalizeText(src.sessionType || fallback.sessionType),
+  };
+}
+
 function normalizeEquipmentMode(value, equipmentAccess = 'full-gym') {
   if (hyroxEquipmentModes.includes(value)) return value;
   if (value === 'limited' || equipmentAccess === 'limited') return 'limited_gym';
@@ -234,6 +436,19 @@ export function normalizeWorkoutRecord(raw, index = 0) {
   const scheduledDate = normalizeDateKey(src.scheduledDate);
   const plannedDate = normalizeDateKey(src.plannedDate, scheduledDate);
   const programType = normalizeProgramType(src.programType || src.programId);
+  const exercises = Array.isArray(src.exercises)
+    ? src.exercises.map((exercise, exerciseIndex) => normalizeWorkoutExercise(exercise, exerciseIndex))
+    : Array.isArray(src.ex)
+      ? src.ex.map((exercise, exerciseIndex) => normalizeWorkoutExercise(exercise, exerciseIndex))
+      : [];
+  const duration = Number.isFinite(src.duration)
+    ? src.duration
+    : Number.isFinite(src.plannedDurationMinutes)
+      ? src.plannedDurationMinutes
+      : 30;
+  const date = normalizeDateKey(src.date, plannedDate || scheduledDate);
+  const programWeek = Number.isFinite(src.programWeek) ? src.programWeek : (Number.isFinite(src.week) ? src.week : 1);
+  const plannedTime = normalizeText(src.plannedTime || src.time);
 
   return {
     id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `workout-${index}-${Date.now()}`,
@@ -247,14 +462,30 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     status: normalizeWorkoutStatus(src.status),
     scheduledDate,
     plannedDate,
+    date,
     sessionOffset: Number.isFinite(src.sessionOffset) ? src.sessionOffset : null,
-    duration: Number.isFinite(src.duration) ? src.duration : 30,
+    duration,
+    plannedDurationMinutes: duration,
+    plannedTime,
     distanceMiles: Number.isFinite(src.distanceMiles) ? src.distanceMiles : 0,
     phase: typeof src.phase === 'string' && src.phase.length > 0 ? src.phase : 'Base',
-    week: Number.isFinite(src.week) ? src.week : 1,
+    week: programWeek,
+    programWeek,
     frequency: src.frequency === '5-day' ? '5-day' : '4-day',
     anchorDay: ['Sunday', 'Monday', 'Wednesday'].includes(src.anchorDay) ? src.anchorDay : 'Monday',
-    exercises: Array.isArray(src.exercises) ? src.exercises : [],
+    exercises,
+    content: normalizeWorkoutContent(src.content, {
+      exercises,
+      source: src.programType || src.programId ? 'program' : 'manual',
+      notes: [src.objective, src.detail, src.shortVersionRule].filter(Boolean),
+    }),
+    source: normalizeWorkoutSource(src.source, {
+      origin: src.programType || src.programId ? 'program' : 'manual',
+      importKey: src.workoutKey || src.id,
+      templateId: src.warmupTemplateId || src.cooldownTemplateId,
+      libraryId: src.workoutId || src.id,
+      sessionType: src.sessionType || src.sessionTypeCanonical,
+    }),
     title: typeof src.title === 'string' && src.title.length > 0 ? src.title : null,
     label: typeof src.label === 'string' && src.label.length > 0 ? src.label : null,
     detail: typeof src.detail === 'string' && src.detail.length > 0 ? src.detail : null,

@@ -425,6 +425,110 @@ p {
   font-size: 0.82rem;
 }
 
+.fitness-workout-structure {
+  display: grid;
+  gap: 10px;
+}
+
+.fitness-workout-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fitness-workout-meta-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid var(--primary-alpha-sm);
+  background: var(--surface);
+}
+
+.fitness-workout-meta-card span {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fitness-workout-meta-card strong {
+  font-size: 0.88rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.fitness-workout-meta-card--wide {
+  grid-column: 1 / -1;
+}
+
+.fitness-structured-note,
+.fitness-structured-block-copy {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.fitness-structured-blocks,
+.fitness-structured-exercise-list {
+  display: grid;
+  gap: 8px;
+}
+
+.fitness-structured-block {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid var(--primary-alpha-sm);
+  background: var(--surface);
+}
+
+.fitness-structured-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fitness-structured-block-header strong {
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.fitness-structured-block-header span {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.fitness-structured-exercise {
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-divider);
+}
+
+.fitness-structured-exercise:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.fitness-structured-exercise-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.fitness-structured-exercise-meta,
+.fitness-structured-exercise-note {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .fitness-progress-grid {
   display: grid;
   gap: 8px;

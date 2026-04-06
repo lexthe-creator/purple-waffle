@@ -19,6 +19,7 @@ import {
 } from './data/hyroxPlan.js';
 import { normalizeProgramType } from './data/programRouter.js';
 import { sessionTypes } from './data/workoutSystemSchema.js';
+import { buildWorkoutContentFromSession } from './data/workoutSystemState.js';
 import {
   QUICK_MEAL_TAGS,
   NUTRITION_SLOTS,
@@ -1113,23 +1114,109 @@ function getCurrentWorkoutType(workout) {
   return inferWorkoutProgram(workout);
 }
 
-function createWorkoutFromSession({ createWorkout, createExercise, session, settings, todayKey }) {
+function getWorkoutLifecycleLabel(status) {
+  if (status === 'completed' || status === 'done') return 'Done';
+  if (status === 'missed' || status === 'skipped') return 'Missed';
+  return 'Planned';
+}
+
+function formatStructuredExerciseMeta(exercise) {
+  if (!exercise) return '';
+
+  return [
+    Number.isFinite(exercise.sets) ? `${exercise.sets} sets` : null,
+    exercise.reps ? `${exercise.reps} reps` : null,
+    exercise.interval ? `Interval ${exercise.interval}` : null,
+    exercise.timedEffort ? `Time ${exercise.timedEffort}` : null,
+    exercise.distance || null,
+    exercise.rest ? `Rest ${exercise.rest}` : null,
+    exercise.effort || null,
+  ].filter(Boolean).join(' · ');
+}
+
+function getStructuredBlockSummary(block) {
+  if (!block) return '';
+  if (block.duration) return block.duration;
+  if (Number.isFinite(block.repeat)) return `${block.repeat} rounds`;
+  if (block.type === 'warmup') return 'Warm-up';
+  if (block.type === 'cooldown') return 'Cooldown';
+  if (block.type === 'intervals') return 'Intervals';
+  if (block.type === 'timed-effort') return 'Timed effort';
+  if (block.type === 'recovery') return 'Recovery';
+  return '';
+}
+
+function getStructuredWorkoutDetails(workout, programNameFallback = '') {
+  if (!workout) return null;
+
+  const content = buildWorkoutContentFromSession(workout);
+  const dateValue = workout.date || workout.dateKey || workout.scheduledDate || workout.plannedDate || null;
+  const duration = Number.isFinite(workout.plannedDurationMinutes)
+    ? workout.plannedDurationMinutes
+    : (Number.isFinite(workout.duration) ? workout.duration : null);
+
+  return {
+    programName: workout.programName || programNameFallback || getProgramDisplayName(workout.programType || workout.programId),
+    programWeek: Number.isFinite(workout.programWeek) ? workout.programWeek : (Number.isFinite(workout.week) ? workout.week : null),
+    dateLabel: workout.dateLabel || (dateValue ? formatDateLabel(dateValue) : null),
+    scheduleLabel: [
+      workout.plannedTime || workout.time || null,
+      duration ? `${duration} min` : null,
+    ].filter(Boolean).join(' · '),
+    statusLabel: getWorkoutLifecycleLabel(workout.status),
+    notes: Array.isArray(content.notes) ? content.notes : [],
+    blocks: Array.isArray(content.blocks) ? content.blocks : [],
+  };
+}
+
+function createWorkoutFromSession({
+  createWorkout,
+  createExercise,
+  session,
+  settings,
+  todayKey,
+  scheduledDateOverride = null,
+  plannedDateOverride = null,
+  statusOverride = 'planned',
+}) {
   const sessionType = session?.type || 'hyrox';
   const normalizedProgramType = session?.programType || settings?.programType || 'hyrox';
   const programName = getProgramDisplayName(normalizedProgramType);
-  const prescribedExercises = Array.isArray(session?.ex) && session.ex.length > 0
-    ? session.ex.map(item => createExercise({
-      name: item.n || 'Exercise',
-      detail: `${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`.trim(),
-      sets: Number.parseInt(item.s, 10) || null,
-      reps: typeof item.r === 'string' ? item.r : null,
-    }))
+  const content = buildWorkoutContentFromSession(session);
+  const prescribedExercises = Array.isArray(content.blocks) && content.blocks.length > 0
+    ? content.blocks.flatMap(block => (
+      Array.isArray(block.exercises) && block.exercises.length > 0
+        ? block.exercises.map(exercise => createExercise({
+            name: exercise.name || block.title || 'Exercise',
+            detail: [exercise.detail, exercise.note].filter(Boolean).join(' · '),
+            sets: Number.isFinite(exercise.sets) ? exercise.sets : block.repeat,
+            reps: typeof exercise.reps === 'string' ? exercise.reps : null,
+            interval: exercise.interval || null,
+            timedEffort: exercise.timedEffort || block.duration || null,
+            duration: exercise.duration || null,
+            rest: exercise.rest || null,
+            distance: exercise.distance || null,
+            effort: exercise.effort || null,
+            note: exercise.note || null,
+            cue: exercise.cue || null,
+          }))
+        : [createExercise({
+            name: block.title || 'Block',
+            detail: Array.isArray(block.notes) ? block.notes[0] || '' : '',
+            sets: block.repeat,
+            timedEffort: block.duration || null,
+          })]
+    ))
     : [
-      createExercise({ name: 'Warm-up', detail: '5-10 min easy movement' }),
+      createExercise({ name: 'Warm-up', detail: '5-10 min easy movement', timedEffort: '5-10 min' }),
       createExercise({ name: session.title || session.label || 'Main set', detail: session.detail || session.label || 'Training session', sets: 3 }),
-      createExercise({ name: 'Cooldown', detail: '5 min mobility' }),
+      createExercise({ name: 'Cooldown', detail: '5 min mobility', timedEffort: '5 min' }),
     ];
-  const scheduledDate = session?.dateKey || todayKey;
+  const scheduledDate = scheduledDateOverride || session?.dateKey || todayKey;
+  const plannedDate = plannedDateOverride || session?.dateKey || scheduledDate;
+  const plannedDurationMinutes = Number.isFinite(session?.plannedDurationMinutes)
+    ? session.plannedDurationMinutes
+    : (Number.isFinite(session?.duration) ? session.duration : null);
   const workout = createWorkout({
     name: session.label || session.title || 'Training Session',
     title: session.label || session.title || 'Training Session',
@@ -1145,15 +1232,19 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
         : sessionType.includes('recovery')
           ? 'recovery'
           : 'strength',
-    status: 'planned',
+    status: statusOverride,
     scheduledDate,
-    plannedDate: scheduledDate,
+    plannedDate,
+    date: scheduledDate,
     sessionOffset: session.offset ?? null,
     trainingDays: settings.trainingDays,
     programType: normalizedProgramType,
     phase: session.phase || '',
     week: session.week || null,
-    duration: session.duration || 45,
+    programWeek: Number.isFinite(session?.programWeek) ? session.programWeek : (Number.isFinite(session?.week) ? session.week : null),
+    duration: plannedDurationMinutes || 45,
+    plannedDurationMinutes: plannedDurationMinutes || 45,
+    plannedTime: session.plannedTime || null,
     sessionType: session.sessionType || null,
     sessionTypeCanonical: session.sessionTypeCanonical || null,
     warmupTemplateId: session.warmupTemplateId || null,
@@ -1162,6 +1253,14 @@ function createWorkoutFromSession({ createWorkout, createExercise, session, sett
     prescription: session.prescription || null,
     coachingNote: session.coachingNotes || session.coachingNote || null,
     exercises: prescribedExercises,
+    content,
+    source: {
+      origin: 'program',
+      importKey: session.id || session.workoutKey || session.workoutId || null,
+      templateId: session.warmupTemplateId || session.cooldownTemplateId || null,
+      libraryId: session.workoutId || session.workoutKey || session.id || null,
+      sessionType: session.sessionType || session.sessionTypeCanonical || session.type || null,
+    },
   });
 
   return {
@@ -3249,6 +3348,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     }),
     [fitnessSettings.programType, todayKey, weeklySchedule],
   );
+  const todayWorkoutDetails = useMemo(
+    () => (
+      todayWorkoutCard.kind === 'workout'
+        ? getStructuredWorkoutDetails(todayWorkoutCard.session, activeProgramName)
+        : null
+    ),
+    [activeProgramName, todayWorkoutCard],
+  );
 
   const progressSnapshot = useMemo(
     () => getFitnessProgressSnapshot({
@@ -3437,23 +3544,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   function moveMissedSession(session) {
     const laterThisWeek = weeklySchedule.find(nextSession => nextSession.dateKey > session.dateKey);
     const nextDate = laterThisWeek?.dateKey ?? toDateKey(addDays(new Date(`${session.dateKey}T00:00:00`), 7));
-    const movedWorkout = createWorkout({
-      name: session.label || session.title,
-      programId: fitnessSettings.programType || 'hyrox',
-      programType: fitnessSettings.programType || 'hyrox',
-      programName: getProgramDisplayName(fitnessSettings.programType),
-      type: session.type,
-      status: 'planned',
-      scheduledDate: nextDate,
-      plannedDate: session.dateKey,
-      sessionOffset: session.offset,
-      trainingDays: fitnessSettings.trainingDays,
-      phase: session.phase || '',
-      week: programWeek,
-      exercises: (session.ex || []).map(item => createExercise({
-        name: item.n || 'Exercise',
-        detail: `${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`.trim(),
-      })),
+    const movedWorkout = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...session, programWeek },
+      settings: fitnessSettings,
+      todayKey: nextDate,
+      scheduledDateOverride: nextDate,
+      plannedDateOverride: session.dateKey,
+      statusOverride: 'planned',
     });
     setWorkouts(current => [movedWorkout, ...current]);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
@@ -3461,21 +3560,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }
 
   function skipMissedSession(session) {
-    const skippedWorkout = createWorkout({
-      name: session.label || session.title,
-      programId: fitnessSettings.programType || 'hyrox',
-      programType: fitnessSettings.programType || 'hyrox',
-      programName: getProgramDisplayName(fitnessSettings.programType),
-      type: session.type,
-      status: 'skipped',
-      scheduledDate: session.dateKey,
-      plannedDate: session.dateKey,
-      sessionOffset: session.offset,
-      trainingDays: fitnessSettings.trainingDays,
-      phase: session.phase || '',
-      week: programWeek,
-      duration: session.duration || 0,
-      exercises: [],
+    const skippedWorkout = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...session, programWeek },
+      settings: fitnessSettings,
+      todayKey: session.dateKey,
+      scheduledDateOverride: session.dateKey,
+      plannedDateOverride: session.dateKey,
+      statusOverride: 'skipped',
     });
     setWorkouts(current => [skippedWorkout, ...current]);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
@@ -3564,20 +3657,75 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                           <span className={`status-pill ${todayHeroState.className}`}>{todayHeroState.label}</span>
                         )}
                       </div>
+                      <p className="empty-message">{todayWorkoutCard.helperLine}</p>
+                      {todayWorkoutDetails && (
+                        <div className="fitness-workout-structure">
+                          <div className="fitness-workout-meta-grid">
+                            <div className="fitness-workout-meta-card">
+                              <span>Program</span>
+                              <strong>{todayWorkoutDetails.programName}</strong>
+                            </div>
+                            <div className="fitness-workout-meta-card">
+                              <span>Week</span>
+                              <strong>{todayWorkoutDetails.programWeek ? `Week ${todayWorkoutDetails.programWeek}` : 'Current'}</strong>
+                            </div>
+                            <div className="fitness-workout-meta-card">
+                              <span>Date</span>
+                              <strong>{todayWorkoutDetails.dateLabel || 'Scheduled'}</strong>
+                            </div>
+                            <div className="fitness-workout-meta-card">
+                              <span>Status</span>
+                              <strong>{todayWorkoutDetails.statusLabel}</strong>
+                            </div>
+                            {todayWorkoutDetails.scheduleLabel && (
+                              <div className="fitness-workout-meta-card fitness-workout-meta-card--wide">
+                                <span>Planned</span>
+                                <strong>{todayWorkoutDetails.scheduleLabel}</strong>
+                              </div>
+                            )}
+                          </div>
+                          {todayWorkoutDetails.notes.length > 0 && todayWorkoutDetails.notes[0] !== todayWorkoutCard.session?.detail && (
+                            <p className="fitness-structured-note">{todayWorkoutDetails.notes[0]}</p>
+                          )}
+                          {todayWorkoutDetails.blocks.length > 0 && (
+                            <div className="fitness-structured-blocks">
+                              {todayWorkoutDetails.blocks.map((block, index) => (
+                                <article key={block.id || `${block.title}-${index}`} className="fitness-structured-block">
+                                  <div className="fitness-structured-block-header">
+                                    <strong>{block.title}</strong>
+                                    {getStructuredBlockSummary(block) && (
+                                      <span>{getStructuredBlockSummary(block)}</span>
+                                    )}
+                                  </div>
+                                  {block.notes[0] && (
+                                    <p className="fitness-structured-block-copy">{block.notes[0]}</p>
+                                  )}
+                                  <div className="fitness-structured-exercise-list">
+                                    {(block.exercises || []).map((exercise, exerciseIndex) => {
+                                      const exerciseMeta = formatStructuredExerciseMeta(exercise);
+                                      return (
+                                        <div key={exercise.id || `${block.id}-${exerciseIndex}`} className="fitness-structured-exercise">
+                                          <span className="fitness-structured-exercise-name">{exercise.name}</span>
+                                          {exerciseMeta && (
+                                            <span className="fitness-structured-exercise-meta">{exerciseMeta}</span>
+                                          )}
+                                          {(exercise.note || exercise.cue) && (
+                                            <span className="fitness-structured-exercise-note">
+                                              {[exercise.note, exercise.cue].filter(Boolean).join(' · ')}
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {todayWorkoutCard.session?.detail && (
                         <p className="empty-message">{todayWorkoutCard.session.detail}</p>
-                      )}
-                      {Array.isArray(todayWorkoutCard.session?.ex) && todayWorkoutCard.session.ex.length > 0 && (
-                        <div className="subtle-feed fitness-workout-feed">
-                          {todayWorkoutCard.session.ex.map((item, index) => (
-                            <ListRow
-                              key={`${item.n}-${index}`}
-                              variant="card"
-                              label={item.n}
-                              sub={`${item.s || '1'} sets · ${item.r || ''}${item.note ? ` · ${item.note}` : ''}`}
-                            />
-                          ))}
-                        </div>
                       )}
                       <div className="quick-entry-row">
                         <button

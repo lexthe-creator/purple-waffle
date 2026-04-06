@@ -54,6 +54,10 @@ export function runWorkoutSystemStateAudit() {
   const normalizedWorkout = normalizeWorkoutRecord({ status: 'done', exercises: [{ name: 'Warm-up', completed: true }] }, 2);
   assert(normalizedWorkout.status === 'completed', 'Workout record normalization should map done to completed', issues);
   assert(Array.isArray(normalizedWorkout.exercises), 'Workout record normalization should preserve exercises array', issues);
+  assert(normalizedWorkout.programWeek === normalizedWorkout.week, 'Workout record normalization should expose programWeek', issues);
+  assert(normalizedWorkout.plannedDurationMinutes === normalizedWorkout.duration, 'Workout record normalization should expose plannedDurationMinutes', issues);
+  assert(Array.isArray(normalizedWorkout.content?.blocks), 'Workout record normalization should build structured content blocks', issues);
+  assert(normalizedWorkout.content?.blocks?.[0]?.exercises?.[0]?.name === 'Warm-up', 'Structured workout content should preserve exercise names', issues);
 
   return {
     ok: issues.length === 0,
