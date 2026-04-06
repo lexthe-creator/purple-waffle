@@ -665,6 +665,13 @@ function parseDateKeyTime(dateKey, timeValue) {
 }
 
 function startOfDay(value) {
+  // ISO date-only strings ("YYYY-MM-DD") are parsed by `new Date()` as UTC
+  // midnight, which shifts the day in non-UTC timezones. Parse them as local
+  // time explicitly to keep all date-key arithmetic in local time.
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+  }
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
   return date;
@@ -681,7 +688,12 @@ function sameDay(left, right) {
 }
 
 function toDateKey(value) {
-  return startOfDay(value).toISOString().slice(0, 10);
+  // Use local date components so the key never shifts with UTC offset.
+  const d = startOfDay(value);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function getProgramDisplayName(programType) {
