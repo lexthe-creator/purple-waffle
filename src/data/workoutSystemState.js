@@ -408,6 +408,54 @@ function summarizeWorkoutContent(content) {
   };
 }
 
+function normalizeWorkoutLogSegment(raw, index = 0) {
+  const src = isPlainObject(raw) ? raw : {};
+  const completedAt = Number.isFinite(src.completedAt) ? src.completedAt : null;
+  const elapsedSeconds = normalizeNumericField(src.elapsedSeconds, src.metrics?.elapsedSeconds);
+  const setsCompleted = normalizeNumericField(src.setsCompleted, src.metrics?.setsCompleted);
+  const intervalCount = normalizeNumericField(src.intervalCount, src.metrics?.intervalCount);
+
+  return {
+    id: normalizeText(src.id, `segment-${index}`),
+    blockId: normalizeText(src.blockId),
+    exerciseId: normalizeText(src.exerciseId),
+    label: normalizeText(src.label || src.name, `Segment ${index + 1}`),
+    completed: src.completed === true || completedAt !== null,
+    completedAt,
+    note: normalizeText(src.note),
+    source: normalizeText(src.source, 'manual'),
+    metrics: {
+      setsCompleted,
+      repsCompleted: normalizeText(src.repsCompleted, normalizeText(src.metrics?.repsCompleted)),
+      elapsedSeconds,
+      intervalCount,
+    },
+  };
+}
+
+export function normalizeWorkoutLog(raw, fallback = {}) {
+  const src = isPlainObject(raw) ? raw : {};
+  const segments = Array.isArray(src.segments)
+    ? src.segments.map((segment, index) => normalizeWorkoutLogSegment(segment, index))
+    : [];
+
+  return {
+    source: normalizeText(src.source, fallback.source || 'manual'),
+    startedAt: Number.isFinite(src.startedAt) ? src.startedAt : (Number.isFinite(fallback.startedAt) ? fallback.startedAt : null),
+    lastUpdatedAt: Number.isFinite(src.lastUpdatedAt) ? src.lastUpdatedAt : null,
+    completionLoggedAt: Number.isFinite(src.completionLoggedAt) ? src.completionLoggedAt : null,
+    completionSource: normalizeText(src.completionSource),
+    notes: normalizeText(src.notes || src.note, '') || '',
+    currentSegmentId: normalizeText(src.currentSegmentId),
+    currentSegmentIndex: Number.isFinite(src.currentSegmentIndex) ? src.currentSegmentIndex : 0,
+    segments,
+    externalRefs: {
+      appleHealthWorkoutId: normalizeText(src.externalRefs?.appleHealthWorkoutId),
+      deviceSessionId: normalizeText(src.externalRefs?.deviceSessionId),
+    },
+  };
+}
+
 export function normalizeFitnessSettings(raw) {
   const src = isPlainObject(raw) ? raw : {};
   const programType = normalizeProgramType(src.programType);
@@ -539,7 +587,7 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     summaryLine2: typeof src.summaryLine2 === 'string' && src.summaryLine2.length > 0 ? src.summaryLine2 : null,
     warmupSteps: Array.isArray(src.warmupSteps) ? src.warmupSteps : [],
     cooldownSteps: Array.isArray(src.cooldownSteps) ? src.cooldownSteps : [],
-    workoutLog: isPlainObject(src.workoutLog) ? src.workoutLog : null,
+    workoutLog: src.workoutLog ? normalizeWorkoutLog(src.workoutLog, { startedAt: src.startedAt }) : null,
     startedAt: Number.isFinite(src.startedAt) ? src.startedAt : null,
     completedAt: Number.isFinite(src.completedAt) ? src.completedAt : null,
     createdAt: Number.isFinite(src.createdAt) ? src.createdAt : Date.now() + index,

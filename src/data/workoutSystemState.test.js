@@ -63,3 +63,34 @@ test('normalizeWorkoutRecord builds future-ready workout structure', () => {
   assert.equal(normalized.contentSummary.hasIntervals, true);
   assert.equal(normalized.source.origin, 'program');
 });
+
+test('normalizeWorkoutRecord preserves workout logging structure while canonicalizing legacy active status', () => {
+  const normalized = normalizeWorkoutRecord({
+    name: 'Structured Session',
+    status: 'active',
+    scheduledDate: '2026-04-06',
+    workoutLog: {
+      source: 'manual',
+      startedAt: 1000,
+      notes: 'Felt steady',
+      currentSegmentId: 'segment-2',
+      currentSegmentIndex: 1,
+      segments: [
+        { id: 'segment-1', label: 'Warm-up', completed: true, completedAt: 1100 },
+        { id: 'segment-2', label: 'Intervals', completed: false, metrics: { intervalCount: 2 } },
+      ],
+      externalRefs: {
+        appleHealthWorkoutId: 'health-123',
+      },
+    },
+  });
+
+  assert.equal(normalized.status, 'planned');
+  assert.equal(normalized.workoutLog.startedAt, 1000);
+  assert.equal(normalized.workoutLog.notes, 'Felt steady');
+  assert.equal(normalized.workoutLog.currentSegmentId, 'segment-2');
+  assert.equal(normalized.workoutLog.segments.length, 2);
+  assert.equal(normalized.workoutLog.segments[0].completed, true);
+  assert.equal(normalized.workoutLog.segments[1].metrics.intervalCount, 2);
+  assert.equal(normalized.workoutLog.externalRefs.appleHealthWorkoutId, 'health-123');
+});

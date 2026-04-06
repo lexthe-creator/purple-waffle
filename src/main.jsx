@@ -19,7 +19,11 @@ import {
 } from './data/hyroxPlan.js';
 import { normalizeProgramType } from './data/programRouter.js';
 import { sessionTypes } from './data/workoutSystemSchema.js';
-import { buildWorkoutContentFromSession } from './data/workoutSystemState.js';
+import {
+  buildWorkoutContentFromSession,
+  normalizeWorkoutLog,
+  normalizeWorkoutRecord,
+} from './data/workoutSystemState.js';
 import {
   QUICK_MEAL_TAGS,
   NUTRITION_SLOTS,
@@ -80,6 +84,8 @@ const MORE_SECTIONS = [
   { id: 'finance', label: 'Finance' },
   { id: 'inbox', label: 'Inbox' },
 ];
+
+const WORKOUT_MISS_HOUR = 20;
 
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
 const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
@@ -435,10 +441,14 @@ function HomeDashboard({ now }) {
     const scheduledKey = workout.scheduledDate || workout.plannedDate;
     return scheduledKey === todayKey && workout.status === 'completed';
   });
+  const hasMissedWorkout = workouts.some(workout => {
+    const scheduledKey = workout.scheduledDate || workout.plannedDate;
+    return scheduledKey === todayKey && workout.status === 'skipped';
+  });
   const workoutMarkedMissed = todayWorkoutCard.kind === 'workout'
     && todayWorkoutCard.canStart
     && !hasCompletedWorkout
-    && now.getHours() >= 18;
+    && (hasMissedWorkout || isWorkoutPastCutoff(now));
   const fitnessState = hasCompletedWorkout
     ? 'done'
     : workoutMarkedMissed
@@ -683,6 +693,10 @@ function addDays(value, amount) {
   const date = asDate(value);
   date.setDate(date.getDate() + amount);
   return date;
+}
+
+function isWorkoutPastCutoff(date = new Date()) {
+  return date.getHours() >= WORKOUT_MISS_HOUR;
 }
 
 function sameDay(left, right) {
@@ -1012,7 +1026,7 @@ function getWorkoutStateMeta({
   const hasActive = matchingWorkouts.some(workout => workout.status === 'active');
   const isToday = dateKey === todayKey;
   const isPast = dateKey < todayKey;
-  const isLateToday = isToday && now.getHours() >= 18;
+  const isLateToday = isToday && isWorkoutPastCutoff(now);
 
   if (hasCompleted) {
     return {
@@ -3550,7 +3564,13 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 
   const missedSessions = useMemo(
-    () => weeklySchedule.filter(session => session.dateKey < todayKey && !workouts.some(workout => workout.scheduledDate === session.dateKey && workout.status === 'completed')),
+    () => weeklySchedule.filter(session => (
+      session.dateKey < todayKey
+      && !workouts.some(workout => (
+        workout.scheduledDate === session.dateKey
+        && ['completed', 'skipped'].includes(workout.status)
+      ))
+    )),
     [todayKey, weeklySchedule, workouts],
   );
 
@@ -3563,59 +3583,116 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
   }
 
+  function updateWorkoutById(workoutId, updater) {
+    setWorkouts(current => current.map((workout, index) => (
+      workout.id === workoutId
+        ? normalizeWorkoutRecord(updater(workout), index)
+        : workout
+    )));
+  }
+
+  function appendWorkout(workout) {
+    setWorkouts(current => [normalizeWorkoutRecord(workout, current.length), ...current]);
+  }
+
+  function mergeWorkoutLog(workout, patch = {}) {
+    const nextLog = normalizeWorkoutLog({
+      ...(workout.workoutLog || {}),
+      ...patch,
+      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
+      segments: (() => {
+        const currentSegments = Array.isArray(workout.workoutLog?.segments)
+          ? workout.workoutLog.segments
+          : [];
+
+        if (Array.isArray(patch.segments)) {
+          return patch.segments;
+        }
+
+        if (!patch.segment) {
+          return currentSegments;
+        }
+
+        const remainingSegments = currentSegments.filter(entry => entry.id !== patch.segment.id);
+        return [...remainingSegments, patch.segment];
+      })(),
+    }, {
+      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
+    });
+
+    return nextLog;
+  }
+
   function startWorkout(workoutId) {
     onStartWorkout(workoutId);
     const startedAt = Date.now();
-    setWorkouts(current => current.map(workout => (
+    setWorkouts(current => current.map((workout, index) => (
       workout.id === workoutId
         ? {
-            ...workout,
+            ...normalizeWorkoutRecord({
+              ...workout,
+              status: 'active',
+              startedAt,
+              type: getCurrentWorkoutType(workout),
+              programId: fitnessSettings.programType || 'hyrox',
+              programType: fitnessSettings.programType || workout.programType || 'hyrox',
+              programName: workout.programName || getProgramDisplayName(fitnessSettings.programType),
+              workoutLog: normalizeWorkoutLog({
+                ...(workout.workoutLog || {}),
+                source: 'manual',
+                startedAt,
+                lastUpdatedAt: startedAt,
+                notes: workout.workoutLog?.notes || '',
+                currentSegmentId: workout.workoutLog?.currentSegmentId || null,
+                currentSegmentIndex: Number.isFinite(workout.workoutLog?.currentSegmentIndex) ? workout.workoutLog.currentSegmentIndex : 0,
+                segments: Array.isArray(workout.workoutLog?.segments) ? workout.workoutLog.segments : [],
+                externalRefs: workout.workoutLog?.externalRefs || {},
+              }, { startedAt }),
+            }, index),
             status: 'active',
-            startedAt,
-            type: getCurrentWorkoutType(workout),
-            programId: fitnessSettings.programType || 'hyrox',
-            programType: fitnessSettings.programType || workout.programType || 'hyrox',
-            programName: workout.programName || getProgramDisplayName(fitnessSettings.programType),
           }
         : workout.status === 'active'
-          ? { ...workout, status: 'planned' }
+          ? normalizeWorkoutRecord({ ...workout, status: 'planned' }, index)
           : workout
     )));
   }
 
   function cancelWorkout() {
     if (!activeWorkoutId) return;
-    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'planned' } : workout)));
+    updateWorkoutById(activeWorkoutId, workout => ({ ...workout, status: 'planned' }));
     onStartWorkout(null);
   }
 
   function completeWorkout(workoutLog) {
     if (!activeWorkoutId) return;
     const completedAt = Date.now();
-    setWorkouts(current => current.map(workout => (
-      workout.id === activeWorkoutId
-        ? { ...workout, status: 'completed', completedAt, workoutLog: workoutLog || null }
-        : workout
-    )));
+    updateWorkoutById(activeWorkoutId, workout => ({
+      ...workout,
+      status: 'completed',
+      completedAt,
+      workoutLog: mergeWorkoutLog(workout, {
+        ...(workoutLog || {}),
+        completionLoggedAt: workoutLog?.completionLoggedAt || completedAt,
+        completionSource: workoutLog?.completionSource || 'manual_completion',
+        lastUpdatedAt: completedAt,
+        notes: typeof workoutLog?.notes === 'string' ? workoutLog.notes : (workout.workoutLog?.notes || ''),
+      }),
+    }));
     upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
     onStartWorkout(null);
   }
 
-  function logCompletion() {
+  function logCompletion(workoutLog) {
     if (!activeWorkoutId) return;
-    const loggedAt = Date.now();
-    setWorkouts(current => current.map(workout => (
-      workout.id === activeWorkoutId
-        ? {
-            ...workout,
-            workoutLog: {
-              ...(workout.workoutLog || {}),
-              completionLoggedAt: loggedAt,
-            },
-          }
-        : workout
-    )));
-    upsertNotification('Completion logged', activeWorkout?.name || 'Workout');
+    completeWorkout(workoutLog);
+  }
+
+  function updateWorkoutLog(patch) {
+    if (!activeWorkoutId) return;
+    updateWorkoutById(activeWorkoutId, workout => ({
+      ...workout,
+      workoutLog: mergeWorkoutLog(workout, patch),
+    }));
   }
 
   function saveCheckIn() {
@@ -3655,7 +3732,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       settings: fitnessSettings,
       todayKey: selectedDay.session.dateKey || todayKey,
     });
-    setWorkouts(current => [sessionWorkout, ...current]);
+    appendWorkout(sessionWorkout);
     startWorkout(sessionWorkout.id);
   }
 
@@ -3672,7 +3749,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       plannedDateOverride: session.dateKey,
       statusOverride: 'planned',
     });
-    setWorkouts(current => [movedWorkout, ...current]);
+    appendWorkout(movedWorkout);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
     upsertNotification('Session rescheduled', `${session.label || session.title} moved to ${nextDate}`);
   }
@@ -3688,7 +3765,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       plannedDateOverride: session.dateKey,
       statusOverride: 'skipped',
     });
-    setWorkouts(current => [skippedWorkout, ...current]);
+    appendWorkout(skippedWorkout);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
     upsertNotification('Session skipped', session.label || session.title);
   }
@@ -3697,11 +3774,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     const existingWorkout = getWorkoutRecordForDate(workouts, session.dateKey);
     if (nextStatus === 'completed') {
       if (existingWorkout) {
-        setWorkouts(current => current.map(workout => (
-          workout.id === existingWorkout.id
-            ? { ...workout, status: 'completed', completedAt: Date.now() }
-            : workout
-        )));
+        updateWorkoutById(existingWorkout.id, workout => ({
+          ...workout,
+          status: 'completed',
+          completedAt: Date.now(),
+          workoutLog: mergeWorkoutLog(workout, {
+            completionLoggedAt: Date.now(),
+            completionSource: 'manual_completion',
+          }),
+        }));
         upsertNotification('Workout completed', session.label || session.title || 'Workout');
         setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
         return;
@@ -3713,18 +3794,21 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         settings: fitnessSettings,
         todayKey: session.dateKey,
       });
-      setWorkouts(current => [{ ...completedWorkout, status: 'completed', completedAt: Date.now() }, ...current]);
+      appendWorkout({ ...completedWorkout, status: 'completed', completedAt: Date.now() });
       upsertNotification('Workout completed', session.label || session.title || 'Workout');
       setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
       return;
     }
     if (nextStatus === 'skipped') {
       if (existingWorkout) {
-        setWorkouts(current => current.map(workout => (
-          workout.id === existingWorkout.id
-            ? { ...workout, status: 'skipped' }
-            : workout
-        )));
+        updateWorkoutById(existingWorkout.id, workout => ({
+          ...workout,
+          status: 'skipped',
+          workoutLog: mergeWorkoutLog(workout, {
+            completionLoggedAt: Date.now(),
+            completionSource: 'missed_cutoff',
+          }),
+        }));
         setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
         upsertNotification('Session skipped', session.label || session.title || 'Workout');
         return;
@@ -3741,6 +3825,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           onCancel={cancelWorkout}
           onComplete={completeWorkout}
           onLogCompletion={logCompletion}
+          onUpdateWorkoutLog={updateWorkoutLog}
         />
       )}
 
@@ -4357,6 +4442,11 @@ function AppShell() {
     inboxItems,
     setInboxItems,
     workouts,
+    setWorkouts,
+    createWorkout,
+    createExercise,
+    setNotifications,
+    createNotification,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -4393,6 +4483,22 @@ function AppShell() {
     () => notifications.filter(notification => !notification.read),
     [notifications],
   );
+  const athleteDefaults = profile?.athlete || {};
+  const workoutHistory = useMemo(
+    () => workouts.map(workout => ({ ...workout, plannedDate: workout.plannedDate || workout.scheduledDate || null })),
+    [workouts],
+  );
+  const shellPlanState = useMemo(
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
+      today: now,
+      history: workoutHistory,
+      athleteDefaults,
+    }),
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, now, workoutHistory],
+  );
 
   function openInboxPage() {
     setQuickAddOpen(false);
@@ -4414,6 +4520,89 @@ function AppShell() {
     setActiveSurface(null);
     setQuickAddOpen(false);
   }
+
+  useEffect(() => {
+    if (!isWorkoutPastCutoff(now)) return;
+
+    const todayKey = toDateKey(now);
+    const todaySession = shellPlanState.sessions.find(session => session.dateKey === todayKey) ?? null;
+    if (!todaySession) return;
+
+    const todayWorkouts = workouts.filter(workout => (
+      workout.scheduledDate === todayKey || workout.plannedDate === todayKey
+    ));
+    if (todayWorkouts.some(workout => ['completed', 'active', 'skipped'].includes(workout.status))) return;
+
+    const existingWorkout = todayWorkouts[0] ?? null;
+    const missedAt = Date.now();
+
+    if (existingWorkout) {
+      setWorkouts(current => current.map((workout, index) => (
+        workout.id === existingWorkout.id
+          ? normalizeWorkoutRecord({
+              ...workout,
+              status: 'skipped',
+              workoutLog: normalizeWorkoutLog({
+                ...(workout.workoutLog || {}),
+                source: 'manual',
+                startedAt: workout.startedAt || workout.workoutLog?.startedAt || null,
+                lastUpdatedAt: missedAt,
+                completionLoggedAt: missedAt,
+                completionSource: 'missed_cutoff',
+                notes: workout.workoutLog?.notes || '',
+                currentSegmentId: workout.workoutLog?.currentSegmentId || null,
+                currentSegmentIndex: Number.isFinite(workout.workoutLog?.currentSegmentIndex) ? workout.workoutLog.currentSegmentIndex : 0,
+                segments: Array.isArray(workout.workoutLog?.segments) ? workout.workoutLog.segments : [],
+                externalRefs: workout.workoutLog?.externalRefs || {},
+              }),
+            }, index)
+          : workout
+      )));
+    } else {
+      const missedWorkout = createWorkoutFromSession({
+        createWorkout,
+        createExercise,
+        session: todaySession,
+        settings: fitnessSettings,
+        todayKey,
+        scheduledDateOverride: todayKey,
+        plannedDateOverride: todayKey,
+        statusOverride: 'skipped',
+      });
+      setWorkouts(current => [normalizeWorkoutRecord({
+        ...missedWorkout,
+        workoutLog: normalizeWorkoutLog({
+          source: 'manual',
+          lastUpdatedAt: missedAt,
+          completionLoggedAt: missedAt,
+          completionSource: 'missed_cutoff',
+          notes: '',
+          currentSegmentId: null,
+          currentSegmentIndex: 0,
+          segments: [],
+          externalRefs: {},
+        }),
+      }, current.length), ...current]);
+    }
+
+    setNotifications(current => [
+      createNotification({
+        title: 'Workout marked missed',
+        detail: `${todaySession.label || todaySession.title || 'Today’s workout'} was not completed by 8:00 PM.`,
+      }),
+      ...current,
+    ]);
+  }, [
+    createExercise,
+    createNotification,
+    createWorkout,
+    fitnessSettings,
+    now,
+    setNotifications,
+    setWorkouts,
+    shellPlanState.sessions,
+    workouts,
+  ]);
 
   const activeCopy = SHELL_TAB_COPY[activeTab] ?? SHELL_TAB_COPY.home;
   const shellContent = activeSurface === 'inbox' ? (
