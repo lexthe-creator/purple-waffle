@@ -58,6 +58,7 @@ export const DEFAULT_APP_STATE = Object.freeze({
   workCalendarPrefs: {
     planningOrder: 'priority',
     busyBlockBehavior: 'hard',
+    googleSyncStatus: 'disconnected',
   },
   mealPrefs: {
     hydrationGoal: 8,

@@ -300,8 +300,14 @@ function getCalendarItemTypeLabel(type) {
   switch (type) {
     case 'busy':
       return 'Busy block';
+    case 'plan':
+      return 'Plan';
     case 'task':
       return 'Task';
+    case 'meal':
+      return 'Meal';
+    case 'workout':
+      return 'Workout';
     case 'event':
     default:
       return 'Event';
@@ -594,7 +600,7 @@ function formatDateLabel(value) {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
-  }).format(new Date(value));
+  }).format(asDate(value));
 }
 
 function getContextualDateLabel(dateKey) {
@@ -602,28 +608,31 @@ function getContextualDateLabel(dateKey) {
   const tomorrowK = toDateKey(addDays(new Date(), 1));
   const yesterdayK = toDateKey(addDays(new Date(), -1));
 
-  const targetDate = new Date(`${dateKey}T12:00:00`);
+  const targetDate = dateKeyToDate(dateKey);
   const weekday = targetDate.toLocaleDateString('en-US', { weekday: 'long' });
   const monthDay = targetDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+  const fullDate = `${weekday}, ${monthDay}`;
 
-  if (dateKey === todayK) return { primary: 'Today', secondary: `${weekday}, ${monthDay}` };
-  if (dateKey === tomorrowK) return { primary: 'Tomorrow', secondary: `${weekday}, ${monthDay}` };
-  if (dateKey === yesterdayK) return { primary: 'Yesterday', secondary: `${weekday}, ${monthDay}` };
+  if (dateKey === todayK) return { primary: 'Today', secondary: fullDate };
+  if (dateKey === tomorrowK) return { primary: 'Tomorrow', secondary: fullDate };
+  if (dateKey === yesterdayK) return { primary: 'Yesterday', secondary: fullDate };
 
-  const nowMidnight = new Date();
-  nowMidnight.setHours(0, 0, 0, 0);
-  const targetMidnight = new Date(`${dateKey}T00:00:00`);
-  const diffDays = Math.round((targetMidnight - nowMidnight) / (1000 * 60 * 60 * 24));
+  if (sameCalendarWeek(dateKey, todayK)) {
+    return { primary: weekday, secondary: monthDay };
+  }
 
-  if (diffDays >= 2 && diffDays <= 6) return { primary: weekday, secondary: monthDay };
-  if (diffDays >= 7 && diffDays <= 13) return { primary: 'Next week', secondary: `${weekday}, ${monthDay}` };
-  return { primary: weekday, secondary: `${weekday}, ${monthDay}` };
+  if (isNextCalendarWeek(dateKey, todayK)) {
+    return { primary: 'Next week', secondary: fullDate };
+  }
+
+  return { primary: weekday, secondary: fullDate };
 }
 
 function getItemStatusTone(itemType) {
   if (itemType === 'busy') return 'status-priority';
   if (itemType === 'event') return 'status-active';
   if (itemType === 'workout') return 'status-active';
+  if (itemType === 'meal') return 'status-active';
   return 'status-planned';
 }
 
@@ -632,25 +641,25 @@ function formatFullDate(value) {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
-  }).format(new Date(value));
+  }).format(asDate(value));
 }
 
 function formatShortMonthDay(value) {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
-  }).format(new Date(value));
+  }).format(asDate(value));
 }
 
 function formatShortTime(value) {
   return new Intl.DateTimeFormat('en-US', {
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date(value));
+  }).format(asDate(value));
 }
 
 function formatStatusTime(value) {
-  const date = new Date(value);
+  const date = asDate(value);
   return new Intl.DateTimeFormat('en-US', date.getMinutes() === 0
     ? { hour: 'numeric' }
     : { hour: 'numeric', minute: '2-digit' }).format(date);
@@ -665,20 +674,13 @@ function parseDateKeyTime(dateKey, timeValue) {
 }
 
 function startOfDay(value) {
-  // ISO date-only strings ("YYYY-MM-DD") are parsed by `new Date()` as UTC
-  // midnight, which shifts the day in non-UTC timezones. Parse them as local
-  // time explicitly to keep all date-key arithmetic in local time.
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [y, m, d] = value.split('-').map(Number);
-    return new Date(y, m - 1, d, 0, 0, 0, 0);
-  }
-  const date = new Date(value);
+  const date = asDate(value);
   date.setHours(0, 0, 0, 0);
   return date;
 }
 
 function addDays(value, amount) {
-  const date = new Date(value);
+  const date = asDate(value);
   date.setDate(date.getDate() + amount);
   return date;
 }
@@ -688,12 +690,104 @@ function sameDay(left, right) {
 }
 
 function toDateKey(value) {
-  // Use local date components so the key never shifts with UTC offset.
-  const d = startOfDay(value);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  const date = startOfDay(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function isDateKey(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function dateKeyToDate(value, hour = 12) {
+  if (!isDateKey(value)) return new Date(value);
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day, hour, 0, 0, 0);
+}
+
+function asDate(value) {
+  if (value instanceof Date) return new Date(value.getTime());
+  if (isDateKey(value)) return dateKeyToDate(value);
+  return new Date(value);
+}
+
+function sameCalendarWeek(left, right, anchorDay = 'Monday') {
+  return toDateKey(alignDateToAnchor(asDate(left), anchorDay)) === toDateKey(alignDateToAnchor(asDate(right), anchorDay));
+}
+
+function isNextCalendarWeek(target, reference = new Date(), anchorDay = 'Monday') {
+  const nextWeekStart = addDays(alignDateToAnchor(asDate(reference), anchorDay), 7);
+  return toDateKey(alignDateToAnchor(asDate(target), anchorDay)) === toDateKey(nextWeekStart);
+}
+
+function formatAgendaTimeRange(startTime, endTime) {
+  if (!startTime && !endTime) return '';
+  if (!startTime || !endTime) return startTime || endTime;
+  const startLabel = formatStatusTime(`2000-01-01T${startTime}`);
+  const endLabel = formatStatusTime(`2000-01-01T${endTime}`);
+  return `${startLabel} - ${endLabel}`;
+}
+
+function getCalendarSyncCardState(workCalendarPrefs, calendarItems) {
+  const rawStatus = workCalendarPrefs?.googleSyncStatus;
+  const hasCalendarItems = calendarItems.length > 0;
+  const status = rawStatus === 'error'
+    ? 'error'
+    : rawStatus === 'connected_empty'
+      ? 'connected_empty'
+      : rawStatus === 'connected' && !hasCalendarItems
+        ? 'connected_empty'
+        : rawStatus === 'connected'
+          ? 'connected'
+          : 'disconnected';
+
+  if (status === 'connected') {
+    return {
+      dotClassName: 'cal-sync-dot--on',
+      title: 'Google connected',
+      description: 'Calendar sync is active.',
+      ctaLabel: 'Manage connection',
+      statusPill: 'Connected',
+      toneClassName: 'status-active',
+      needsAttention: false,
+    };
+  }
+
+  if (status === 'connected_empty') {
+    return {
+      dotClassName: 'cal-sync-dot--on',
+      title: 'Google connected',
+      description: 'Sync is active, but no calendar items were found yet.',
+      ctaLabel: 'Manage connection',
+      statusPill: 'Sync active',
+      toneClassName: 'status-planned',
+      needsAttention: false,
+    };
+  }
+
+  if (status === 'error') {
+    return {
+      dotClassName: 'cal-sync-dot--error',
+      title: 'Sync needs attention',
+      description: 'Reconnect Google Calendar or review sync settings.',
+      ctaLabel: 'Open settings',
+      statusPill: 'Action needed',
+      toneClassName: 'status-priority',
+      needsAttention: true,
+    };
+  }
+
+  return {
+    dotClassName: 'cal-sync-dot--off',
+    title: 'Connect Google to sync',
+    description: 'Connect Google Calendar in Settings to import events automatically.',
+    ctaLabel: 'Go to Settings',
+    statusPill: 'Disconnected',
+    toneClassName: 'status-planned',
+    needsAttention: true,
+  };
 }
 
 function getProgramDisplayName(programType) {
@@ -2229,7 +2323,7 @@ return (
 );
 }
 
-function CalendarScreen() {
+function CalendarScreen({ onOpenSettings }) {
   const { tasks, meals, workouts, calendarItems, setCalendarItems } = useTaskContext();
   const { fitnessSettings } = useAppContext();
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
@@ -2281,7 +2375,7 @@ function CalendarScreen() {
         id: `plan-${session.dateKey}-${session.title}`,
         type: 'plan',
         title: session.label || session.title,
-        subtitle: `${session.dayLabel} · ${planState.programLabel} · ${session.detail || session.title}`,
+        subtitle: `${planState.programLabel} · ${session.detail || session.title}`,
       }));
 
     const calendarDayItems = calendarItems
@@ -2289,9 +2383,13 @@ function CalendarScreen() {
       .map(item => ({
         id: item.id,
         type: item.type,
-        title: item.title,
+        title: item.title || 'Untitled item',
         startTime: item.startTime,
-        subtitle: `${item.startTime} – ${item.endTime}${item.priority ? ' · priority' : ''}`,
+        subtitle: [
+          formatAgendaTimeRange(item.startTime, item.endTime),
+          item.priority ? 'Priority' : null,
+          item.notes || null,
+        ].filter(Boolean).join(' · '),
         notes: item.notes,
       }));
 
@@ -2300,7 +2398,7 @@ function CalendarScreen() {
       .map(meal => ({
         id: `meal-${meal.id}`,
         type: 'meal',
-        title: meal.name,
+        title: meal.name || 'Logged meal',
         subtitle: Array.isArray(meal.tags) && meal.tags.length ? meal.tags.join(' · ') : 'Logged meal',
       }));
 
@@ -2309,7 +2407,7 @@ function CalendarScreen() {
       .map(workout => ({
         id: `workout-${workout.id}`,
         type: 'workout',
-        title: workout.name,
+        title: workout.name || 'Workout',
         subtitle: `${workout.status} · ${workout.duration || 30} min`,
       }));
 
@@ -2330,10 +2428,18 @@ function CalendarScreen() {
   );
 
   const contextLabel = useMemo(() => getContextualDateLabel(selectedDate), [selectedDate]);
+  const exactSelectedDate = useMemo(() => formatFullDate(selectedDate), [selectedDate]);
   const agendaStatus = selectedDayItems.length > 0
-    ? `${selectedDayItems.length} item${selectedDayItems.length === 1 ? '' : 's'}`
-    : 'Open';
+    ? `${selectedDayItems.length} scheduled`
+    : 'Open day';
   const agendaStatusTone = selectedDayItems.length > 0 ? 'status-active' : 'status-planned';
+  const agendaIntro = selectedDayItems.length > 0
+    ? `Everything below is scheduled for ${exactSelectedDate}.`
+    : `${exactSelectedDate} is open right now. Use + to add a busy block, event, or task.`;
+  const syncCardState = useMemo(
+    () => getCalendarSyncCardState(workCalendarPrefs, calendarItems),
+    [calendarItems, workCalendarPrefs],
+  );
 
   useEffect(() => {
     if (selectedCalendarItem) {
@@ -2503,40 +2609,44 @@ function CalendarScreen() {
     </span>
 
     {/* Primary agenda card – main feature of the page */}
-    <Card variant="flat" className="home-card home-section cal-agenda-card">
+      <Card variant="flat" className="home-card home-section cal-agenda-card">
       <SectionHeader
-        eyebrow={contextLabel.primary}
-        title="Day schedule"
+        eyebrow="Agenda"
+        title={`${exactSelectedDate} agenda`}
         action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
       />
+      <p className="home-card-copy cal-agenda-copy">{agendaIntro}</p>
       <div className="home-list">
         {selectedDayItems.length === 0 ? (
           <EmptyState
             title="Nothing scheduled"
-            description="Tap + to add a busy block, event, or task to this day."
+            description={`Tap + to add a busy block, event, or task for ${contextLabel.primary.toLowerCase() === 'today' ? 'today' : exactSelectedDate}.`}
           />
         ) : (
           selectedDayItems.map(item => (
             <ListRow
               key={item.id}
               variant="card"
+              className="cal-agenda-row"
               label={item.title}
               sub={item.subtitle || item.type}
               trailing={
-                <span className={`status-pill ${getItemStatusTone(item.type)}`}>
-                  {getCalendarItemTypeLabel(item.type)}
-                </span>
+                <div className="cal-row-trailing">
+                  <span className={`status-pill ${getItemStatusTone(item.type)}`}>
+                    {getCalendarItemTypeLabel(item.type)}
+                  </span>
+                  {['busy', 'event', 'task'].includes(item.type) && (
+                    <button
+                      type="button"
+                      aria-label={`Edit ${item.title}`}
+                      className="ghost-button compact-ghost"
+                      onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
               }
-              action={['busy', 'event', 'task'].includes(item.type) ? (
-                <button
-                  type="button"
-                  aria-label={`Edit ${item.title}`}
-                  className="ghost-button compact-ghost"
-                  onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
-                >
-                  Edit
-                </button>
-              ) : undefined}
             />
           ))
         )}
@@ -2544,59 +2654,77 @@ function CalendarScreen() {
     </Card>
 
     {/* Google sync – connection status module, visually secondary */}
-    <Card variant="flat" className="home-card home-section cal-sync-card">
+    <Card
+      variant={syncCardState.needsAttention ? 'default' : 'tinted'}
+      className={`home-card cal-sync-card cal-utility-card ${syncCardState.needsAttention ? 'is-attention' : 'is-quiet'}`}
+    >
       <div className="cal-sync-row">
         <div className="cal-sync-status">
-          <span className="cal-sync-dot cal-sync-dot--off" aria-hidden="true" />
-          <span className="cal-sync-title">Google not connected</span>
+          <span className={`cal-sync-dot ${syncCardState.dotClassName}`} aria-hidden="true" />
+          <span className="cal-sync-title">{syncCardState.title}</span>
         </div>
-        <button
-          type="button"
-          className="ghost-button compact-ghost"
-          onClick={() => window.alert('Google Calendar connection setup will live in Settings.')}
-        >
-          Go to Settings
-        </button>
+        <div className="cal-sync-actions">
+          <span className={`status-pill ${syncCardState.toneClassName}`}>{syncCardState.statusPill}</span>
+          <button
+            type="button"
+            className="ghost-button compact-ghost"
+            onClick={onOpenSettings}
+          >
+            {syncCardState.ctaLabel}
+          </button>
+        </div>
       </div>
-      <p className="cal-sync-desc">Connect Google Calendar in Settings to import events automatically.</p>
+      <p className="cal-sync-desc">{syncCardState.description}</p>
     </Card>
 
     {/* Pattern utility – demoted, collapsed by default */}
-    <ExpandablePanel header="Save as pattern" className="calendar-pattern-expandable">
-      <div className="calendar-pattern-row">
-        <input
-          aria-label="Pattern name"
-          className="task-title-input calendar-pattern-input"
-          value={patternName}
-          onChange={event => setPatternName(event.target.value)}
-          placeholder="Pattern name (e.g. Typical Mon)"
-        />
-        <button type="button" className="calendar-primary-button calendar-save-button" onClick={savePattern}>
-          Save
-        </button>
-      </div>
-    </ExpandablePanel>
-
-    {calendarPatterns.length > 0 && (
-      <section className="calendar-saved-patterns-card">
-        <SectionHeader eyebrow="Patterns" title="Saved patterns" />
-        <div className="subtle-feed">
-          {calendarPatterns.map(pattern => (
-            <ListRow
-              key={pattern.id}
-              variant="card"
-              label={pattern.name}
-              sub={`${pattern.items.length} items · ${pattern.sourceDate}`}
-              action={(
-                <button type="button" className="ghost-button compact-ghost" onClick={() => applyPattern(pattern)}>
-                  Apply next week
-                </button>
-              )}
-            />
-          ))}
+    <Card variant="tinted" className="home-card cal-pattern-card cal-utility-card">
+      <ExpandablePanel
+        header={(
+          <div className="cal-utility-header">
+            <div>
+              <p className="eyebrow">Patterns</p>
+              <h2 className="cal-utility-title">Save this week as a pattern</h2>
+            </div>
+            <span className="status-pill status-planned">
+              {calendarPatterns.length > 0 ? `${calendarPatterns.length} saved` : 'Optional'}
+            </span>
+          </div>
+        )}
+        className="calendar-pattern-expandable"
+      >
+        <div className="calendar-pattern-row">
+          <input
+            aria-label="Pattern name"
+            className="task-title-input calendar-pattern-input"
+            value={patternName}
+            onChange={event => setPatternName(event.target.value)}
+            placeholder="Pattern name (e.g. Typical Mon)"
+          />
+          <button type="button" className="calendar-primary-button calendar-save-button" onClick={savePattern}>
+            Save
+          </button>
         </div>
-      </section>
-    )}
+
+        {calendarPatterns.length > 0 && (
+          <div className="subtle-feed cal-pattern-list">
+            {calendarPatterns.map(pattern => (
+              <ListRow
+                key={pattern.id}
+                variant="card"
+                label={pattern.name}
+                sub={`${pattern.items.length} items · ${formatFullDate(pattern.sourceDate)}`}
+                trailing={(
+                  <button type="button" className="ghost-button compact-ghost" onClick={() => applyPattern(pattern)}>
+                    Apply next week
+                  </button>
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </ExpandablePanel>
+    </Card>
 
     {/* Single FAB – rendered via portal so it sits above AppFrame's generic FAB */}
     {createPortal(
@@ -2622,7 +2750,7 @@ function CalendarScreen() {
           onClick={event => event.stopPropagation()}
         >
           <div className="modal-header">
-            <h2 style={{ margin: 0 }}>{editingItemId ? 'Edit item' : 'Add item'}</h2>
+            <h2 style={{ margin: 0 }}>{editingItemId ? `Edit ${exactSelectedDate}` : `Add item for ${exactSelectedDate}`}</h2>
             <button type="button" className="ghost-button compact-ghost" onClick={resetDraft}>✕</button>
           </div>
 
@@ -3919,7 +4047,7 @@ function AppShell() {
   ) : activeTab === 'home' ? (
     <HomeDashboard now={now} />
   ) : activeTab === 'calendar' ? (
-    <CalendarScreen />
+    <CalendarScreen onOpenSettings={openSettingsPage} />
   ) : (
     <div className="tab-stack shell-stack">
       <section className="shell-hero task-card">
@@ -3967,6 +4095,7 @@ function AppShell() {
         onOpenInbox={openInboxPage}
         onOpenQuickAdd={openQuickCapture}
         onOpenSettings={openSettingsPage}
+        showQuickAddFab={activeTab !== 'calendar' || activeSurface !== null}
       >
         {shellContent}
       </AppFrame>
