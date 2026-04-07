@@ -2765,10 +2765,10 @@ function CalendarScreen({ onOpenSettings }) {
         <button
           type="button"
           aria-label="Previous week"
-          className="calendar-nav-pill"
+          className="calendar-nav-arrow calendar-nav-arrow--prev"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
         >
-          ← Prev
+          <span aria-hidden="true">&lsaquo;</span>
         </button>
 
         <div className="calendar-range-title" aria-hidden="true">
@@ -2778,10 +2778,10 @@ function CalendarScreen({ onOpenSettings }) {
         <button
           type="button"
           aria-label="Next week"
-          className="calendar-nav-pill"
+          className="calendar-nav-arrow calendar-nav-arrow--next"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
         >
-          Next →
+          <span aria-hidden="true">&rsaquo;</span>
         </button>
       </div>
 
@@ -2813,7 +2813,7 @@ function CalendarScreen({ onOpenSettings }) {
       <SectionHeader
         eyebrow="Agenda"
         title={`${exactSelectedDate} agenda`}
-        action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
+        action={<span className={`status-pill cal-agenda-status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
       />
       <p className="home-card-copy cal-agenda-copy">{agendaIntro}</p>
       <div className="home-list">
