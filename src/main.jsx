@@ -730,6 +730,40 @@ function formatAgendaTimeRange(startTime, endTime) {
   return `${startLabel} - ${endLabel}`;
 }
 
+// ── Day Timeline planner ──────────────────────────────────────
+const TIMELINE_START_HOUR = 6;   // 6 AM
+const TIMELINE_END_HOUR = 22;    // 10 PM
+const HOUR_HEIGHT_PX = 64;       // px per hour slot
+const MIN_BLOCK_MINUTES = 30;    // minimum rendered block height
+const TIMELINE_TOTAL_HEIGHT = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * HOUR_HEIGHT_PX;
+const TIMELINE_HOURS = Array.from(
+  { length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 },
+  (_, i) => TIMELINE_START_HOUR + i,
+);
+
+function timeStringToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const [h, m] = timeStr.split(':');
+  return parseInt(h, 10) * 60 + parseInt(m || '0', 10);
+}
+
+function getTimelineBlockStyle(startTime, endTime) {
+  const startMin = timeStringToMinutes(startTime);
+  if (startMin === null) return null;
+  const endMin = endTime ? timeStringToMinutes(endTime) : startMin + MIN_BLOCK_MINUTES;
+  const durationMin = Math.max(endMin - startMin, MIN_BLOCK_MINUTES);
+  const offsetMin = startMin - TIMELINE_START_HOUR * 60;
+  if (offsetMin < 0) return null; // before visible range
+  return {
+    top: Math.round(offsetMin * HOUR_HEIGHT_PX / 60),
+    height: Math.round(durationMin * HOUR_HEIGHT_PX / 60),
+  };
+}
+
+function formatHourLabel(hour) {
+  return formatStatusTime(`2000-01-01T${String(hour).padStart(2, '0')}:00`);
+}
+
 function getCalendarSyncCardState(workCalendarPrefs, calendarItems) {
   const rawStatus = workCalendarPrefs?.googleSyncStatus;
   const hasCalendarItems = calendarItems.length > 0;
@@ -2555,6 +2589,7 @@ function CalendarScreen({ onOpenSettings }) {
         type: item.type,
         title: item.title || 'Untitled item',
         startTime: item.startTime,
+        endTime: item.endTime,
         subtitle: [
           formatAgendaTimeRange(item.startTime, item.endTime),
           item.priority ? 'Priority' : null,
@@ -2565,12 +2600,26 @@ function CalendarScreen({ onOpenSettings }) {
 
     const mealItems = meals
       .filter(meal => toDateKey(meal.loggedAt) === selectedDate)
-      .map(meal => ({
-        id: `meal-${meal.id}`,
-        type: 'meal',
-        title: meal.name || 'Logged meal',
-        subtitle: Array.isArray(meal.tags) && meal.tags.length ? meal.tags.join(' · ') : 'Logged meal',
-      }));
+      .map(meal => {
+        let startTime;
+        let endTime;
+        if (meal.loggedAt) {
+          const d = new Date(meal.loggedAt);
+          const h = String(d.getHours()).padStart(2, '0');
+          const m = String(d.getMinutes()).padStart(2, '0');
+          startTime = `${h}:${m}`;
+          const end = new Date(d.getTime() + 30 * 60 * 1000);
+          endTime = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+        }
+        return {
+          id: `meal-${meal.id}`,
+          type: 'meal',
+          title: meal.name || 'Logged meal',
+          subtitle: Array.isArray(meal.tags) && meal.tags.length ? meal.tags.filter(t => !t.startsWith('slot:')).join(' · ') : 'Logged meal',
+          startTime,
+          endTime,
+        };
+      });
 
     const workoutItems = workouts
       .filter(workout => workout.scheduledDate === selectedDate || toDateKey(workout.createdAt) === selectedDate)
@@ -2596,6 +2645,28 @@ function CalendarScreen({ onOpenSettings }) {
     () => calendarItems.find(item => item.id === editingItemId) ?? null,
     [calendarItems, editingItemId],
   );
+
+  const timedItems = useMemo(
+    () => selectedDayItems.filter(item => Boolean(item.startTime)),
+    [selectedDayItems],
+  );
+
+  const untimedItems = useMemo(
+    () => selectedDayItems.filter(item => !item.startTime),
+    [selectedDayItems],
+  );
+
+  const isSelectedToday = selectedDate === toDateKey(new Date());
+
+  const nowTopPx = useMemo(() => {
+    if (!isSelectedToday) return null;
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const offsetMin = nowMin - TIMELINE_START_HOUR * 60;
+    const maxMin = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 60;
+    if (offsetMin < 0 || offsetMin > maxMin) return null;
+    return Math.round(offsetMin * HOUR_HEIGHT_PX / 60);
+  }, [isSelectedToday]);
 
   const contextLabel = useMemo(() => getContextualDateLabel(selectedDate), [selectedDate]);
   const exactSelectedDate = useMemo(() => formatFullDate(selectedDate), [selectedDate]);
@@ -2651,6 +2722,29 @@ function CalendarScreen({ onOpenSettings }) {
     setDraftNotes('');
     setDraftPriority(false);
     setSheetOpen(true);
+  }
+
+  function openAddSheetAtTime(startMinutes) {
+    const snapped = Math.round(startMinutes / 15) * 15;
+    const clampedStart = Math.max(TIMELINE_START_HOUR * 60, Math.min(snapped, TIMELINE_END_HOUR * 60 - 60));
+    const endMin = clampedStart + 60;
+    const pad = n => String(n).padStart(2, '0');
+    setEditingItemId(null);
+    setDraftType('busy');
+    setDraftTitle('');
+    setDraftStartTime(`${pad(Math.floor(clampedStart / 60))}:${pad(clampedStart % 60)}`);
+    setDraftEndTime(`${pad(Math.floor(endMin / 60))}:${pad(endMin % 60)}`);
+    setDraftNotes('');
+    setDraftPriority(false);
+    setSheetOpen(true);
+  }
+
+  function handleLaneClick(event) {
+    if (event.target !== event.currentTarget) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const y = event.clientY - rect.top;
+    const clickedMin = Math.round(y / HOUR_HEIGHT_PX * 60) + TIMELINE_START_HOUR * 60;
+    openAddSheetAtTime(clickedMin);
   }
 
   function saveCalendarItem() {
@@ -2778,49 +2872,147 @@ function CalendarScreen({ onOpenSettings }) {
       {formatFullDate(selectedDate)} selected
     </span>
 
-    {/* Primary agenda card – main feature of the page */}
-      <Card variant="flat" className="home-card home-section cal-agenda-card">
+    {/* Primary timeline card – main feature of the page */}
+    <Card variant="flat" className="home-card home-section cal-agenda-card cal-timeline-card">
       <SectionHeader
-        eyebrow="Agenda"
-        title={`${exactSelectedDate} agenda`}
+        eyebrow="Day planner"
+        title={exactSelectedDate}
         action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
       />
-      <p className="home-card-copy cal-agenda-copy">{agendaIntro}</p>
-      <div className="home-list">
-        {selectedDayItems.length === 0 ? (
-          <EmptyState
-            title="Nothing scheduled"
-            description={`Tap + to add a busy block, event, or task for ${contextLabel.primary.toLowerCase() === 'today' ? 'today' : exactSelectedDate}.`}
-          />
-        ) : (
-          selectedDayItems.map(item => (
-            <ListRow
-              key={item.id}
-              variant="card"
-              className="cal-agenda-row"
-              label={item.title}
-              sub={item.subtitle || item.type}
-              trailing={
-                <div className="cal-row-trailing">
-                  <span className={`status-pill ${getItemStatusTone(item.type)}`}>
-                    {getCalendarItemTypeLabel(item.type)}
-                  </span>
-                  {['busy', 'event', 'task'].includes(item.type) && (
-                    <button
-                      type="button"
-                      aria-label={`Edit ${item.title}`}
-                      className="ghost-button compact-ghost"
-                      onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
-                    >
-                      Edit
-                    </button>
+
+      {/* Scrollable timeline body */}
+      <div className="cal-timeline-scroll">
+        <div className="cal-timeline-grid" style={{ height: `${TIMELINE_TOTAL_HEIGHT}px` }}>
+
+          {/* Hour labels column */}
+          <div className="cal-timeline-labels" aria-hidden="true">
+            {TIMELINE_HOURS.map(hour => (
+              <div
+                key={hour}
+                className="cal-timeline-hour-label"
+                style={{ top: `${(hour - TIMELINE_START_HOUR) * HOUR_HEIGHT_PX}px` }}
+              >
+                {formatHourLabel(hour)}
+              </div>
+            ))}
+          </div>
+
+          {/* Schedule lane */}
+          <div
+            className="cal-timeline-lane"
+            onClick={handleLaneClick}
+            aria-label="Day schedule. Tap empty space to add an item."
+          >
+            {/* Hour grid lines */}
+            {TIMELINE_HOURS.map(hour => (
+              <div
+                key={hour}
+                className="cal-hour-line"
+                style={{ top: `${(hour - TIMELINE_START_HOUR) * HOUR_HEIGHT_PX}px` }}
+                aria-hidden="true"
+              />
+            ))}
+
+            {/* Half-hour tick lines */}
+            {TIMELINE_HOURS.slice(0, -1).map(hour => (
+              <div
+                key={`${hour}-half`}
+                className="cal-hour-line cal-hour-line--half"
+                style={{ top: `${(hour - TIMELINE_START_HOUR) * HOUR_HEIGHT_PX + HOUR_HEIGHT_PX / 2}px` }}
+                aria-hidden="true"
+              />
+            ))}
+
+            {/* Timed blocks */}
+            {timedItems.map(item => {
+              const pos = getTimelineBlockStyle(item.startTime, item.endTime);
+              if (!pos) return null;
+              const isEditable = ['busy', 'event', 'task'].includes(item.type);
+              return (
+                <div
+                  key={item.id}
+                  className={`cal-timeline-block cal-timeline-block--${item.type}`}
+                  style={{ top: `${pos.top}px`, height: `${pos.height}px` }}
+                  onClick={event => {
+                    event.stopPropagation();
+                    if (isEditable) { setEditingItemId(item.id); setSheetOpen(true); }
+                  }}
+                  role={isEditable ? 'button' : undefined}
+                  tabIndex={isEditable ? 0 : undefined}
+                  onKeyDown={isEditable ? event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setEditingItemId(item.id);
+                      setSheetOpen(true);
+                    }
+                  } : undefined}
+                  aria-label={`${item.title}${item.startTime ? `, ${formatAgendaTimeRange(item.startTime, item.endTime)}` : ''}`}
+                >
+                  <div className="cal-timeline-block__title">{item.title}</div>
+                  {pos.height >= 36 && item.startTime && (
+                    <div className="cal-timeline-block__time">
+                      {formatAgendaTimeRange(item.startTime, item.endTime)}
+                    </div>
+                  )}
+                  {pos.height >= 52 && item.subtitle && !item.startTime && (
+                    <div className="cal-timeline-block__time">{item.subtitle}</div>
                   )}
                 </div>
-              }
-            />
-          ))
-        )}
+              );
+            })}
+
+            {/* Now indicator – only on today */}
+            {nowTopPx !== null && (
+              <div className="cal-now-indicator" style={{ top: `${nowTopPx}px` }} aria-hidden="true">
+                <div className="cal-now-dot" />
+                <div className="cal-now-line" />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Unscheduled items – items with no usable time data */}
+      {untimedItems.length > 0 && (
+        <div className="cal-unscheduled-section">
+          <p className="cal-unscheduled-title eyebrow">Unscheduled</p>
+          <div className="home-list">
+            {untimedItems.map(item => (
+              <ListRow
+                key={item.id}
+                variant="card"
+                className="cal-agenda-row"
+                label={item.title}
+                sub={item.subtitle || item.type}
+                trailing={
+                  <div className="cal-row-trailing">
+                    <span className={`status-pill ${getItemStatusTone(item.type)}`}>
+                      {getCalendarItemTypeLabel(item.type)}
+                    </span>
+                    {['busy', 'event', 'task'].includes(item.type) && (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${item.title}`}
+                        className="ghost-button compact-ghost"
+                        onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                }
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty hint when truly nothing scheduled */}
+      {selectedDayItems.length === 0 && (
+        <p className="cal-timeline-empty-hint">
+          Tap + to add a busy block, event, or task — or tap any hour in the timeline above.
+        </p>
+      )}
     </Card>
 
     {/* Google sync – connection status module, visually secondary */}
