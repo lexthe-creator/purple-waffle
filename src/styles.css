@@ -308,12 +308,17 @@ p {
   gap: 10px;
 }
 
+.fitness-week-card,
+.fitness-support-card {
+  gap: 10px;
+}
+
 .fitness-subnav {
   gap: 6px;
   padding: 4px;
   background: var(--surface);
-  border: 1px solid var(--primary-alpha-sm);
-  border-radius: 18px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--r-lg);
 }
 
 .fitness-subnav .status-chip {
@@ -433,8 +438,8 @@ p {
   display: grid;
   gap: 4px;
   padding: 10px;
-  border-radius: 16px;
-  border: 1px solid var(--primary-alpha-sm);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-card);
   background: var(--surface);
 }
 
@@ -474,8 +479,8 @@ p {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border-radius: 18px;
-  border: 1px solid var(--primary-alpha-sm);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-card);
   background: var(--surface);
 }
 
@@ -542,12 +547,7 @@ p {
 
 /* ── Fitness Hero Card ── */
 .fitness-hero-card {
-  gap: 16px;
-  border-color: var(--border-card);
-  box-shadow: var(--shadow);
-  background:
-    linear-gradient(180deg, rgba(246, 243, 239, 0.92) 0%, rgba(246, 243, 239, 0) 36%),
-    var(--card);
+  gap: 12px;
 }
 
 .fitness-hero-header {
@@ -616,13 +616,13 @@ p {
 .fitness-week-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 5px;
+  gap: 8px;
 }
 
 .fitness-week-tile {
   appearance: none;
   width: 100%;
-  border: 1px solid var(--primary-alpha-sm);
+  border: 1px solid var(--border-card);
   background: var(--surface);
   border-radius: var(--r-lg);
   padding: 10px 6px;
@@ -636,17 +636,17 @@ p {
 
 .fitness-week-tile--today {
   border-color: var(--primary);
-  background: var(--primary-soft, #f0ede9);
+  background: var(--primary-soft);
 }
 
 .fitness-week-tile--completed {
-  background: rgba(165, 179, 140, 0.12);
-  border-color: rgba(165, 179, 140, 0.4);
+  background: var(--success-soft);
+  border-color: var(--success);
 }
 
 .fitness-week-tile--missed {
-  background: rgba(198, 90, 75, 0.06);
-  border-color: rgba(198, 90, 75, 0.25);
+  background: var(--danger-soft);
+  border-color: var(--danger);
 }
 
 .fitness-week-tile--rest {
@@ -654,8 +654,8 @@ p {
 }
 
 .fitness-week-tile--selected {
-  border-color: rgba(79, 73, 70, 0.35);
-  box-shadow: inset 0 0 0 1px rgba(79, 73, 70, 0.16);
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--border-card);
 }
 
 .fitness-week-tile__day {
@@ -709,7 +709,7 @@ p {
 }
 
 .fitness-week-tile--planned .fitness-week-tile__dot {
-  background: var(--primary-alpha-md, rgba(79, 73, 70, 0.3));
+  background: var(--border-muted);
 }
 
 /* ── Fitness Week Sessions List ── */
@@ -723,8 +723,8 @@ p {
 }
 
 .fitness-week-session-card.is-selected {
-  border-color: rgba(79, 73, 70, 0.24);
-  background: rgba(246, 243, 239, 0.72);
+  border-color: var(--border-muted);
+  background: var(--surface);
 }
 
 .fitness-week-session-button {
@@ -739,11 +739,6 @@ p {
 
 .fitness-week-session-button strong {
   display: block;
-}
-
-.fitness-week-actions {
-  padding: 0 12px 12px;
-  flex-wrap: wrap;
 }
 
 .fitness-week-session-row {
@@ -2955,17 +2950,20 @@ p {
   letter-spacing: -0.03em;
 }
 
-.calendar-week-header-card,
-.calendar-sync-card,
-.calendar-pattern-card,
 .calendar-day-content-card,
 .calendar-editor-card,
 .calendar-saved-patterns-card {
-  background: color-mix(in srgb, var(--surface) 78%, white 22%);
-  border: 1px solid rgba(214, 221, 228, 0.86);
+  background: var(--surface);
+  border: 1px solid var(--border-card);
   border-radius: var(--r-xl);
   padding: var(--sp-4) var(--sp-5);
   box-shadow: var(--sh-sm);
+}
+
+.calendar-week-header-card,
+.cal-sync-card,
+.cal-pattern-card {
+  gap: 10px;
 }
 
 .calendar-week-header-row,
@@ -2977,71 +2975,97 @@ p {
   gap: var(--sp-3);
 }
 
+.calendar-week-header-card {
+  gap: var(--sp-2);
+}
+
 .calendar-week-header-row {
-  margin-bottom: var(--sp-4);
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
 }
 
 .calendar-range-title,
 .calendar-selected-title {
   margin: 0;
-  font-size: var(--fs-md);
+  font-size: var(--fs-base);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
-.calendar-nav-pill,
+.calendar-nav-arrow,
 .calendar-primary-button,
 .calendar-save-button,
 .calendar-sync-button {
   border: none;
-  border-radius: var(--r-full);
   font-weight: 600;
   cursor: pointer;
 }
 
-.calendar-nav-pill {
-  min-height: 40px;
-  min-width: 80px;
-  padding: 0 var(--sp-5);
-  background: var(--primary-soft);
-  color: var(--primary);
-  font-size: var(--fs-sm);
+.calendar-nav-arrow {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-nav-arrow--prev {
+  justify-self: start;
+}
+
+.calendar-nav-arrow--next {
+  justify-self: end;
+}
+
+.calendar-range-title {
+  text-align: center;
+  letter-spacing: -0.02em;
 }
 
 .calendar-day-pill-row {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: var(--sp-2);
+  gap: 6px;
 }
 
 .calendar-day-pill {
-  min-height: 64px;
-  border-radius: var(--r-xl);
-  border: 1px solid rgba(214, 221, 228, 0.9);
-  background: var(--card);
+  min-height: 56px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-soft);
+  background: transparent;
   color: var(--text-secondary);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--sp-1);
+  gap: 2px;
   cursor: pointer;
-  transition: border-color 0.12s;
+  transition: border-color 0.12s, background-color 0.12s, color 0.12s;
 }
 
 .calendar-day-pill strong {
-  font-size: var(--fs-base);
-  color: var(--text-primary);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
 }
 
 .calendar-day-pill.is-active {
-  border: 1px solid color-mix(in srgb, var(--primary) 55%, white 45%);
-  background: color-mix(in srgb, var(--primary-soft) 72%, white 28%);
-  box-shadow: var(--sh-sm);
+  border-color: var(--primary-alpha-md);
+  background: var(--primary-soft);
+  box-shadow: none;
 }
 
 .calendar-day-pill.is-today {
-  border-color: color-mix(in srgb, var(--primary) 24%, white 76%);
+  border-color: var(--border-muted);
 }
 
 .calendar-day-pill.is-today strong {
@@ -3119,26 +3143,19 @@ p {
 }
 
 @media (max-width: 720px) {
-  /* Nav pills stay inline — just ensure they don't crowd */
-  .calendar-nav-pill {
-    min-width: 64px;
-    padding: 0 var(--sp-4);
-  }
-
-  /* Day pills: horizontal scroll on narrow screens */
   .calendar-day-pill-row {
     display: flex;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
-    gap: var(--sp-2);
+    gap: 6px;
     padding-bottom: 4px;
   }
 
   .calendar-day-pill {
     flex: 0 0 auto;
-    width: calc((100% - 6 * 8px) / 7);
-    min-width: 40px;
+    width: calc((100% - 6 * 6px) / 7);
+    min-width: 38px;
     scroll-snap-align: start;
   }
 }
@@ -3154,8 +3171,19 @@ p {
     font-weight: 600;
   }
 
+  .calendar-week-header-row {
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
+    gap: 6px;
+  }
+
+  .calendar-nav-arrow {
+    width: 32px;
+    height: 32px;
+    font-size: 0.95rem;
+  }
+
   .calendar-day-pill {
-    min-height: 56px;
+    min-height: 52px;
   }
 
   .calendar-pattern-row {
@@ -3166,16 +3194,7 @@ p {
 .cal-header {
   display: grid;
   gap: 4px;
-  padding: 2px 2px 8px;
-}
-
-.cal-header-primary {
-  margin: 0;
-  font-size: var(--fs-xl);
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--text-primary);
-  line-height: 1.1;
+  padding: 0;
 }
 
 .cal-header-secondary {
@@ -3188,11 +3207,23 @@ p {
 
 /* ── Calendar agenda card (primary section) ───────────────── */
 .cal-agenda-card {
-  gap: 12px;
+  gap: 10px;
+  padding-top: var(--sp-4);
 }
 
 .cal-agenda-copy {
   margin-top: -2px;
+}
+
+.cal-agenda-card .ui-section-header__title {
+  font-size: var(--fs-lg);
+  letter-spacing: -0.02em;
+}
+
+.cal-agenda-status-pill {
+  padding: 4px 10px;
+  font-size: var(--fs-2xs);
+  opacity: 0.78;
 }
 
 .cal-agenda-row {
@@ -3222,15 +3253,16 @@ p {
 }
 
 .cal-utility-card.ui-card {
-  gap: 12px;
-  background: color-mix(in srgb, var(--surface) 78%, white 22%);
-  border-color: rgba(214, 221, 228, 0.9);
-  box-shadow: var(--sh-sm);
+  gap: 10px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 .cal-utility-card.is-attention.ui-card {
-  background: color-mix(in srgb, var(--card) 86%, var(--primary-soft) 14%);
-  border-color: color-mix(in srgb, var(--primary) 20%, rgba(214, 221, 228, 0.9) 80%);
+  background: transparent;
+  border: none;
 }
 
 .cal-utility-card.is-quiet.ui-card {
@@ -3272,9 +3304,9 @@ p {
 }
 
 .cal-sync-title {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-base);
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .cal-sync-actions {
@@ -3316,10 +3348,6 @@ p {
 
 /* ── Responsive adjustments ───────────────────────────────── */
 @media (max-width: 520px) {
-  .cal-header-primary {
-    font-size: var(--fs-lg);
-  }
-
   .cal-row-trailing,
   .cal-sync-actions,
   .cal-utility-header {

@@ -19,7 +19,11 @@ import {
 } from './data/hyroxPlan.js';
 import { normalizeProgramType } from './data/programRouter.js';
 import { sessionTypes } from './data/workoutSystemSchema.js';
-import { buildWorkoutContentFromSession } from './data/workoutSystemState.js';
+import {
+  buildWorkoutContentFromSession,
+  normalizeWorkoutLog,
+  normalizeWorkoutRecord,
+} from './data/workoutSystemState.js';
 import {
   QUICK_MEAL_TAGS,
   NUTRITION_SLOTS,
@@ -80,6 +84,8 @@ const MORE_SECTIONS = [
   { id: 'finance', label: 'Finance' },
   { id: 'inbox', label: 'Inbox' },
 ];
+
+const WORKOUT_MISS_HOUR = 20;
 
 const FITNESS_LEVELS = ['beginner', 'intermediate', 'advanced'];
 const RACE_CATEGORIES = ['Open', 'Pro', 'Masters'];
@@ -435,10 +441,14 @@ function HomeDashboard({ now }) {
     const scheduledKey = workout.scheduledDate || workout.plannedDate;
     return scheduledKey === todayKey && workout.status === 'completed';
   });
+  const hasMissedWorkout = workouts.some(workout => {
+    const scheduledKey = workout.scheduledDate || workout.plannedDate;
+    return scheduledKey === todayKey && workout.status === 'skipped';
+  });
   const workoutMarkedMissed = todayWorkoutCard.kind === 'workout'
     && todayWorkoutCard.canStart
     && !hasCompletedWorkout
-    && now.getHours() >= 18;
+    && (hasMissedWorkout || isWorkoutPastCutoff(now));
   const fitnessState = hasCompletedWorkout
     ? 'done'
     : workoutMarkedMissed
@@ -683,6 +693,10 @@ function addDays(value, amount) {
   const date = asDate(value);
   date.setDate(date.getDate() + amount);
   return date;
+}
+
+function isWorkoutPastCutoff(date = new Date()) {
+  return date.getHours() >= WORKOUT_MISS_HOUR;
 }
 
 function sameDay(left, right) {
@@ -1012,7 +1026,7 @@ function getWorkoutStateMeta({
   const hasActive = matchingWorkouts.some(workout => workout.status === 'active');
   const isToday = dateKey === todayKey;
   const isPast = dateKey < todayKey;
-  const isLateToday = isToday && now.getHours() >= 18;
+  const isLateToday = isToday && isWorkoutPastCutoff(now);
 
   if (hasCompleted) {
     return {
@@ -1228,16 +1242,32 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
     : (Number.isFinite(workout.duration) ? workout.duration : null);
 
   return {
+    name: workout.name || workout.label || workout.title || 'Workout',
+    typeLabel: getProgramWorkoutTypeLabel(workout),
     programName: workout.programName || programNameFallback || getProgramDisplayName(workout.programType || workout.programId),
     programWeek: Number.isFinite(workout.programWeek) ? workout.programWeek : (Number.isFinite(workout.week) ? workout.week : null),
+    dateKey: dateValue,
     dateLabel: workout.dateLabel || (dateValue ? formatDateLabel(dateValue) : null),
-    scheduleLabel: [
+    scheduleLabel: workout.plannedLabel || [
       workout.plannedTime || workout.time || null,
       duration ? `${duration} min` : null,
     ].filter(Boolean).join(' · '),
-    statusLabel: getWorkoutLifecycleLabel(workout.status),
+    statusLabel: workout.statusLabel || getWorkoutLifecycleLabel(workout.status),
     notes: Array.isArray(content.notes) ? content.notes : [],
     blocks: Array.isArray(content.blocks) ? content.blocks : [],
+    contentSummary: workout.contentSummary || {
+      blockCount: Array.isArray(content.blocks) ? content.blocks.length : 0,
+      exerciseCount: Array.isArray(content.blocks)
+        ? content.blocks.reduce((total, block) => total + (Array.isArray(block.exercises) ? block.exercises.length : 0), 0)
+        : 0,
+      hasIntervals: Array.isArray(content.blocks)
+        ? content.blocks.some(block => Array.isArray(block.exercises) && block.exercises.some(exercise => Boolean(exercise.interval)))
+        : false,
+      hasTimedEfforts: Array.isArray(content.blocks)
+        ? content.blocks.some(block => Array.isArray(block.exercises) && block.exercises.some(exercise => Boolean(exercise.timedEffort || exercise.duration)))
+        : false,
+      hasNotes: Array.isArray(content.notes) ? content.notes.length > 0 : false,
+    },
   };
 }
 
@@ -2725,20 +2755,20 @@ function CalendarScreen({ onOpenSettings }) {
 
     {/* Selected-date-aware contextual header */}
     <section className="cal-header">
-      <p className="cal-header-primary">{contextLabel.primary}</p>
-      <p className="cal-header-secondary">{contextLabel.secondary}</p>
+      <SectionHeader eyebrow="Calendar" title={contextLabel.primary} />
+      <p className="home-card-copy cal-header-secondary">{contextLabel.secondary}</p>
     </section>
 
     {/* Week strip */}
-    <section className="calendar-week-header-card">
+    <Card variant="flat" className="home-card home-section calendar-week-header-card">
       <div className="calendar-week-header-row">
         <button
           type="button"
           aria-label="Previous week"
-          className="calendar-nav-pill"
+          className="calendar-nav-arrow calendar-nav-arrow--prev"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
         >
-          ← Prev
+          <span aria-hidden="true">&lsaquo;</span>
         </button>
 
         <div className="calendar-range-title" aria-hidden="true">
@@ -2748,10 +2778,10 @@ function CalendarScreen({ onOpenSettings }) {
         <button
           type="button"
           aria-label="Next week"
-          className="calendar-nav-pill"
+          className="calendar-nav-arrow calendar-nav-arrow--next"
           onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
         >
-          Next →
+          <span aria-hidden="true">&rsaquo;</span>
         </button>
       </div>
 
@@ -2772,18 +2802,18 @@ function CalendarScreen({ onOpenSettings }) {
           </button>
         ))}
       </div>
-    </section>
+    </Card>
 
     <span className="sr-only" aria-live="polite" aria-atomic="true">
       {formatFullDate(selectedDate)} selected
     </span>
 
     {/* Primary agenda card – main feature of the page */}
-      <Card variant="flat" className="home-card home-section cal-agenda-card">
+    <Card variant="flat" className="home-card home-section cal-agenda-card">
       <SectionHeader
         eyebrow="Agenda"
         title={`${exactSelectedDate} agenda`}
-        action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
+        action={<span className={`status-pill cal-agenda-status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
       />
       <p className="home-card-copy cal-agenda-copy">{agendaIntro}</p>
       <div className="home-list">
@@ -2800,21 +2830,17 @@ function CalendarScreen({ onOpenSettings }) {
               className="cal-agenda-row"
               label={item.title}
               sub={item.subtitle || item.type}
+              onClick={['busy', 'event', 'task'].includes(item.type)
+                ? () => {
+                  setEditingItemId(item.id);
+                  setSheetOpen(true);
+                }
+                : undefined}
               trailing={
                 <div className="cal-row-trailing">
                   <span className={`status-pill ${getItemStatusTone(item.type)}`}>
                     {getCalendarItemTypeLabel(item.type)}
                   </span>
-                  {['busy', 'event', 'task'].includes(item.type) && (
-                    <button
-                      type="button"
-                      aria-label={`Edit ${item.title}`}
-                      className="ghost-button compact-ghost"
-                      onClick={() => { setEditingItemId(item.id); setSheetOpen(true); }}
-                    >
-                      Edit
-                    </button>
-                  )}
                 </div>
               }
             />
@@ -2825,8 +2851,8 @@ function CalendarScreen({ onOpenSettings }) {
 
     {/* Google sync – connection status module, visually secondary */}
     <Card
-      variant={syncCardState.needsAttention ? 'default' : 'tinted'}
-      className={`home-card cal-sync-card cal-utility-card ${syncCardState.needsAttention ? 'is-attention' : 'is-quiet'}`}
+      variant="flat"
+      className={`home-card home-section cal-sync-card cal-utility-card ${syncCardState.needsAttention ? 'is-attention' : 'is-quiet'}`}
     >
       <div className="cal-sync-row">
         <div className="cal-sync-status">
@@ -2848,7 +2874,7 @@ function CalendarScreen({ onOpenSettings }) {
     </Card>
 
     {/* Pattern utility – demoted, collapsed by default */}
-    <Card variant="tinted" className="home-card cal-pattern-card cal-utility-card">
+    <Card variant="flat" className="home-card home-section cal-pattern-card cal-utility-card">
       <ExpandablePanel
         header={(
           <div className="cal-utility-header">
@@ -3509,10 +3535,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     ),
     [activeProgramName, selectedWorkoutSource],
   );
-  const selectedWorkoutTypeLabel = useMemo(
-    () => getProgramWorkoutTypeLabel(selectedWorkoutSource || selectedDay?.session),
-    [selectedDay, selectedWorkoutSource],
-  );
   const selectedStateMeta = selectedDay?.stateMeta ?? {
     state: 'rest',
     label: 'Rest',
@@ -3538,7 +3560,13 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 
   const missedSessions = useMemo(
-    () => weeklySchedule.filter(session => session.dateKey < todayKey && !workouts.some(workout => workout.scheduledDate === session.dateKey && workout.status === 'completed')),
+    () => weeklySchedule.filter(session => (
+      session.dateKey < todayKey
+      && !workouts.some(workout => (
+        workout.scheduledDate === session.dateKey
+        && ['completed', 'skipped'].includes(workout.status)
+      ))
+    )),
     [todayKey, weeklySchedule, workouts],
   );
 
@@ -3551,59 +3579,116 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
   }
 
+  function updateWorkoutById(workoutId, updater) {
+    setWorkouts(current => current.map((workout, index) => (
+      workout.id === workoutId
+        ? normalizeWorkoutRecord(updater(workout), index)
+        : workout
+    )));
+  }
+
+  function appendWorkout(workout) {
+    setWorkouts(current => [normalizeWorkoutRecord(workout, current.length), ...current]);
+  }
+
+  function mergeWorkoutLog(workout, patch = {}) {
+    const nextLog = normalizeWorkoutLog({
+      ...(workout.workoutLog || {}),
+      ...patch,
+      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
+      segments: (() => {
+        const currentSegments = Array.isArray(workout.workoutLog?.segments)
+          ? workout.workoutLog.segments
+          : [];
+
+        if (Array.isArray(patch.segments)) {
+          return patch.segments;
+        }
+
+        if (!patch.segment) {
+          return currentSegments;
+        }
+
+        const remainingSegments = currentSegments.filter(entry => entry.id !== patch.segment.id);
+        return [...remainingSegments, patch.segment];
+      })(),
+    }, {
+      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
+    });
+
+    return nextLog;
+  }
+
   function startWorkout(workoutId) {
     onStartWorkout(workoutId);
     const startedAt = Date.now();
-    setWorkouts(current => current.map(workout => (
+    setWorkouts(current => current.map((workout, index) => (
       workout.id === workoutId
         ? {
-            ...workout,
+            ...normalizeWorkoutRecord({
+              ...workout,
+              status: 'active',
+              startedAt,
+              type: getCurrentWorkoutType(workout),
+              programId: fitnessSettings.programType || 'hyrox',
+              programType: fitnessSettings.programType || workout.programType || 'hyrox',
+              programName: workout.programName || getProgramDisplayName(fitnessSettings.programType),
+              workoutLog: normalizeWorkoutLog({
+                ...(workout.workoutLog || {}),
+                source: 'manual',
+                startedAt,
+                lastUpdatedAt: startedAt,
+                notes: workout.workoutLog?.notes || '',
+                currentSegmentId: workout.workoutLog?.currentSegmentId || null,
+                currentSegmentIndex: Number.isFinite(workout.workoutLog?.currentSegmentIndex) ? workout.workoutLog.currentSegmentIndex : 0,
+                segments: Array.isArray(workout.workoutLog?.segments) ? workout.workoutLog.segments : [],
+                externalRefs: workout.workoutLog?.externalRefs || {},
+              }, { startedAt }),
+            }, index),
             status: 'active',
-            startedAt,
-            type: getCurrentWorkoutType(workout),
-            programId: fitnessSettings.programType || 'hyrox',
-            programType: fitnessSettings.programType || workout.programType || 'hyrox',
-            programName: workout.programName || getProgramDisplayName(fitnessSettings.programType),
           }
         : workout.status === 'active'
-          ? { ...workout, status: 'planned' }
+          ? normalizeWorkoutRecord({ ...workout, status: 'planned' }, index)
           : workout
     )));
   }
 
   function cancelWorkout() {
     if (!activeWorkoutId) return;
-    setWorkouts(current => current.map(workout => (workout.id === activeWorkoutId ? { ...workout, status: 'planned' } : workout)));
+    updateWorkoutById(activeWorkoutId, workout => ({ ...workout, status: 'planned' }));
     onStartWorkout(null);
   }
 
   function completeWorkout(workoutLog) {
     if (!activeWorkoutId) return;
     const completedAt = Date.now();
-    setWorkouts(current => current.map(workout => (
-      workout.id === activeWorkoutId
-        ? { ...workout, status: 'completed', completedAt, workoutLog: workoutLog || null }
-        : workout
-    )));
+    updateWorkoutById(activeWorkoutId, workout => ({
+      ...workout,
+      status: 'completed',
+      completedAt,
+      workoutLog: mergeWorkoutLog(workout, {
+        ...(workoutLog || {}),
+        completionLoggedAt: workoutLog?.completionLoggedAt || completedAt,
+        completionSource: workoutLog?.completionSource || 'manual_completion',
+        lastUpdatedAt: completedAt,
+        notes: typeof workoutLog?.notes === 'string' ? workoutLog.notes : (workout.workoutLog?.notes || ''),
+      }),
+    }));
     upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
     onStartWorkout(null);
   }
 
-  function logCompletion() {
+  function logCompletion(workoutLog) {
     if (!activeWorkoutId) return;
-    const loggedAt = Date.now();
-    setWorkouts(current => current.map(workout => (
-      workout.id === activeWorkoutId
-        ? {
-            ...workout,
-            workoutLog: {
-              ...(workout.workoutLog || {}),
-              completionLoggedAt: loggedAt,
-            },
-          }
-        : workout
-    )));
-    upsertNotification('Completion logged', activeWorkout?.name || 'Workout');
+    completeWorkout(workoutLog);
+  }
+
+  function updateWorkoutLog(patch) {
+    if (!activeWorkoutId) return;
+    updateWorkoutById(activeWorkoutId, workout => ({
+      ...workout,
+      workoutLog: mergeWorkoutLog(workout, patch),
+    }));
   }
 
   function saveCheckIn() {
@@ -3643,7 +3728,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       settings: fitnessSettings,
       todayKey: selectedDay.session.dateKey || todayKey,
     });
-    setWorkouts(current => [sessionWorkout, ...current]);
+    appendWorkout(sessionWorkout);
     startWorkout(sessionWorkout.id);
   }
 
@@ -3660,7 +3745,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       plannedDateOverride: session.dateKey,
       statusOverride: 'planned',
     });
-    setWorkouts(current => [movedWorkout, ...current]);
+    appendWorkout(movedWorkout);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
     upsertNotification('Session rescheduled', `${session.label || session.title} moved to ${nextDate}`);
   }
@@ -3676,49 +3761,9 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       plannedDateOverride: session.dateKey,
       statusOverride: 'skipped',
     });
-    setWorkouts(current => [skippedWorkout, ...current]);
+    appendWorkout(skippedWorkout);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
     upsertNotification('Session skipped', session.label || session.title);
-  }
-
-  function updateWeeklySessionStatus(session, nextStatus) {
-    const existingWorkout = getWorkoutRecordForDate(workouts, session.dateKey);
-    if (nextStatus === 'completed') {
-      if (existingWorkout) {
-        setWorkouts(current => current.map(workout => (
-          workout.id === existingWorkout.id
-            ? { ...workout, status: 'completed', completedAt: Date.now() }
-            : workout
-        )));
-        upsertNotification('Workout completed', session.label || session.title || 'Workout');
-        setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
-        return;
-      }
-      const completedWorkout = createWorkoutFromSession({
-        createWorkout,
-        createExercise,
-        session,
-        settings: fitnessSettings,
-        todayKey: session.dateKey,
-      });
-      setWorkouts(current => [{ ...completedWorkout, status: 'completed', completedAt: Date.now() }, ...current]);
-      upsertNotification('Workout completed', session.label || session.title || 'Workout');
-      setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
-      return;
-    }
-    if (nextStatus === 'skipped') {
-      if (existingWorkout) {
-        setWorkouts(current => current.map(workout => (
-          workout.id === existingWorkout.id
-            ? { ...workout, status: 'skipped' }
-            : workout
-        )));
-        setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
-        upsertNotification('Session skipped', session.label || session.title || 'Workout');
-        return;
-      }
-      skipMissedSession(session);
-    }
   }
 
   return (
@@ -3729,12 +3774,13 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           onCancel={cancelWorkout}
           onComplete={completeWorkout}
           onLogCompletion={logCompletion}
+          onUpdateWorkoutLog={updateWorkoutLog}
         />
       )}
 
       {!activeWorkout && (
         <>
-          <section className="task-card fitness-hero-card">
+          <Card variant="flat" className="home-card home-section fitness-hero-card">
             {!hasGeneratedSchedule ? (
               <EmptyState
                 title={programEmptyState.title}
@@ -3771,14 +3817,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </div>
                 <div className="fitness-hero-copy">
                   <p className="fitness-hero-kicker">{activeProgramName} · {programPhase}</p>
-                  <h2 className="fitness-hero-headline">{selectedDay.session.label || selectedDay.session.title}</h2>
+                  <h2 className="fitness-hero-headline">{selectedWorkoutDetails?.name || selectedDay.session.label || selectedDay.session.title}</h2>
                   <p className="fitness-hero-meta">{selectedSummary}</p>
                 </div>
                 <div className="fitness-workout-structure">
                   <div className="fitness-workout-meta-grid">
                     <div className="fitness-workout-meta-card">
                       <span>Workout type</span>
-                      <strong>{selectedWorkoutTypeLabel}</strong>
+                      <strong>{selectedWorkoutDetails?.typeLabel || getProgramWorkoutTypeLabel(selectedDay.session)}</strong>
                     </div>
                     <div className="fitness-workout-meta-card">
                       <span>Program</span>
@@ -3796,6 +3842,14 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                       <span>Planned time</span>
                       <strong>{selectedTiming || 'Scheduled'}</strong>
                     </div>
+                    {selectedWorkoutDetails?.contentSummary?.exerciseCount > 0 && (
+                      <div className="fitness-workout-meta-card fitness-workout-meta-card--wide">
+                        <span>Structure</span>
+                        <strong>
+                          {`${selectedWorkoutDetails.contentSummary.blockCount} block${selectedWorkoutDetails.contentSummary.blockCount === 1 ? '' : 's'} · ${selectedWorkoutDetails.contentSummary.exerciseCount} exercise${selectedWorkoutDetails.contentSummary.exerciseCount === 1 ? '' : 's'}`}
+                        </strong>
+                      </div>
+                    )}
                   </div>
                   {selectedWorkoutDetails?.notes?.length > 0 && selectedWorkoutDetails.notes[0] !== selectedDay.session.detail && (
                     <p className="fitness-structured-note">{selectedWorkoutDetails.notes[0]}</p>
@@ -3859,16 +3913,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </div>
               </>
             )}
-          </section>
+          </Card>
 
-          <section className="task-card">
-            <div className="task-card-header">
-              <div>
-                <p className="eyebrow">This Week</p>
-                <h2>{planState.label}</h2>
-                <p className="empty-message">Tap any day to load that workout into the hero above.</p>
-              </div>
-            </div>
+          <Card variant="flat" className="home-card home-section fitness-week-card">
+            <SectionHeader eyebrow="This Week" title={planState.label} />
+            <p className="home-card-copy">Tap any day to load that workout into the detail section above.</p>
             <div className="fitness-week-grid" role="list" aria-label="Weekly workout plan">
               {weekDays.map(({ key, dayLabel, session, isToday, tileStatus }) => (
                 <button
@@ -3917,21 +3966,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                       <span className={`status-pill ${day.stateMeta.className}`}>{day.stateMeta.label}</span>
                     </div>
                   </button>
-                  {selectedDateKey === day.key && day.session && day.key <= todayKey && day.stateMeta.state !== 'done' && (
-                    <div className="tag-row fitness-week-actions">
-                      {day.isToday && (
-                        <button type="button" className="status-chip is-active" onClick={startSelectedWorkout}>
-                          {day.workoutRecord?.status === 'active' ? 'Resume' : 'Start'}
-                        </button>
-                      )}
-                      <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(day.session, 'completed')}>
-                        Mark done
-                      </button>
-                      <button type="button" className="status-chip" onClick={() => updateWeeklySessionStatus(day.session, 'skipped')}>
-                        Skip
-                      </button>
-                    </div>
-                  )}
                 </article>
               ))}
             </div>
@@ -3959,10 +3993,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 )}
               </div>
             )}
-          </section>
+          </Card>
 
-          <section className="task-card fitness-nav-card">
-            <p className="eyebrow">Fitness Views</p>
+          <Card variant="flat" className="home-card home-section fitness-nav-card">
+            <SectionHeader eyebrow="Fitness" title="Views" />
             <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness internal navigation">
               {FITNESS_SUBTABS.map(tab => (
                 <button
@@ -3977,17 +4011,12 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                 </button>
               ))}
             </div>
-          </section>
+          </Card>
 
           {activeSubTab === 'today' && (
             <>
-              <section className="task-card">
-                <div className="task-card-header">
-                  <div>
-                    <p className="eyebrow">Daily check-in</p>
-                    <h2>Open the day with recovery context</h2>
-                  </div>
-                </div>
+              <Card variant="flat" className="home-card home-section fitness-support-card">
+                <SectionHeader eyebrow="Daily check-in" title="Open the day with recovery context" />
                 <div className="fitness-checkin-grid">
                   <label className="field-stack compact-field">
                     <span>Mood</span>
@@ -4057,16 +4086,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                     </div>
                   </div>
                 )}
-              </section>
+              </Card>
 
               {unacknowledgedMisses.length > 0 && (
-                <section className="task-card">
-                  <div className="task-card-header">
-                    <div>
-                      <p className="eyebrow">Missed session</p>
-                      <h2>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</h2>
-                    </div>
-                  </div>
+                <Card variant="flat" className="home-card home-section fitness-support-card">
+                  <SectionHeader eyebrow="Missed session" title={unacknowledgedMisses[0].label || unacknowledgedMisses[0].title} />
                   <article className="feed-card">
                     <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
                     <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
@@ -4080,7 +4104,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                       </button>
                     </div>
                   </article>
-                </section>
+                </Card>
               )}
             </>
           )}
@@ -4088,15 +4112,15 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         {activeSubTab === 'library' && (
           <>
             {!hasGeneratedSchedule ? (
-              <section className="task-card">
+              <Card variant="flat" className="home-card home-section fitness-support-card">
                 <EmptyState
                   title={programEmptyState.title}
                   description={programEmptyState.description}
                 />
-              </section>
+              </Card>
             ) : (
               <>
-                <section className="task-card">
+                <Card variant="flat" className="home-card home-section fitness-support-card">
                   <SectionHeader eyebrow="Workout Library" title={activeProgramName} />
                   {librarySections.length > 0 ? (
                     <div className="subtle-feed">
@@ -4124,7 +4148,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                         : programEmptyState.description}
                     />
                   )}
-                </section>
+                </Card>
               </>
             )}
           </>
@@ -4132,7 +4156,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
         {activeSubTab === 'logging' && (
           <>
-            <section className="task-card">
+            <Card variant="flat" className="home-card home-section fitness-support-card">
               <SectionHeader eyebrow="Logging" title="Recent completed workouts" />
               <div className="subtle-feed">
                 {recentCompletedWorkouts.length > 0 ? (
@@ -4148,7 +4172,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
                   <EmptyState title="No completed workouts yet" description="Finished sessions will appear here once you log them." />
                 )}
               </div>
-            </section>
+            </Card>
           </>
         )}
       </>
@@ -4337,6 +4361,11 @@ function AppShell() {
     inboxItems,
     setInboxItems,
     workouts,
+    setWorkouts,
+    createWorkout,
+    createExercise,
+    setNotifications,
+    createNotification,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -4373,6 +4402,22 @@ function AppShell() {
     () => notifications.filter(notification => !notification.read),
     [notifications],
   );
+  const athleteDefaults = profile?.athlete || {};
+  const workoutHistory = useMemo(
+    () => workouts.map(workout => ({ ...workout, plannedDate: workout.plannedDate || workout.scheduledDate || null })),
+    [workouts],
+  );
+  const shellPlanState = useMemo(
+    () => getPlanState({
+      startDate: fitnessSettings.programStartDate,
+      trainingDays: fitnessSettings.trainingDays,
+      programType: fitnessSettings.programType,
+      today: now,
+      history: workoutHistory,
+      athleteDefaults,
+    }),
+    [athleteDefaults, fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays, now, workoutHistory],
+  );
 
   function openInboxPage() {
     setQuickAddOpen(false);
@@ -4394,6 +4439,89 @@ function AppShell() {
     setActiveSurface(null);
     setQuickAddOpen(false);
   }
+
+  useEffect(() => {
+    if (!isWorkoutPastCutoff(now)) return;
+
+    const todayKey = toDateKey(now);
+    const todaySession = shellPlanState.sessions.find(session => session.dateKey === todayKey) ?? null;
+    if (!todaySession) return;
+
+    const todayWorkouts = workouts.filter(workout => (
+      workout.scheduledDate === todayKey || workout.plannedDate === todayKey
+    ));
+    if (todayWorkouts.some(workout => ['completed', 'active', 'skipped'].includes(workout.status))) return;
+
+    const existingWorkout = todayWorkouts[0] ?? null;
+    const missedAt = Date.now();
+
+    if (existingWorkout) {
+      setWorkouts(current => current.map((workout, index) => (
+        workout.id === existingWorkout.id
+          ? normalizeWorkoutRecord({
+              ...workout,
+              status: 'skipped',
+              workoutLog: normalizeWorkoutLog({
+                ...(workout.workoutLog || {}),
+                source: 'manual',
+                startedAt: workout.startedAt || workout.workoutLog?.startedAt || null,
+                lastUpdatedAt: missedAt,
+                completionLoggedAt: missedAt,
+                completionSource: 'missed_cutoff',
+                notes: workout.workoutLog?.notes || '',
+                currentSegmentId: workout.workoutLog?.currentSegmentId || null,
+                currentSegmentIndex: Number.isFinite(workout.workoutLog?.currentSegmentIndex) ? workout.workoutLog.currentSegmentIndex : 0,
+                segments: Array.isArray(workout.workoutLog?.segments) ? workout.workoutLog.segments : [],
+                externalRefs: workout.workoutLog?.externalRefs || {},
+              }),
+            }, index)
+          : workout
+      )));
+    } else {
+      const missedWorkout = createWorkoutFromSession({
+        createWorkout,
+        createExercise,
+        session: todaySession,
+        settings: fitnessSettings,
+        todayKey,
+        scheduledDateOverride: todayKey,
+        plannedDateOverride: todayKey,
+        statusOverride: 'skipped',
+      });
+      setWorkouts(current => [normalizeWorkoutRecord({
+        ...missedWorkout,
+        workoutLog: normalizeWorkoutLog({
+          source: 'manual',
+          lastUpdatedAt: missedAt,
+          completionLoggedAt: missedAt,
+          completionSource: 'missed_cutoff',
+          notes: '',
+          currentSegmentId: null,
+          currentSegmentIndex: 0,
+          segments: [],
+          externalRefs: {},
+        }),
+      }, current.length), ...current]);
+    }
+
+    setNotifications(current => [
+      createNotification({
+        title: 'Workout marked missed',
+        detail: `${todaySession.label || todaySession.title || 'Today’s workout'} was not completed by 8:00 PM.`,
+      }),
+      ...current,
+    ]);
+  }, [
+    createExercise,
+    createNotification,
+    createWorkout,
+    fitnessSettings,
+    now,
+    setNotifications,
+    setWorkouts,
+    shellPlanState.sessions,
+    workouts,
+  ]);
 
   const activeCopy = SHELL_TAB_COPY[activeTab] ?? SHELL_TAB_COPY.home;
   const shellContent = activeSurface === 'inbox' ? (

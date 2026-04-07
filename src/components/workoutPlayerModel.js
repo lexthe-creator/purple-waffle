@@ -1,6 +1,7 @@
 import { cooldownTemplates, warmupTemplates } from '../data/workoutSystemSchema.js';
 import { HYROX_COOLDOWN_TEMPLATES, HYROX_WARMUP_TEMPLATES } from '../data/hyroxWorkoutLibrary.js';
 import { normalizeProgramType } from '../data/programRouter.js';
+import { buildWorkoutContentFromSession } from '../data/workoutSystemState.js';
 
 const DEFAULT_COACHING_NOTES = {
   run: 'Conversational pace throughout',
@@ -207,6 +208,28 @@ function getSummaryLineTwo(workout) {
 }
 
 function resolveDirectSteps(workout, kind) {
+  const structuredContent = buildWorkoutContentFromSession(workout);
+  const structuredSteps = Array.isArray(structuredContent?.blocks)
+    ? structuredContent.blocks
+      .filter(block => (kind === 'warmup' ? block.type === 'warmup' : block.type === 'cooldown'))
+      .flatMap((block, blockIndex) => {
+        if (Array.isArray(block.exercises) && block.exercises.length > 0) {
+          return block.exercises.map((exercise, exerciseIndex) => normalizeStep({
+            label: exercise.name || `${kind === 'warmup' ? 'Warm-up' : 'Cooldown'} ${exerciseIndex + 1}`,
+            value: exercise.timedEffort || exercise.duration || exercise.detail || block.duration || '',
+          }, `${kind === 'warmup' ? 'Warm-up' : 'Cooldown'} ${exerciseIndex + 1}`));
+        }
+
+        return [normalizeStep({
+          label: block.title || `${kind === 'warmup' ? 'Warm-up' : 'Cooldown'} ${blockIndex + 1}`,
+          value: block.duration || block.notes?.[0] || '',
+        }, `${kind === 'warmup' ? 'Warm-up' : 'Cooldown'} ${blockIndex + 1}`)];
+      })
+    : [];
+  if (structuredSteps.length > 0) {
+    return structuredSteps;
+  }
+
   const explicitKey = kind === 'warmup' ? 'warmupSteps' : 'cooldownSteps';
   const explicitBlocksKey = kind === 'warmup' ? 'warmupBlocks' : 'cooldownBlocks';
   const explicitTextKey = kind === 'warmup' ? 'warmup' : 'cooldown';
@@ -266,7 +289,70 @@ export function resolveWorkoutPlayerSteps(workout, kind) {
   return resolveFallbackExerciseStep(workout, kind).slice(0, 8);
 }
 
+function formatExerciseMeta(exercise, block) {
+  return [
+    Number.isFinite(exercise?.sets) ? `${exercise.sets} sets` : null,
+    exercise?.reps ? `${exercise.reps} reps` : null,
+    exercise?.interval ? exercise.interval : null,
+    exercise?.timedEffort || exercise?.duration || block?.duration || null,
+    exercise?.distance || null,
+    exercise?.rest ? `Rest ${exercise.rest}` : null,
+    exercise?.effort || null,
+  ].filter(Boolean).join(' · ');
+}
+
+function buildWorkoutSegments(workout) {
+  const content = buildWorkoutContentFromSession(workout);
+  const blocks = Array.isArray(content?.blocks) ? content.blocks : [];
+
+  if (blocks.length === 0) {
+    const exercises = Array.isArray(workout?.exercises) ? workout.exercises : [];
+    return exercises.map((exercise, index) => ({
+      id: exercise.id || `segment-${index}`,
+      blockId: null,
+      exerciseId: exercise.id || null,
+      blockTitle: null,
+      title: exercise.name || `Segment ${index + 1}`,
+      detail: exercise.detail || '',
+      meta: formatExerciseMeta(exercise, null),
+      note: [exercise.note, exercise.cue].filter(Boolean).join(' · '),
+      type: 'main',
+    }));
+  }
+
+  return blocks.flatMap((block, blockIndex) => {
+    const exercises = Array.isArray(block.exercises) ? block.exercises : [];
+    if (exercises.length === 0) {
+      return [{
+        id: `${block.id || `block-${blockIndex}`}:block`,
+        blockId: block.id || `block-${blockIndex}`,
+        exerciseId: null,
+        blockTitle: block.title || `Block ${blockIndex + 1}`,
+        title: block.title || `Block ${blockIndex + 1}`,
+        detail: Array.isArray(block.notes) ? block.notes[0] || '' : '',
+        meta: block.duration || (Number.isFinite(block.repeat) ? `${block.repeat} rounds` : ''),
+        note: Array.isArray(block.notes) ? block.notes.slice(1).join(' · ') : '',
+        type: block.type || 'main',
+      }];
+    }
+
+    return exercises.map((exercise, exerciseIndex) => ({
+      id: `${block.id || `block-${blockIndex}`}:${exercise.id || exerciseIndex}`,
+      blockId: block.id || `block-${blockIndex}`,
+      exerciseId: exercise.id || null,
+      blockTitle: block.title || `Block ${blockIndex + 1}`,
+      title: exercise.name || `${block.title || 'Exercise'} ${exerciseIndex + 1}`,
+      detail: exercise.detail || '',
+      meta: formatExerciseMeta(exercise, block),
+      note: [exercise.note, exercise.cue, Array.isArray(block.notes) ? block.notes[0] : null].filter(Boolean).join(' · '),
+      type: block.type || 'main',
+    }));
+  });
+}
+
 export function getWorkoutPlayerModel(workout) {
+  const segments = buildWorkoutSegments(workout);
+
   return {
     title: workout?.title || workout?.label || workout?.name || 'Workout',
     typeLabel: getWorkoutTypeLabel(workout),
@@ -275,6 +361,7 @@ export function getWorkoutPlayerModel(workout) {
     summaryLine2: getSummaryLineTwo(workout),
     warmupSteps: resolveWorkoutPlayerSteps(workout, 'warmup'),
     cooldownSteps: resolveWorkoutPlayerSteps(workout, 'cooldown'),
+    segments,
     completeLabel: getCompleteLabel(workout),
   };
 }
