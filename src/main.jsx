@@ -2557,7 +2557,7 @@ return (
 );
 }
 
-function TrackingStrip({ selectedDate, setSelectedDate }) {
+function TrackingStrip({ selectedDate, setSelectedDate, dayActivity = {} }) {
   const weekStart = useMemo(() => alignDateToAnchor(selectedDate, 'Monday'), [selectedDate]);
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => {
@@ -2597,21 +2597,30 @@ function TrackingStrip({ selectedDate, setSelectedDate }) {
         </button>
       </div>
       <div className="tracking-strip-days" role="listbox" aria-label="Select a day">
-        {weekDays.map(day => (
-          <button
-            key={day.key}
-            type="button"
-            role="option"
-            aria-selected={selectedDate === day.key}
-            aria-current={day.isToday ? 'date' : undefined}
-            aria-label={new Date(`${day.key}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            className={`tracking-strip-chip ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
-            onClick={() => setSelectedDate(day.key)}
-          >
-            <span className="tracking-strip-dow">{day.dow}</span>
-            <strong>{day.date}</strong>
-          </button>
-        ))}
+        {weekDays.map(day => {
+          const isActive = selectedDate === day.key;
+          const count = dayActivity[day.key] || 0;
+          return (
+            <button
+              key={day.key}
+              type="button"
+              role="option"
+              aria-selected={isActive}
+              aria-current={day.isToday ? 'date' : undefined}
+              aria-label={new Date(`${day.key}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              className={`tracking-strip-chip ${isActive ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
+              onClick={() => setSelectedDate(day.key)}
+            >
+              <span className="tracking-strip-dow">{day.dow}</span>
+              <strong>{day.date}</strong>
+              {count > 0 && (
+                isActive
+                  ? <span className="tracking-strip-count" aria-hidden="true">{count}</span>
+                  : <span className="tracking-strip-dot" aria-hidden="true" />
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -2768,10 +2777,18 @@ function CalendarScreen({ onOpenSettings }) {
       : new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
     [isSelectedToday, selectedDate],
   );
-  const agendaStatus = selectedDayItems.length > 0
-    ? `${selectedDayItems.length} scheduled`
-    : 'Open day';
-  const agendaStatusTone = selectedDayItems.length > 0 ? 'status-active' : 'status-planned';
+  const weekDayActivity = useMemo(() => {
+    const map = {};
+    weekDays.forEach(({ key }) => {
+      const planCount = planState.sessions.filter(s => toDateKey(s.date) === key).length;
+      const calCount = calendarItems.filter(item => item.date === key).length;
+      const mealCount = meals.filter(meal => toDateKey(meal.loggedAt) === key).length;
+      const workoutCount = workouts.filter(w => w.scheduledDate === key || toDateKey(w.createdAt) === key).length;
+      map[key] = planCount + calCount + mealCount + workoutCount;
+    });
+    return map;
+  }, [weekDays, planState.sessions, calendarItems, meals, workouts]);
+
   const syncCardState = useMemo(
     () => getCalendarSyncCardState(workCalendarPrefs, calendarItems),
     [calendarItems, workCalendarPrefs],
@@ -2915,11 +2932,10 @@ function CalendarScreen({ onOpenSettings }) {
     {/* Selected-date header */}
     <section className="cal-header">
       <h1 className="cal-header-date">{selectedDayLabel}</h1>
-      <span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>
     </section>
 
     {/* Week strip */}
-    <TrackingStrip selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
+    <TrackingStrip selectedDate={selectedDate} setSelectedDate={setSelectedDate} dayActivity={weekDayActivity} />
 
     <span className="sr-only" aria-live="polite" aria-atomic="true">
       {formatFullDate(selectedDate)} selected
@@ -3382,9 +3398,17 @@ function NutritionScreen({ now }) {
 
   const isSelectedToday = selectedPlanDay === todayKey;
 
+  const nutritionWeekActivity = useMemo(() => {
+    const map = {};
+    planWeekDays.forEach(({ key }) => {
+      map[key] = meals.filter(meal => toDateKey(meal.loggedAt) === key).length;
+    });
+    return map;
+  }, [planWeekDays, meals]);
+
   return (
     <div className="tab-stack nutrition-stack">
-      <TrackingStrip selectedDate={selectedPlanDay} setSelectedDate={setSelectedPlanDay} />
+      <TrackingStrip selectedDate={selectedPlanDay} setSelectedDate={setSelectedPlanDay} dayActivity={nutritionWeekActivity} />
       <Card>
         <SectionHeader
           eyebrow="Nutrition"
@@ -3963,7 +3987,11 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
       {!activeWorkout && (
         <>
-          <TrackingStrip selectedDate={selectedDateKey} setSelectedDate={setSelectedDateKey} />
+          <TrackingStrip
+            selectedDate={selectedDateKey}
+            setSelectedDate={setSelectedDateKey}
+            dayActivity={Object.fromEntries(weekDays.map(d => [d.key, (d.session ? 1 : 0) + (d.workoutRecord ? 1 : 0)]))}
+          />
           <Card variant="flat" className="home-card home-section fitness-hero-card">
             {!hasGeneratedSchedule ? (
               <EmptyState

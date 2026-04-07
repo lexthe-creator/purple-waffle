@@ -3089,6 +3089,24 @@ p {
   font-weight: 600;
 }
 
+.tracking-strip-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.tracking-strip-count {
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--primary);
+  opacity: 0.8;
+  letter-spacing: 0;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 .calendar-selected-title {
