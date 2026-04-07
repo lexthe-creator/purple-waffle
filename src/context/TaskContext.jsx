@@ -130,17 +130,13 @@ function createWorkout(overrides = {}) {
   };
 
   const resolvedExercises = Array.isArray(workout.exercises) ? workout.exercises : seedExercises;
-
-  return {
+  return normalizeWorkoutRecord({
     ...workout,
     exercises: resolvedExercises,
     date: workout.date || workout.plannedDate || workout.scheduledDate || null,
     plannedDurationMinutes: Number.isFinite(workout.plannedDurationMinutes)
       ? workout.plannedDurationMinutes
       : (Number.isFinite(workout.duration) ? workout.duration : 30),
-    duration: Number.isFinite(workout.duration)
-      ? workout.duration
-      : (Number.isFinite(workout.plannedDurationMinutes) ? workout.plannedDurationMinutes : 30),
     programWeek: Number.isFinite(workout.programWeek)
       ? workout.programWeek
       : (Number.isFinite(workout.week) ? workout.week : 1),
@@ -150,7 +146,7 @@ function createWorkout(overrides = {}) {
     content: workout.content || buildWorkoutContentFromExercises(resolvedExercises, {
       source: workout.programType || workout.programId ? 'program' : 'manual',
     }),
-  };
+  });
 }
 
 function inferWorkoutProgram(workout) {
