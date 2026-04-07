@@ -53,6 +53,7 @@ export function AppProvider({ children }) {
   const [recoveryInputs, setRecoveryInputs] = useState(() => saved.recoveryInputs);
   const [hubInsights, setHubInsights] = useState(() => saved.hubInsights);
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
+  const [selectedDate, setSelectedDate] = useState(getTodayDateKey);
 
   // Morning check-in modal state
   const [showMorningCheckin, setShowMorningCheckin] = useState(false);
@@ -112,6 +113,8 @@ export function AppProvider({ children }) {
       setHubInsights,
       morningChecklist,
       setMorningChecklist,
+      selectedDate,
+      setSelectedDate,
       // Morning check-in modal
       showMorningCheckin,
       setShowMorningCheckin,
@@ -127,6 +130,7 @@ export function AppProvider({ children }) {
       energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
       calendarPatterns, recoveryInputs, hubInsights,
       morningChecklist, showMorningCheckin, morningStep, energyScore, sleepHours,
+      selectedDate,
     ],
   );
 

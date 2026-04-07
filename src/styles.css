@@ -164,6 +164,7 @@ p {
   opacity: 0.78;
 }
 
+
 .app-header h1 {
   margin: 0;
   font-size: 1.08rem;
@@ -2931,7 +2932,7 @@ p {
 /* CALENDAR DASHBOARD REFRESH */
 
 .calendar-dashboard {
-  gap: 10px;
+  gap: var(--sp-5);
   padding-bottom: 120px;
 }
 
@@ -2960,13 +2961,11 @@ p {
   box-shadow: var(--sh-sm);
 }
 
-.calendar-week-header-card,
 .cal-sync-card,
 .cal-pattern-card {
   gap: 10px;
 }
 
-.calendar-week-header-row,
 .calendar-selected-header,
 .calendar-pattern-row {
   display: flex;
@@ -2975,19 +2974,6 @@ p {
   gap: var(--sp-3);
 }
 
-.calendar-week-header-card {
-  gap: var(--sp-2);
-}
-
-.calendar-week-header-row {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-}
-
-.calendar-range-title,
 .calendar-selected-title {
   margin: 0;
   font-size: var(--fs-base);
@@ -2995,7 +2981,6 @@ p {
   color: var(--text);
 }
 
-.calendar-nav-arrow,
 .calendar-primary-button,
 .calendar-save-button,
 .calendar-sync-button {
@@ -3004,79 +2989,107 @@ p {
   cursor: pointer;
 }
 
-.calendar-nav-arrow {
-  width: 36px;
-  height: 36px;
+/* ── Tracking strip (Fitness + Nutrition) ─────────────────────────────────── */
+
+.tracking-strip {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0 4px;
+}
+
+.tracking-strip-nav {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.tracking-strip-range {
+  text-align: center;
+  font-size: var(--fs-2xs);
+  font-weight: 400;
+  color: var(--text-tertiary, var(--text-secondary));
+  letter-spacing: 0.02em;
+}
+
+.tracking-strip-arrow {
+  width: 28px;
+  height: 28px;
   padding: 0;
+  border: none;
   border-radius: 50%;
   background: transparent;
   color: var(--text-secondary);
   font-size: 1rem;
   line-height: 1;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.7;
 }
 
-.calendar-nav-arrow--prev {
+.tracking-strip-arrow:first-child {
   justify-self: start;
 }
 
-.calendar-nav-arrow--next {
+.tracking-strip-arrow:last-child {
   justify-self: end;
 }
 
-.calendar-range-title {
-  text-align: center;
-  letter-spacing: -0.02em;
-}
-
-.calendar-day-pill-row {
+.tracking-strip-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
 }
 
-.calendar-day-pill {
-  min-height: 56px;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--border-soft);
+.tracking-strip-chip {
+  min-height: 44px;
+  border-radius: var(--r-md, 10px);
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   cursor: pointer;
   transition: border-color 0.12s, background-color 0.12s, color 0.12s;
 }
 
-.calendar-day-pill strong {
+.tracking-strip-chip strong {
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 
-.calendar-day-pill.is-active {
-  border-color: var(--primary-alpha-md);
-  background: var(--primary-soft);
-  box-shadow: none;
+.tracking-strip-dow {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
 }
 
-.calendar-day-pill.is-today {
+.tracking-strip-chip.is-today {
   border-color: var(--border-muted);
 }
 
-.calendar-day-pill.is-today strong {
+.tracking-strip-chip.is-today strong {
   color: var(--primary);
 }
 
-.calendar-day-pill-dow {
-  font-size: var(--fs-2xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.tracking-strip-chip.is-active {
+  background: var(--primary-soft);
+  border-color: var(--primary-alpha-md);
 }
+
+.tracking-strip-chip.is-active strong {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
 
 .calendar-selected-title {
   font-size: var(--fs-lg);
@@ -3142,48 +3155,14 @@ p {
   min-width: 80px;
 }
 
-@media (max-width: 720px) {
-  .calendar-day-pill-row {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    gap: 6px;
-    padding-bottom: 4px;
-  }
-
-  .calendar-day-pill {
-    flex: 0 0 auto;
-    width: calc((100% - 6 * 6px) / 7);
-    min-width: 38px;
-    scroll-snap-align: start;
-  }
-}
-
 @media (max-width: 520px) {
   .calendar-page-title {
     font-size: var(--fs-md);
   }
 
-  .calendar-range-title,
   .calendar-selected-title {
     font-size: var(--fs-base);
     font-weight: 600;
-  }
-
-  .calendar-week-header-row {
-    grid-template-columns: 32px minmax(0, 1fr) 32px;
-    gap: 6px;
-  }
-
-  .calendar-nav-arrow {
-    width: 32px;
-    height: 32px;
-    font-size: 0.95rem;
-  }
-
-  .calendar-day-pill {
-    min-height: 52px;
   }
 
   .calendar-pattern-row {
@@ -3192,17 +3171,19 @@ p {
 }
 /* ── Calendar redesign: contextual header ─────────────────── */
 .cal-header {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
   padding: 0;
 }
 
-.cal-header-secondary {
+.cal-header-date {
   margin: 0;
-  font-size: var(--fs-sm);
-  font-weight: 400;
-  color: var(--text-secondary);
-  line-height: 1.4;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.2;
 }
 
 /* ── Calendar agenda card (primary section) ───────────────── */
@@ -3226,6 +3207,7 @@ p {
   opacity: 0.78;
 }
 
+
 .cal-agenda-row {
   align-items: flex-start;
 }
@@ -3248,6 +3230,12 @@ p {
 }
 
 /* ── Google sync status module ────────────────────────────── */
+/* ── Google sync secondary callout ── */
+.cal-sync-callout {
+  padding: var(--sp-3) var(--sp-4);
+  opacity: 0.82;
+}
+
 .cal-sync-card {
   text-align: left;
 }
@@ -3304,8 +3292,14 @@ p {
 }
 
 .cal-sync-title {
-  font-size: var(--fs-base);
-  font-weight: 600;
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.cal-pattern-row-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
   color: var(--text);
 }
 
@@ -3357,7 +3351,7 @@ p {
 /* Two-column grid: labels | lane */
 .cal-timeline-grid {
   display: grid;
-  grid-template-columns: 48px 1fr;
+  grid-template-columns: 30px 1fr;
   position: relative;
 }
 
@@ -3365,24 +3359,26 @@ p {
 .cal-timeline-labels {
   position: relative;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .cal-timeline-hour-label {
   position: absolute;
-  right: 10px;
+  right: 2px;
   font-size: var(--fs-2xs);
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text-secondary);
   line-height: 1;
   transform: translateY(-50%);
   white-space: nowrap;
   user-select: none;
+  text-align: right;
 }
 
 /* ── Schedule lane ── */
 .cal-timeline-lane {
   position: relative;
-  border-left: 1px solid var(--border-soft);
+  border-left: 1.5px solid var(--border-mid);
   cursor: pointer;
 }
 
@@ -3396,6 +3392,18 @@ p {
   pointer-events: none;
 }
 
+/* Tick mark: 4px anchor bridging spine → label */
+.cal-hour-line::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: -1px;
+  width: 5px;
+  height: 1px;
+  background: var(--border-mid);
+  pointer-events: none;
+}
+
 .cal-hour-line--half {
   border-top-color: var(--border-zone);
   border-top-style: dashed;
@@ -3405,10 +3413,10 @@ p {
 /* ── Timeline event blocks ── */
 .cal-timeline-block {
   position: absolute;
-  left: 5px;
+  left: 3px;
   right: 5px;
-  border-radius: var(--r-md);
-  padding: 5px 8px;
+  border-radius: 10px;
+  padding: 4px 7px;
   overflow: hidden;
   border: 1px solid transparent;
   transition: opacity 0.12s ease, box-shadow 0.12s ease;
@@ -3495,7 +3503,7 @@ p {
   background: var(--accent-danger);
   opacity: 0.75;
   flex-shrink: 0;
-  margin-left: -4px;
+  margin-left: -3px;
 }
 
 .cal-now-line {
@@ -3507,13 +3515,15 @@ p {
 
 /* ── Unscheduled section ── */
 .cal-unscheduled-section {
-  padding: var(--sp-4) var(--sp-4) 0;
-  border-top: 1px solid var(--border-soft);
+  padding: var(--sp-5) var(--sp-4) 0;
   margin-top: var(--sp-3);
 }
 
 .cal-unscheduled-title {
-  margin: 0 0 var(--sp-3);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 /* ── Empty hint ── */

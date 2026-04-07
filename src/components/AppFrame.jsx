@@ -42,7 +42,7 @@ export default function AppFrame({
   children,
 }) {
   return (
-    <div className="app-shell">
+    <div className={`app-shell${activeTab === 'calendar' ? ' app-shell--calendar' : ''}`}>
       <Header
         userName={userName}
         inboxCount={inboxCount}

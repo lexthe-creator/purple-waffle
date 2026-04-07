@@ -628,7 +628,7 @@ function getContextualDateLabel(dateKey) {
   if (dateKey === yesterdayK) return { primary: 'Yesterday', secondary: fullDate };
 
   if (sameCalendarWeek(dateKey, todayK)) {
-    return { primary: weekday, secondary: monthDay };
+    return { primary: weekday, secondary: fullDate };
   }
 
   if (isNextCalendarWeek(dateKey, todayK)) {
@@ -747,7 +747,7 @@ function formatAgendaTimeRange(startTime, endTime) {
 // ── Day Timeline planner ──────────────────────────────────────
 const TIMELINE_START_HOUR = 6;   // 6 AM
 const TIMELINE_END_HOUR = 22;    // 10 PM
-const HOUR_HEIGHT_PX = 64;       // px per hour slot
+const HOUR_HEIGHT_PX = 54;       // px per hour slot
 const MIN_BLOCK_MINUTES = 30;    // minimum rendered block height
 const TIMELINE_TOTAL_HEIGHT = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * HOUR_HEIGHT_PX;
 const TIMELINE_HOURS = Array.from(
@@ -2557,10 +2557,69 @@ return (
 );
 }
 
+function TrackingStrip({ selectedDate, setSelectedDate }) {
+  const weekStart = useMemo(() => alignDateToAnchor(selectedDate, 'Monday'), [selectedDate]);
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => {
+      const day = addDays(weekStart, i);
+      const key = toDateKey(day);
+      return {
+        key,
+        dow: day.toLocaleDateString('en-US', { weekday: 'narrow' }),
+        date: day.getDate(),
+        isToday: sameDay(day, new Date()),
+      };
+    }),
+    [weekStart],
+  );
+
+  return (
+    <div className="tracking-strip">
+      <div className="tracking-strip-nav">
+        <button
+          type="button"
+          className="tracking-strip-arrow"
+          aria-label="Previous week"
+          onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
+        >
+          ‹
+        </button>
+        <span className="tracking-strip-range" aria-hidden="true">
+          {formatShortMonthDay(weekDays[0]?.key)} – {formatShortMonthDay(weekDays[6]?.key)}
+        </span>
+        <button
+          type="button"
+          className="tracking-strip-arrow"
+          aria-label="Next week"
+          onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
+        >
+          ›
+        </button>
+      </div>
+      <div className="tracking-strip-days" role="listbox" aria-label="Select a day">
+        {weekDays.map(day => (
+          <button
+            key={day.key}
+            type="button"
+            role="option"
+            aria-selected={selectedDate === day.key}
+            aria-current={day.isToday ? 'date' : undefined}
+            aria-label={new Date(`${day.key}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            className={`tracking-strip-chip ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
+            onClick={() => setSelectedDate(day.key)}
+          >
+            <span className="tracking-strip-dow">{day.dow}</span>
+            <strong>{day.date}</strong>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CalendarScreen({ onOpenSettings }) {
   const { tasks, meals, workouts, calendarItems, setCalendarItems } = useTaskContext();
-  const { fitnessSettings } = useAppContext();
-  const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
+  const { fitnessSettings, selectedDate, setSelectedDate } = useAppContext();
   const [editingItemId, setEditingItemId] = useState(null);
   const [draftType, setDraftType] = useState('busy');
   const [draftTitle, setDraftTitle] = useState('');
@@ -2677,12 +2736,16 @@ function CalendarScreen({ onOpenSettings }) {
   );
 
   const timedItems = useMemo(
-    () => selectedDayItems.filter(item => Boolean(item.startTime)),
+    () => selectedDayItems.filter(
+      item => Boolean(item.startTime) && getTimelineBlockStyle(item.startTime, item.endTime) !== null,
+    ),
     [selectedDayItems],
   );
 
   const untimedItems = useMemo(
-    () => selectedDayItems.filter(item => !item.startTime),
+    () => selectedDayItems.filter(
+      item => !item.startTime || getTimelineBlockStyle(item.startTime, item.endTime) === null,
+    ),
     [selectedDayItems],
   );
 
@@ -2698,15 +2761,17 @@ function CalendarScreen({ onOpenSettings }) {
     return Math.round(offsetMin * HOUR_HEIGHT_PX / 60);
   }, [isSelectedToday]);
 
-  const contextLabel = useMemo(() => getContextualDateLabel(selectedDate), [selectedDate]);
   const exactSelectedDate = useMemo(() => formatFullDate(selectedDate), [selectedDate]);
+  const selectedDayLabel = useMemo(
+    () => isSelectedToday
+      ? 'Today'
+      : new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' }),
+    [isSelectedToday, selectedDate],
+  );
   const agendaStatus = selectedDayItems.length > 0
     ? `${selectedDayItems.length} scheduled`
     : 'Open day';
   const agendaStatusTone = selectedDayItems.length > 0 ? 'status-active' : 'status-planned';
-  const agendaIntro = selectedDayItems.length > 0
-    ? `Everything below is scheduled for ${exactSelectedDate}.`
-    : `${exactSelectedDate} is open right now. Use + to add a busy block, event, or task.`;
   const syncCardState = useMemo(
     () => getCalendarSyncCardState(workCalendarPrefs, calendarItems),
     [calendarItems, workCalendarPrefs],
@@ -2847,56 +2912,14 @@ function CalendarScreen({ onOpenSettings }) {
   return (
   <div className="tab-stack calendar-dashboard">
 
-    {/* Selected-date-aware contextual header */}
+    {/* Selected-date header */}
     <section className="cal-header">
-      <SectionHeader eyebrow="Calendar" title={contextLabel.primary} />
-      <p className="home-card-copy cal-header-secondary">{contextLabel.secondary}</p>
+      <h1 className="cal-header-date">{selectedDayLabel}</h1>
+      <span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>
     </section>
 
     {/* Week strip */}
-    <Card variant="flat" className="home-card home-section calendar-week-header-card">
-      <div className="calendar-week-header-row">
-        <button
-          type="button"
-          aria-label="Previous week"
-          className="calendar-nav-arrow calendar-nav-arrow--prev"
-          onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, -7)))}
-        >
-          <span aria-hidden="true">&lsaquo;</span>
-        </button>
-
-        <div className="calendar-range-title" aria-hidden="true">
-          {formatShortMonthDay(weekDays[0]?.key)} – {formatShortMonthDay(weekDays[6]?.key)}
-        </div>
-
-        <button
-          type="button"
-          aria-label="Next week"
-          className="calendar-nav-arrow calendar-nav-arrow--next"
-          onClick={() => setSelectedDate(toDateKey(addDays(selectedDate, 7)))}
-        >
-          <span aria-hidden="true">&rsaquo;</span>
-        </button>
-      </div>
-
-      <div className="calendar-day-pill-row" role="listbox" aria-label="Select a day">
-        {weekDays.map(day => (
-          <button
-            key={day.key}
-            type="button"
-            role="option"
-            aria-selected={selectedDate === day.key}
-            aria-current={day.isToday ? 'date' : undefined}
-            aria-label={new Date(`${day.key}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            className={`calendar-day-pill ${selectedDate === day.key ? 'is-active' : ''} ${day.isToday ? 'is-today' : ''}`}
-            onClick={() => setSelectedDate(day.key)}
-          >
-            <span className="calendar-day-pill-dow" aria-hidden="true">{day.label.slice(0, 1)}</span>
-            <strong aria-hidden="true">{new Date(`${day.key}T12:00:00`).getDate()}</strong>
-          </button>
-        ))}
-      </div>
-    </Card>
+    <TrackingStrip selectedDate={selectedDate} setSelectedDate={setSelectedDate} />
 
     <span className="sr-only" aria-live="polite" aria-atomic="true">
       {formatFullDate(selectedDate)} selected
@@ -2904,12 +2927,6 @@ function CalendarScreen({ onOpenSettings }) {
 
     {/* Primary timeline card – main feature of the page */}
     <Card variant="flat" className="home-card home-section cal-agenda-card cal-timeline-card">
-      <SectionHeader
-        eyebrow="Daily Schedule"
-        title={exactSelectedDate}
-        action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
-      />
-
       {/* Scrollable timeline body */}
       <div className="cal-timeline-scroll">
         <div className="cal-timeline-grid" style={{ height: `${TIMELINE_TOTAL_HEIGHT}px` }}>
@@ -3005,7 +3022,7 @@ function CalendarScreen({ onOpenSettings }) {
       {/* Unscheduled items – items with no usable time data */}
       {untimedItems.length > 0 && (
         <div className="cal-unscheduled-section">
-          <p className="cal-unscheduled-title eyebrow">Unscheduled</p>
+          <p className="cal-unscheduled-title">Unscheduled ({untimedItems.length})</p>
           <div className="home-list">
             {untimedItems.map(item => (
               <ListRow
@@ -3045,11 +3062,8 @@ function CalendarScreen({ onOpenSettings }) {
       )}
     </Card>
 
-    {/* Google sync – connection status module, visually secondary */}
-    <Card
-      variant="flat"
-      className={`home-card home-section cal-sync-card cal-utility-card ${syncCardState.needsAttention ? 'is-attention' : 'is-quiet'}`}
-    >
+    {/* Google sync – secondary callout */}
+    <div className="cal-sync-callout">
       <div className="cal-sync-row">
         <div className="cal-sync-status">
           <span className={`cal-sync-dot ${syncCardState.dotClassName}`} aria-hidden="true" />
@@ -3057,35 +3071,20 @@ function CalendarScreen({ onOpenSettings }) {
         </div>
         <div className="cal-sync-actions">
           <span className={`status-pill ${syncCardState.toneClassName}`}>{syncCardState.statusPill}</span>
-          <button
-            type="button"
-            className="ghost-button compact-ghost"
-            onClick={onOpenSettings}
-          >
+          <button type="button" className="ghost-button compact-ghost" onClick={onOpenSettings}>
             {syncCardState.ctaLabel}
           </button>
         </div>
       </div>
-      <p className="cal-sync-desc">{syncCardState.description}</p>
-    </Card>
+    </div>
 
-    {/* Pattern utility – demoted, collapsed by default */}
+    {/* Pattern – single tappable row */}
     <Card variant="flat" className="home-card home-section cal-pattern-card cal-utility-card">
       <ExpandablePanel
-        header={(
-          <div className="cal-utility-header">
-            <div>
-              <p className="eyebrow">Patterns</p>
-              <h2 className="cal-utility-title">Save this week as a pattern</h2>
-            </div>
-            <span className="status-pill status-planned">
-              {calendarPatterns.length > 0 ? `${calendarPatterns.length} saved` : 'Optional'}
-            </span>
-          </div>
-        )}
+        header={<span className="cal-pattern-row-label">Save this week as a pattern</span>}
         className="calendar-pattern-expandable"
       >
-        <div className="calendar-pattern-row">
+        <div className="calendar-pattern-row" style={{ marginTop: '10px' }}>
           <input
             aria-label="Pattern name"
             className="task-title-input calendar-pattern-input"
@@ -3117,20 +3116,6 @@ function CalendarScreen({ onOpenSettings }) {
         )}
       </ExpandablePanel>
     </Card>
-
-    {/* Single FAB – rendered via portal so it sits above AppFrame's generic FAB */}
-    {createPortal(
-      <button
-        type="button"
-        className="fab-button"
-        onClick={openAddSheet}
-        aria-label="Add calendar item"
-        title="Add calendar item"
-      >
-        +
-      </button>,
-      document.body,
-    )}
 
     {sheetOpen && createPortal(
       <div
@@ -3229,33 +3214,32 @@ function CalendarScreen({ onOpenSettings }) {
 
 function NutritionScreen({ now }) {
   const { meals, setMeals, createMeal, setNotifications, createNotification, pantryItems, setPantryItems } = useTaskContext();
-  const { mealPrefs } = useAppContext();
+  const { mealPrefs, selectedDate: selectedPlanDay, setSelectedDate: setSelectedPlanDay } = useAppContext();
   const [mealName, setMealName] = useState('');
   const [mealTags, setMealTags] = useState([]);
   const [mealSlot, setMealSlot] = useState('auto');
   const [planDrafts, setPlanDrafts] = useState(() => Object.fromEntries(NUTRITION_SLOTS.map(slot => [slot.id, ''])));
   const [pantryDraft, setPantryDraft] = useState('');
   const [prepNote, setPrepNote] = useState('');
-  const [selectedPlanDay, setSelectedPlanDay] = useState(() => toDateKey(now));
   const todayKey = toDateKey(now);
 
-  const todaysMeals = useMemo(
-    () => meals.filter(meal => toDateKey(meal.loggedAt) === todayKey),
-    [meals, todayKey],
+  const selectedDayMeals = useMemo(
+    () => meals.filter(meal => toDateKey(meal.loggedAt) === selectedPlanDay),
+    [meals, selectedPlanDay],
   );
 
-  const todaysFuelMeals = useMemo(
-    () => todaysMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('water')),
-    [todaysMeals],
+  const selectedDayFuelMeals = useMemo(
+    () => selectedDayMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('water')),
+    [selectedDayMeals],
   );
 
   const hydrationCount = useMemo(
-    () => todaysMeals.filter(meal => Array.isArray(meal.tags) && meal.tags.includes('water')).length,
-    [todaysMeals],
+    () => selectedDayMeals.filter(meal => Array.isArray(meal.tags) && meal.tags.includes('water')).length,
+    [selectedDayMeals],
   );
 
   const mealSlots = useMemo(() => NUTRITION_SLOTS.map(slot => {
-    const slotMeals = todaysFuelMeals.filter(meal => {
+    const slotMeals = selectedDayFuelMeals.filter(meal => {
       const slotTag = meal.tags?.find(tag => typeof tag === 'string' && tag.startsWith('slot:'))?.slice(5);
       return slotTag === slot.id || `${meal.name} ${meal.tags.join(' ')}`.toLowerCase().includes(slot.keywords[0]);
     });
@@ -3264,7 +3248,7 @@ function NutritionScreen({ now }) {
       planned: slotMeals.filter(meal => Array.isArray(meal.tags) && meal.tags.includes('planned')),
       logged: slotMeals.filter(meal => !Array.isArray(meal.tags) || !meal.tags.includes('planned')),
     };
-  }), [todaysFuelMeals]);
+  }), [selectedDayFuelMeals]);
 
   const slotCoverage = useMemo(
     () => mealSlots.reduce((accumulator, slot) => {
@@ -3277,14 +3261,14 @@ function NutritionScreen({ now }) {
 
   const macroSummary = useMemo(() => {
     const counts = { protein: 0, carbs: 0, veg: 0, quick: 0 };
-    todaysFuelMeals.forEach(meal => {
+    selectedDayFuelMeals.forEach(meal => {
       counts.protein += Array.isArray(meal.tags) && meal.tags.includes('protein') ? 1 : 0;
       counts.carbs += Array.isArray(meal.tags) && meal.tags.includes('carbs') ? 1 : 0;
       counts.veg += Array.isArray(meal.tags) && meal.tags.includes('veg') ? 1 : 0;
       counts.quick += Array.isArray(meal.tags) && meal.tags.includes('quick') ? 1 : 0;
     });
     return counts;
-  }, [todaysFuelMeals]);
+  }, [selectedDayFuelMeals]);
 
   const planWeekDays = useMemo(() => {
     const weekStart = alignDateToAnchor(now, 'Monday');
@@ -3396,10 +3380,16 @@ function NutritionScreen({ now }) {
     setPrepNote('');
   }
 
+  const isSelectedToday = selectedPlanDay === todayKey;
+
   return (
     <div className="tab-stack nutrition-stack">
+      <TrackingStrip selectedDate={selectedPlanDay} setSelectedDate={setSelectedPlanDay} />
       <Card>
-        <SectionHeader eyebrow="Nutrition" title="Today’s fuel" />
+        <SectionHeader
+          eyebrow="Nutrition"
+          title={isSelectedToday ? "Today’s fuel" : formatDateLabel(selectedPlanDay)}
+        />
         <div className="ui-metrics-row">
           <MetricBlock value={slotCoverage.planned} label="Planned" />
           <MetricBlock value={slotCoverage.logged} label="Logged" />
@@ -3585,10 +3575,9 @@ function NutritionScreen({ now }) {
 
 function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const { workouts, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
-  const { energyState, setEnergyState, fitnessSettings } = useAppContext();
+  const { energyState, setEnergyState, fitnessSettings, selectedDate: selectedDateKey, setSelectedDate: setSelectedDateKey } = useAppContext();
   const { profile } = useProfileContext();
   const [activeSubTab, setActiveSubTab] = useState('today');
-  const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKey(now));
   const [checkInDraft, setCheckInDraft] = useState(() => ({
     mood: energyState.mood || 'steady',
     energy: Number.isFinite(energyState.value) ? energyState.value : 5,
@@ -3675,12 +3664,10 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   }, [recoveryState, todayKey, weeklySchedule]);
 
   const weekDays = useMemo(() => {
-    const today = new Date(`${todayKey}T00:00:00`);
-    const dow = today.getDay();
-    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    const anchor = alignDateToAnchor(selectedDateKey, 'Monday');
     const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return Array.from({ length: 7 }, (_, i) => {
-      const d = addDays(today, mondayOffset + i);
+      const d = addDays(anchor, i);
       const key = toDateKey(d);
       const session = weeklySchedule.find(s => s.dateKey === key) ?? null;
       const isToday = key === todayKey;
@@ -3703,7 +3690,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
         shortDateLabel: formatShortMonthDay(key),
       };
     });
-  }, [todayKey, weeklySchedule, workouts, now]);
+  }, [selectedDateKey, todayKey, weeklySchedule, workouts, now]);
 
   useEffect(() => {
     setSelectedDateKey(current => (
@@ -3976,6 +3963,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
       {!activeWorkout && (
         <>
+          <TrackingStrip selectedDate={selectedDateKey} setSelectedDate={setSelectedDateKey} />
           <Card variant="flat" className="home-card home-section fitness-hero-card">
             {!hasGeneratedSchedule ? (
               <EmptyState
@@ -4744,6 +4732,8 @@ function AppShell() {
     />
   ) : activeTab === 'calendar' ? (
     <CalendarScreen onOpenSettings={openSettingsPage} />
+  ) : activeTab === 'nutrition' ? (
+    <NutritionScreen now={now} />
   ) : (
     <div className="tab-stack shell-stack">
       <section className="shell-hero task-card">
