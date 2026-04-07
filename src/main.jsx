@@ -2905,7 +2905,7 @@ function CalendarScreen({ onOpenSettings }) {
     {/* Primary timeline card – main feature of the page */}
     <Card variant="flat" className="home-card home-section cal-agenda-card cal-timeline-card">
       <SectionHeader
-        eyebrow="Day planner"
+        eyebrow="Daily Schedule"
         title={exactSelectedDate}
         action={<span className={`status-pill ${agendaStatusTone}`}>{agendaStatus}</span>}
       />
