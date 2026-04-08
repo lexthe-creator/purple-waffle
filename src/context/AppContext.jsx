@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { normalizeAppState } from '../data/workoutSystemState.js';
 
 const AppContext = createContext(null);
@@ -55,13 +55,64 @@ export function AppProvider({ children }) {
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey);
 
-  // Focus session state
-  const [focusSession, setFocusSession] = useState({
-    active: false,
+  // ---------------------------------------------------------------------------
+  // Active execution block — single source of truth for what is currently running
+  // Shape: null | { type: 'focus' | 'workout' | 'routine', id: string | null }
+  // ---------------------------------------------------------------------------
+  const [activeBlock, _setActiveBlock] = useState(null);
+
+  const setActiveBlock = useCallback((next) => {
+    if (
+      next !== null &&
+      (typeof next !== 'object' || !['focus', 'workout', 'routine'].includes(next.type))
+    ) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[AppContext] setActiveBlock: invalid shape', next);
+      }
+      return;
+    }
+    _setActiveBlock(next);
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Focus session — non-active fields stored separately; `active` is derived
+  // ---------------------------------------------------------------------------
+  const [focusSessionDetails, setFocusSessionDetails] = useState({
     taskLabel: '',
     durationMinutes: 25,
     startedAt: null,
   });
+
+  // focusSession.active is derived from activeBlock so there is no separate
+  // boolean to keep in sync. Consumers that read focusSession continue to work.
+  const focusSession = useMemo(() => ({
+    active: activeBlock?.type === 'focus',
+    ...focusSessionDetails,
+  }), [activeBlock, focusSessionDetails]);
+
+  // Backward-compat shim: existing callers of setFocusSession({ active, ... })
+  // are routed through setActiveBlock so the transition stays centralised.
+  const setFocusSession = useCallback((updaterOrValue) => {
+    setFocusSessionDetails(current => {
+      const currentFull = {
+        active: activeBlock?.type === 'focus',
+        ...current,
+      };
+      const next =
+        typeof updaterOrValue === 'function' ? updaterOrValue(currentFull) : updaterOrValue;
+      const { active: nextActive, ...nextDetails } = next;
+
+      // Drive activeBlock from the `active` field change
+      if (nextActive && activeBlock?.type !== 'focus') {
+        _setActiveBlock({ type: 'focus', id: null });
+      } else if (!nextActive && activeBlock?.type === 'focus') {
+        _setActiveBlock(null);
+      }
+
+      return nextDetails;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBlock]);
 
   // Morning check-in modal state
   const [showMorningCheckin, setShowMorningCheckin] = useState(false);
@@ -123,6 +174,10 @@ export function AppProvider({ children }) {
       setMorningChecklist,
       selectedDate,
       setSelectedDate,
+      // Active execution block (single source of truth)
+      activeBlock,
+      setActiveBlock,
+      // Focus session (active field is derived from activeBlock)
       focusSession,
       setFocusSession,
       // Morning check-in modal
@@ -140,7 +195,7 @@ export function AppProvider({ children }) {
       energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
       calendarPatterns, recoveryInputs, hubInsights,
       morningChecklist, showMorningCheckin, morningStep, energyScore, sleepHours,
-      selectedDate, focusSession,
+      selectedDate, focusSession, activeBlock, setActiveBlock, setFocusSession,
     ],
   );
 

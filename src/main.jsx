@@ -308,9 +308,17 @@ const TASK_STATUS_ORDER = { planned: 0, active: 1 };
 
 function HomeDashboard({ now }) {
   const { tasks, setTasks, workouts, meals, calendarItems, routines, setRoutines } = useTaskContext();
-  const { fitnessSettings, energyState, focusSession, setFocusSession } = useAppContext();
+  const { fitnessSettings, energyState, focusSession, setFocusSession, activeBlock, setActiveBlock } = useAppContext();
   const { profile } = useProfileContext();
-  const [activeRoutine, setActiveRoutine] = useState(null);
+
+  // activeRoutine is derived from activeBlock (compatibility bridge for Step 1)
+  const activeRoutine = activeBlock?.type === 'routine'
+    ? (routines.find(r => r.id === activeBlock.id) ?? null)
+    : null;
+
+  function setActiveRoutine(routine) {
+    setActiveBlock(routine ? { type: 'routine', id: routine.id } : null);
+  }
 
   const todayKey = toDateKey(now);
   const athleteDefaults = profile?.athlete || {};
@@ -4527,29 +4535,40 @@ function AppShell() {
     recoveryInputs,
     mealPrefs,
     fitnessSettings,
+    activeBlock,
+    setActiveBlock,
   } = useAppContext();
   const { profile } = useProfileContext();
   const [activeTab, setActiveTab] = useState('home');
   const [activeSurface, setActiveSurface] = useState(null);
-  const [activeWorkoutId, setActiveWorkoutId] = useState(() => {
-    const activeWorkout = workouts.find(workout => workout.status === 'active');
-    return activeWorkout?.id ?? null;
-  });
   const [now, setNow] = useState(() => new Date());
+
+  // activeWorkoutId is derived from activeBlock (compatibility bridge for Step 1)
+  const activeWorkoutId = activeBlock?.type === 'workout' ? activeBlock.id : null;
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(interval);
   }, []);
 
+  // Boot: on first render, initialize activeBlock from any persisted active workout.
+  // Runs once; workouts list is stable enough at mount for this purpose.
   useEffect(() => {
-    setActiveWorkoutId(current => {
-      const currentWorkout = current ? workouts.find(workout => workout.id === current) ?? null : null;
-      if (currentWorkout?.status === 'active') return currentWorkout.id;
-      const activeWorkout = workouts.find(workout => workout.status === 'active');
-      return activeWorkout?.id ?? null;
-    });
-  }, [workouts]);
+    const activeWorkout = workouts.find(workout => workout.status === 'active');
+    if (activeWorkout) {
+      setActiveBlock({ type: 'workout', id: activeWorkout.id });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync: if the active workout is completed/cancelled externally, clear activeBlock.
+  useEffect(() => {
+    if (activeBlock?.type !== 'workout') return;
+    const currentWorkout = workouts.find(workout => workout.id === activeBlock.id);
+    if (!currentWorkout || currentWorkout.status !== 'active') {
+      setActiveBlock(null);
+    }
+  }, [workouts, activeBlock, setActiveBlock]);
 
   const unreadNotifications = useMemo(
     () => notifications.filter(notification => !notification.read),
@@ -4697,7 +4716,7 @@ function AppShell() {
     <FitnessScreen
       now={now}
       activeWorkoutId={activeWorkoutId}
-      onStartWorkout={setActiveWorkoutId}
+      onStartWorkout={id => setActiveBlock(id ? { type: 'workout', id } : null)}
     />
   ) : activeTab === 'calendar' ? (
     <CalendarScreen onOpenSettings={openSettingsPage} />
