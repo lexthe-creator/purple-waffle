@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import AppFrame from './components/AppFrame.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import FocusTimer from './components/FocusTimer.jsx';
+import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import RoutinePlayer from './components/RoutinePlayer.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
@@ -307,14 +308,9 @@ function getCalendarItemTypeLabel(type) {
 const TASK_STATUS_ORDER = { planned: 0, active: 1 };
 
 function HomeDashboard({ now }) {
-  const { tasks, setTasks, workouts, meals, calendarItems, routines, setRoutines } = useTaskContext();
-  const { fitnessSettings, energyState, focusSession, setFocusSessionDetails, activeBlock, setActiveBlock } = useAppContext();
+  const { tasks, setTasks, workouts, meals, calendarItems, routines } = useTaskContext();
+  const { fitnessSettings, energyState, focusSession, setFocusSessionDetails, setActiveBlock } = useAppContext();
   const { profile } = useProfileContext();
-
-  // activeRoutine is derived from activeBlock — no local state
-  const activeRoutine = activeBlock?.type === 'routine'
-    ? (routines.find(r => r.id === activeBlock.id) ?? null)
-    : null;
 
   const todayKey = toDateKey(now);
   const athleteDefaults = profile?.athlete || {};
@@ -539,35 +535,23 @@ function HomeDashboard({ now }) {
 
       <Card variant="flat" className="home-card home-section home-focus-card">
         <SectionHeader eyebrow="Focus" title="Deep work session" />
-        {focusSession.active ? (
-          <FocusTimer
-            session={focusSession}
-            onStop={() => {
-              setActiveBlock(null);
-              setFocusSessionDetails(s => ({ ...s, startedAt: null }));
-            }}
-            onDismiss={() => {
-              setActiveBlock(null);
-              setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
-            }}
-          />
-        ) : (
-          <FocusTimer
-            session={focusSession}
-            onStart={({ taskLabel, durationMinutes }) => {
-              setActiveBlock({ type: 'focus', id: null });
-              setFocusSessionDetails({ taskLabel, durationMinutes, startedAt: Date.now() });
-            }}
-            onStop={() => {
-              setActiveBlock(null);
-              setFocusSessionDetails(s => ({ ...s, startedAt: null }));
-            }}
-            onDismiss={() => {
-              setActiveBlock(null);
-              setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
-            }}
-          />
-        )}
+        {/* Active FocusTimer is promoted to AppShell level (survives tab switches).
+            This card only renders the idle setup form; once active, AppShell takes over. */}
+        <FocusTimer
+          session={focusSession}
+          onStart={({ taskLabel, durationMinutes }) => {
+            setActiveBlock({ type: 'focus', id: null });
+            setFocusSessionDetails({ taskLabel, durationMinutes, startedAt: Date.now() });
+          }}
+          onStop={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+          }}
+          onDismiss={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+          }}
+        />
       </Card>
 
       <Card variant="flat" className="home-card home-section home-tasks-card">
@@ -655,17 +639,6 @@ function HomeDashboard({ now }) {
         </div>
       </Card>
 
-      {activeRoutine && (
-        <RoutinePlayer
-          routine={activeRoutine}
-          onClose={() => setActiveBlock(null)}
-          onComplete={routineId =>
-            setRoutines(current =>
-              current.map(r => r.id === routineId ? { ...r, lastCompleted: toDateKey(now) } : r)
-            )
-          }
-        />
-      )}
     </div>
   );
 }
@@ -4040,18 +4013,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
   return (
     <div className="tab-stack fitness-stack">
-      {activeWorkout && (
-        <WorkoutPlayer
-          workout={activeWorkout}
-          onCancel={cancelWorkout}
-          onComplete={completeWorkout}
-          onLogCompletion={logCompletion}
-          onUpdateWorkoutLog={updateWorkoutLog}
-        />
-      )}
-
-      {!activeWorkout && (
-        <>
+      <>
           <TrackingStrip
             selectedDate={selectedDateKey}
             setSelectedDate={setSelectedDateKey}
@@ -4389,7 +4351,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           <NutritionScreen now={now} />
         )}
       </>
-      )}
     </div>
   );
 }
@@ -4536,6 +4497,8 @@ function AppShell() {
     createExercise,
     setNotifications,
     createNotification,
+    routines,
+    setRoutines,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -4546,14 +4509,13 @@ function AppShell() {
     fitnessSettings,
     activeBlock,
     setActiveBlock,
+    focusSession,
+    setFocusSessionDetails,
   } = useAppContext();
   const { profile } = useProfileContext();
   const [activeTab, setActiveTab] = useState('home');
   const [activeSurface, setActiveSurface] = useState(null);
   const [now, setNow] = useState(() => new Date());
-
-  // activeWorkoutId is derived from activeBlock (compatibility bridge for Step 1)
-  const activeWorkoutId = activeBlock?.type === 'workout' ? activeBlock.id : null;
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
@@ -4563,9 +4525,9 @@ function AppShell() {
   // Boot: on first render, initialize activeBlock from any persisted active workout.
   // Runs once; workouts list is stable enough at mount for this purpose.
   useEffect(() => {
-    const activeWorkout = workouts.find(workout => workout.status === 'active');
-    if (activeWorkout) {
-      setActiveBlock({ type: 'workout', id: activeWorkout.id });
+    const persisted = workouts.find(workout => workout.status === 'active');
+    if (persisted) {
+      setActiveBlock({ type: 'workout', id: persisted.id });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4578,6 +4540,86 @@ function AppShell() {
       setActiveBlock(null);
     }
   }, [workouts, activeBlock, setActiveBlock]);
+
+  // ---------------------------------------------------------------------------
+  // Derived execution objects (used by promoted overlays)
+  // ---------------------------------------------------------------------------
+  const activeWorkoutId = activeBlock?.type === 'workout' ? activeBlock.id : null;
+
+  const activeWorkout = useMemo(
+    () => (activeWorkoutId ? workouts.find(w => w.id === activeWorkoutId) ?? null : null),
+    [activeWorkoutId, workouts],
+  );
+
+  const activeRoutine = activeBlock?.type === 'routine'
+    ? (routines.find(r => r.id === activeBlock.id) ?? null)
+    : null;
+
+  // ---------------------------------------------------------------------------
+  // Workout execution handlers (promoted from FitnessScreen for shell-level WorkoutPlayer)
+  // ---------------------------------------------------------------------------
+  function shellUpdateWorkoutById(workoutId, updater) {
+    setWorkouts(current => current.map((workout, index) => (
+      workout.id === workoutId ? normalizeWorkoutRecord(updater(workout), index) : workout
+    )));
+  }
+
+  function shellUpsertNotification(title, detail) {
+    setNotifications(current => [createNotification({ title, detail }), ...current]);
+  }
+
+  function shellMergeWorkoutLog(workout, patch = {}) {
+    const currentSegments = Array.isArray(workout.workoutLog?.segments)
+      ? workout.workoutLog.segments : [];
+    const nextSegments = Array.isArray(patch.segments)
+      ? patch.segments
+      : patch.segment
+        ? [...currentSegments.filter(e => e.id !== patch.segment.id), patch.segment]
+        : currentSegments;
+    return normalizeWorkoutLog({
+      ...(workout.workoutLog || {}),
+      ...patch,
+      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
+      segments: nextSegments,
+    }, { startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now() });
+  }
+
+  function cancelWorkout() {
+    if (!activeWorkoutId) return;
+    shellUpdateWorkoutById(activeWorkoutId, w => ({ ...w, status: 'planned' }));
+    setActiveBlock(null);
+  }
+
+  function completeWorkout(workoutLog) {
+    if (!activeWorkoutId) return;
+    const completedAt = Date.now();
+    shellUpdateWorkoutById(activeWorkoutId, w => ({
+      ...w,
+      status: 'completed',
+      completedAt,
+      workoutLog: shellMergeWorkoutLog(w, {
+        ...(workoutLog || {}),
+        completionLoggedAt: workoutLog?.completionLoggedAt || completedAt,
+        completionSource: workoutLog?.completionSource || 'manual_completion',
+        lastUpdatedAt: completedAt,
+        notes: typeof workoutLog?.notes === 'string' ? workoutLog.notes : (w.workoutLog?.notes || ''),
+      }),
+    }));
+    shellUpsertNotification('Workout completed', activeWorkout?.name || 'Workout');
+    setActiveBlock(null);
+  }
+
+  function logCompletion(workoutLog) {
+    completeWorkout(workoutLog);
+  }
+
+  function updateWorkoutLog(patch) {
+    if (!activeWorkoutId) return;
+    shellUpdateWorkoutById(activeWorkoutId, w => ({
+      ...w,
+      workoutLog: shellMergeWorkoutLog(w, patch),
+    }));
+  }
 
   const unreadNotifications = useMemo(
     () => notifications.filter(notification => !notification.read),
@@ -4705,7 +4747,35 @@ function AppShell() {
   ]);
 
   const activeCopy = SHELL_TAB_COPY[activeTab] ?? SHELL_TAB_COPY.home;
-  const shellContent = activeSurface === 'inbox' ? (
+
+  // Execution overlays take priority over surface and tab routing.
+  // They are mounted here so they survive tab switches.
+  const shellContent = activeBlock?.type === 'workout' && activeWorkout ? (
+    <WorkoutPlayer
+      workout={activeWorkout}
+      onCancel={cancelWorkout}
+      onComplete={completeWorkout}
+      onLogCompletion={logCompletion}
+      onUpdateWorkoutLog={updateWorkoutLog}
+    />
+  ) : activeBlock?.type === 'focus' ? (
+    <div className="tab-stack">
+      <Card variant="flat" className="home-card home-section home-focus-card">
+        <SectionHeader eyebrow="Focus" title="Deep work session" />
+        <FocusTimer
+          session={focusSession}
+          onStop={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+          }}
+          onDismiss={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+          }}
+        />
+      </Card>
+    </div>
+  ) : activeSurface === 'inbox' ? (
     <InboxSurface
       inboxItems={inboxItems}
       onClose={() => setActiveSurface(null)}
@@ -4787,6 +4857,21 @@ function AppShell() {
         onClose={() => setQuickAddOpen(false)}
         todayKey={toDateKey(now)}
       />
+      {/* RoutinePlayer portals to document.body internally; mounted here so it
+          survives HomeDashboard unmounting on tab switch. */}
+      {activeRoutine && (
+        <RoutinePlayer
+          routine={activeRoutine}
+          onClose={() => setActiveBlock(null)}
+          onComplete={routineId =>
+            setRoutines(current =>
+              current.map(r => r.id === routineId ? { ...r, lastCompleted: toDateKey(now) } : r)
+            )
+          }
+        />
+      )}
+      {/* MorningCheckinModal portals to document.body; self-gates on showMorningCheckin. */}
+      <MorningCheckinModal />
     </>
   );
 }
