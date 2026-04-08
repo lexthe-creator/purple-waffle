@@ -4198,3 +4198,88 @@ p {
   background: rgba(76, 175, 80, 0.12);
   color: #2e7d32;
 }
+
+/* ─── Home Zone 2: Active block indicator ────────────────────────────── */
+
+.home-active-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--accent-olive-soft);
+  border: 1px solid rgba(165, 179, 140, 0.22);
+  border-radius: 10px;
+}
+
+.home-active-block-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: var(--success);
+}
+
+.home-active-block-dot--focus { background: var(--accent-olive); }
+.home-active-block-dot--workout { background: var(--accent-terracotta); }
+.home-active-block-dot--routine { background: var(--accent-olive); }
+
+.home-active-block-label {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Home Zone 5: Routine strip ─────────────────────────────────────── */
+
+.home-routine-strip {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+}
+
+.home-routine-strip-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-routine-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-routine-chips .status-chip.is-done {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* ─── Home Zone 7: Nutrition slots ───────────────────────────────────── */
+
+.home-nutrition-slots {
+  display: grid;
+  gap: 8px;
+}
+
+.home-nutrition-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.home-nutrition-slot-label {
+  font-size: 0.875rem;
+  color: var(--text);
+}
+
+.home-nutrition-slot.is-logged .home-nutrition-slot-label {
+  color: var(--text);
+}

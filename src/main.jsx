@@ -308,11 +308,12 @@ function getCalendarItemTypeLabel(type) {
 const TASK_STATUS_ORDER = { planned: 0, active: 1 };
 
 function HomeDashboard({ now }) {
-  const { tasks, setTasks, workouts, meals, calendarItems, routines } = useTaskContext();
-  const { fitnessSettings, energyState, focusSession, setFocusSessionDetails, setActiveBlock } = useAppContext();
+  const { tasks, setTasks, workouts, setWorkouts, meals, calendarItems, routines, createWorkout, createExercise } = useTaskContext();
+  const { fitnessSettings, energyState, focusSession, setFocusSessionDetails, setActiveBlock, activeBlock } = useAppContext();
   const { profile } = useProfileContext();
 
   const todayKey = toDateKey(now);
+  const todayDayName = now.toLocaleDateString('en-US', { weekday: 'long' });
   const athleteDefaults = profile?.athlete || {};
   const workoutHistory = useMemo(
     () => workouts.map(workout => ({
@@ -408,6 +409,27 @@ function HomeDashboard({ now }) {
     [loggedMeals],
   );
 
+  const todayRoutines = useMemo(
+    () => routines.filter(r => Array.isArray(r.scheduleDays) && r.scheduleDays.includes(todayDayName)),
+    [routines, todayDayName],
+  );
+
+  const todayWorkoutRecord = useMemo(
+    () => getWorkoutRecordForDate(workouts, todayKey),
+    [workouts, todayKey],
+  );
+
+  const activeBlockLabel = useMemo(() => {
+    if (!activeBlock) return null;
+    if (activeBlock.type === 'focus') return focusSession.taskLabel || 'Focus session';
+    if (activeBlock.type === 'workout') {
+      const w = workouts.find(workout => workout.id === activeBlock.id);
+      return w?.title || w?.name || 'Workout';
+    }
+    const r = routines.find(routine => routine.id === activeBlock.id);
+    return r?.name || 'Routine';
+  }, [activeBlock, focusSession.taskLabel, workouts, routines]);
+
   const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
   const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
   const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
@@ -457,6 +479,57 @@ function HomeDashboard({ now }) {
       ? 'moderate'
       : 'low';
 
+  function handleStartTodayWorkout() {
+    if (todayWorkoutRecord) {
+      setActiveBlock({ type: 'workout', id: todayWorkoutRecord.id });
+      return;
+    }
+    if (todayWorkoutCard.kind !== 'workout' || !todayWorkoutCard.session) return;
+    const newWorkout = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...todayWorkoutCard.session, programWeek: planState.programWeek },
+      settings: fitnessSettings,
+      todayKey,
+      statusOverride: 'active',
+    });
+    setWorkouts(ws => [...ws, newWorkout]);
+    setActiveBlock({ type: 'workout', id: newWorkout.id });
+  }
+
+  function handleSkipTodayWorkout() {
+    if (todayWorkoutRecord) {
+      setWorkouts(ws => ws.map(w => w.id === todayWorkoutRecord.id ? { ...w, status: 'skipped' } : w));
+    } else if (todayWorkoutCard.kind === 'workout' && todayWorkoutCard.session) {
+      const skipped = createWorkoutFromSession({
+        createWorkout,
+        createExercise,
+        session: { ...todayWorkoutCard.session, programWeek: planState.programWeek },
+        settings: fitnessSettings,
+        todayKey,
+        statusOverride: 'skipped',
+      });
+      setWorkouts(ws => [...ws, skipped]);
+    }
+  }
+
+  function handleMoveTodayWorkout() {
+    if (todayWorkoutCard.kind !== 'workout' || !todayWorkoutCard.session) return;
+    const nextDate = toDateKey(addDays(new Date(`${todayKey}T00:00:00`), 1));
+    const moved = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...todayWorkoutCard.session, programWeek: planState.programWeek },
+      settings: fitnessSettings,
+      todayKey: nextDate,
+      scheduledDateOverride: nextDate,
+      plannedDateOverride: todayKey,
+      statusOverride: 'planned',
+    });
+    setWorkouts(ws => [...ws, moved]);
+    handleSkipTodayWorkout();
+  }
+
   return (
     <div className="tab-stack home-dashboard">
       <section className="home-status-strip" aria-label="Today status">
@@ -501,36 +574,85 @@ function HomeDashboard({ now }) {
         </div>
       </section>
 
-      {routines.length > 0 && (
-        <Card variant="flat" className="home-card home-section home-routines-card">
-          <SectionHeader eyebrow="Routines" title="Today's routines" />
-          <div className="home-list">
-            {routines.map(routine => {
-              const isCompleted = routine.lastCompleted === toDateKey(now);
+      {/* Zone 2: Active block indicator */}
+      {activeBlock && (
+        <div className="home-active-block" role="status" aria-live="polite">
+          <span className={`home-active-block-dot home-active-block-dot--${activeBlock.type}`} aria-hidden="true" />
+          <span className="home-active-block-label">{activeBlockLabel}</span>
+          <span className="status-pill status-active">Active</span>
+        </div>
+      )}
+
+      {/* Zone 3: Today's workout card */}
+      {todayWorkoutCard.kind === 'workout' && (
+        <Card variant="flat" className="home-card home-section home-workout-card">
+          <SectionHeader
+            eyebrow="Today's workout"
+            title={todayWorkoutCard.title}
+            action={
+              hasCompletedWorkout
+                ? <span className="status-pill status-done">Done</span>
+                : workoutMarkedMissed
+                  ? <span className="status-pill status-missed">Missed</span>
+                  : <span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>
+            }
+          />
+          {todayWorkoutCard.metaLine && (
+            <p className="home-card-copy">{todayWorkoutCard.metaLine}</p>
+          )}
+          {!hasCompletedWorkout && (
+            <div className="quick-entry-row">
+              {workoutMarkedMissed ? (
+                <>
+                  <button type="button" className="secondary-button" onClick={handleMoveTodayWorkout}>
+                    Move to tomorrow
+                  </button>
+                  <button type="button" className="ghost-button compact-ghost" onClick={handleSkipTodayWorkout}>
+                    Skip
+                  </button>
+                </>
+              ) : todayWorkoutCard.canStart ? (
+                <>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleStartTodayWorkout}
+                    disabled={activeBlock !== null && !(activeBlock.type === 'workout' && activeBlock.id === todayWorkoutRecord?.id)}
+                  >
+                    Start
+                  </button>
+                  <button type="button" className="ghost-button compact-ghost" onClick={handleSkipTodayWorkout}>
+                    Skip
+                  </button>
+                </>
+              ) : null}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Zone 5: Today's routine strip */}
+      {todayRoutines.length > 0 && (
+        <div className="home-routine-strip home-section">
+          <p className="home-routine-strip-label">Routines</p>
+          <div className="home-routine-chips">
+            {todayRoutines.map(routine => {
+              const isCompleted = routine.lastCompleted === todayKey;
               return (
-                <ListRow
+                <button
                   key={routine.id}
-                  variant="card"
-                  label={routine.name}
-                  sub={`${routine.steps.length} step${routine.steps.length === 1 ? '' : 's'}${routine.scheduleTime ? ` · ${routine.scheduleTime}` : ''}`}
-                  trailing={
-                    isCompleted
-                      ? <span className="status-pill status-done">Done</span>
-                      : (
-                        <button
-                          type="button"
-                          className="ghost-button compact-ghost"
-                          onClick={() => setActiveBlock({ type: 'routine', id: routine.id })}
-                        >
-                          Start
-                        </button>
-                      )
-                  }
-                />
+                  type="button"
+                  className={`status-chip${isCompleted ? ' is-done' : ''}`}
+                  onClick={() => !isCompleted && setActiveBlock({ type: 'routine', id: routine.id })}
+                  disabled={isCompleted}
+                  aria-label={`${routine.name}${isCompleted ? ' — done' : ''}`}
+                >
+                  {routine.name}
+                </button>
               );
             })}
           </div>
-        </Card>
+        </div>
       )}
 
       <Card variant="flat" className="home-card home-section home-focus-card">
@@ -611,15 +733,6 @@ function HomeDashboard({ now }) {
             />
           ))}
 
-          {todayWorkoutCard.kind === 'workout' && (
-            <ListRow
-              variant="card"
-              label={todayWorkoutCard.title}
-              sub={todayWorkoutCard.metaLine}
-              trailing={<span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>}
-            />
-          )}
-
           {todayCalendarItems.filter(item => !item.isCurrent).map(item => (
             <ListRow
               key={item.id}
@@ -630,12 +743,31 @@ function HomeDashboard({ now }) {
             />
           ))}
 
-          {todayWorkoutCard.kind !== 'workout' && todayCalendarItems.length === 0 && (
+          {todayCalendarItems.length === 0 && (
             <EmptyState
               title="No schedule items yet"
-              description="Home will show today's plan once Calendar or Fitness has something scheduled."
+              description="Home will show today's plan once Calendar has something scheduled."
             />
           )}
+        </div>
+      </Card>
+
+      {/* Zone 7: Nutrition bar */}
+      <Card variant="flat" className="home-card home-section home-nutrition-card">
+        <SectionHeader
+          eyebrow="Nutrition"
+          title="Today's meals"
+          action={<span className="home-card-copy">{completedMealSlots}/4 logged</span>}
+        />
+        <div className="home-nutrition-slots">
+          {mealSlotProgress.map(slot => (
+            <div key={slot.id} className={`home-nutrition-slot${slot.complete ? ' is-logged' : ''}`}>
+              <span className="home-nutrition-slot-label">{slot.label}</span>
+              <span className={`status-pill ${slot.complete ? 'status-done' : 'status-planned'}`}>
+                {slot.complete ? 'Logged' : 'Empty'}
+              </span>
+            </div>
+          ))}
         </div>
       </Card>
 
