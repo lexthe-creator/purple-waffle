@@ -3635,7 +3635,7 @@ function NutritionScreen({ now }) {
   );
 }
 
-function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
+function FitnessScreen({ now, onStartWorkout }) {
   const { workouts, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
   const { energyState, setEnergyState, fitnessSettings, selectedDate: selectedDateKey, setSelectedDate: setSelectedDateKey } = useAppContext();
   const { profile } = useProfileContext();
@@ -3655,11 +3655,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
       sleepHours: Number.isFinite(energyState.sleepHours) ? energyState.sleepHours : 7,
     });
   }, [energyState.mood, energyState.value, energyState.sleepHours]);
-
-  const activeWorkout = useMemo(
-    () => workouts.find(workout => workout.id === activeWorkoutId) ?? null,
-    [workouts, activeWorkoutId],
-  );
 
   const todayKey = toDateKey(now);
   const normalizedProgramType = normalizeProgramType(fitnessSettings.programType);
@@ -3824,44 +3819,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
   }
 
-  function updateWorkoutById(workoutId, updater) {
-    setWorkouts(current => current.map((workout, index) => (
-      workout.id === workoutId
-        ? normalizeWorkoutRecord(updater(workout), index)
-        : workout
-    )));
-  }
-
   function appendWorkout(workout) {
     setWorkouts(current => [normalizeWorkoutRecord(workout, current.length), ...current]);
-  }
-
-  function mergeWorkoutLog(workout, patch = {}) {
-    const nextLog = normalizeWorkoutLog({
-      ...(workout.workoutLog || {}),
-      ...patch,
-      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
-      segments: (() => {
-        const currentSegments = Array.isArray(workout.workoutLog?.segments)
-          ? workout.workoutLog.segments
-          : [];
-
-        if (Array.isArray(patch.segments)) {
-          return patch.segments;
-        }
-
-        if (!patch.segment) {
-          return currentSegments;
-        }
-
-        const remainingSegments = currentSegments.filter(entry => entry.id !== patch.segment.id);
-        return [...remainingSegments, patch.segment];
-      })(),
-    }, {
-      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
-    });
-
-    return nextLog;
   }
 
   function startWorkout(workoutId) {
@@ -3896,44 +3855,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           ? normalizeWorkoutRecord({ ...workout, status: 'planned' }, index)
           : workout
     )));
-  }
-
-  function cancelWorkout() {
-    if (!activeWorkoutId) return;
-    updateWorkoutById(activeWorkoutId, workout => ({ ...workout, status: 'planned' }));
-    onStartWorkout(null);
-  }
-
-  function completeWorkout(workoutLog) {
-    if (!activeWorkoutId) return;
-    const completedAt = Date.now();
-    updateWorkoutById(activeWorkoutId, workout => ({
-      ...workout,
-      status: 'completed',
-      completedAt,
-      workoutLog: mergeWorkoutLog(workout, {
-        ...(workoutLog || {}),
-        completionLoggedAt: workoutLog?.completionLoggedAt || completedAt,
-        completionSource: workoutLog?.completionSource || 'manual_completion',
-        lastUpdatedAt: completedAt,
-        notes: typeof workoutLog?.notes === 'string' ? workoutLog.notes : (workout.workoutLog?.notes || ''),
-      }),
-    }));
-    upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
-    onStartWorkout(null);
-  }
-
-  function logCompletion(workoutLog) {
-    if (!activeWorkoutId) return;
-    completeWorkout(workoutLog);
-  }
-
-  function updateWorkoutLog(patch) {
-    if (!activeWorkoutId) return;
-    updateWorkoutById(activeWorkoutId, workout => ({
-      ...workout,
-      workoutLog: mergeWorkoutLog(workout, patch),
-    }));
   }
 
   function saveCheckIn() {
@@ -4509,6 +4430,8 @@ function AppShell() {
     fitnessSettings,
     activeBlock,
     setActiveBlock,
+    conflictMessage,
+    setConflictMessage,
     focusSession,
     setFocusSessionDetails,
   } = useAppContext();
@@ -4523,11 +4446,12 @@ function AppShell() {
   }, []);
 
   // Boot: on first render, initialize activeBlock from any persisted active workout.
+  // Uses force:true to bypass conflict check — no user intent involved.
   // Runs once; workouts list is stable enough at mount for this purpose.
   useEffect(() => {
     const persisted = workouts.find(workout => workout.status === 'active');
     if (persisted) {
-      setActiveBlock({ type: 'workout', id: persisted.id });
+      setActiveBlock({ type: 'workout', id: persisted.id }, { force: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4794,7 +4718,6 @@ function AppShell() {
   ) : activeTab === 'fitness' ? (
     <FitnessScreen
       now={now}
-      activeWorkoutId={activeWorkoutId}
       onStartWorkout={id => setActiveBlock(id ? { type: 'workout', id } : null)}
     />
   ) : activeTab === 'calendar' ? (
@@ -4872,6 +4795,49 @@ function AppShell() {
       )}
       {/* MorningCheckinModal portals to document.body; self-gates on showMorningCheckin. */}
       <MorningCheckinModal />
+      {/* Conflict toast — shown when setActiveBlock blocks a transition.
+          Minimal fixed alert; Step 5 can replace this with polished UI. */}
+      {conflictMessage && createPortal(
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            bottom: 88,
+            left: 16,
+            right: 16,
+            background: 'var(--bg-card, #1e1e2e)',
+            border: '1px solid var(--border-card, rgba(255,255,255,0.1))',
+            borderRadius: 12,
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            zIndex: 1100,
+          }}
+        >
+          <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4, color: 'var(--text, #fff)' }}>
+            {conflictMessage}
+          </span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setConflictMessage(null)}
+            style={{
+              flexShrink: 0,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              color: 'var(--text-muted, rgba(255,255,255,0.5))',
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }
