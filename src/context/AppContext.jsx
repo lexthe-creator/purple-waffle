@@ -55,6 +55,14 @@ export function AppProvider({ children }) {
   const [morningChecklist, setMorningChecklist] = useState(() => loadChecklist());
   const [selectedDate, setSelectedDate] = useState(getTodayDateKey);
 
+  // Focus session state
+  const [focusSession, setFocusSession] = useState({
+    active: false,
+    taskLabel: '',
+    durationMinutes: 25,
+    startedAt: null,
+  });
+
   // Morning check-in modal state
   const [showMorningCheckin, setShowMorningCheckin] = useState(false);
   const [morningStep, setMorningStep] = useState(1);
@@ -115,6 +123,8 @@ export function AppProvider({ children }) {
       setMorningChecklist,
       selectedDate,
       setSelectedDate,
+      focusSession,
+      setFocusSession,
       // Morning check-in modal
       showMorningCheckin,
       setShowMorningCheckin,
@@ -130,7 +140,7 @@ export function AppProvider({ children }) {
       energyState, fitnessSettings, workCalendarPrefs, mealPrefs, notificationPrefs,
       calendarPatterns, recoveryInputs, hubInsights,
       morningChecklist, showMorningCheckin, morningStep, energyScore, sleepHours,
-      selectedDate,
+      selectedDate, focusSession,
     ],
   );
 

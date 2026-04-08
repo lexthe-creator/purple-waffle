@@ -3947,3 +3947,254 @@ p {
   background: rgba(232, 226, 220, 0.9);
   margin-bottom: 2px;
 }
+
+/* ─── Focus Timer ────────────────────────────────────────────────────── */
+
+.focus-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 0;
+}
+
+.focus-timer__ring-wrap {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
+.focus-timer__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.focus-timer__track {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.08);
+  stroke-width: 8;
+}
+
+.focus-timer__progress {
+  fill: none;
+  stroke: var(--color-accent, #1a1a1a);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear;
+}
+
+.focus-timer__progress--done {
+  stroke: #4caf50;
+}
+
+.focus-timer__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.focus-timer__time {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.focus-timer__label-idle,
+.focus-timer__task-running {
+  font-size: 0.65rem;
+  color: rgba(0, 0, 0, 0.45);
+  text-align: center;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.focus-timer__setup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.focus-timer__task-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: var(--color-surface, #fff);
+  color: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.focus-timer__task-input:focus {
+  border-color: var(--color-accent, #1a1a1a);
+}
+
+.focus-timer__presets {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.focus-timer__controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.focus-timer__finish-msg {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.55);
+  text-align: center;
+}
+
+/* ─── Routine Player ─────────────────────────────────────────────────── */
+
+.routine-player-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: overlay-fade-in 0.2s ease;
+}
+
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.routine-player {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface, #fff);
+  border-radius: 20px 20px 0 0;
+  padding: 24px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: slide-up 0.25s ease;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.routine-player__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.routine-player__progress-label {
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.45);
+  margin: 2px 0 0;
+}
+
+.routine-player__progress-track {
+  height: 4px;
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.routine-player__progress-fill {
+  height: 100%;
+  background: var(--color-accent, #1a1a1a);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.routine-player__step {
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.routine-player__step-type {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.routine-player__step-duration {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.routine-player__step-label {
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.routine-player__done-badge {
+  align-self: flex-start;
+}
+
+.routine-player__step-list {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.routine-player__step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.routine-player__step-dot.is-current {
+  background: var(--color-accent, #1a1a1a);
+  transform: scale(1.2);
+}
+
+.routine-player__step-dot.is-done {
+  background: #4caf50;
+}
+
+.routine-player__controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.routine-player__controls .primary-button {
+  flex: 1;
+}
+
+.status-done {
+  background: rgba(76, 175, 80, 0.12);
+  color: #2e7d32;
+}

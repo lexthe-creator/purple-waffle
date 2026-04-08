@@ -194,6 +194,30 @@ function createHabit(overrides = {}) {
   };
 }
 
+function createRoutineStep(overrides = {}) {
+  return {
+    id: generateId('step'),
+    label: '',
+    type: 'custom', // 'task' | 'habit' | 'focus' | 'custom'
+    durationMinutes: null,
+    ...overrides,
+  };
+}
+
+function createRoutine(overrides = {}) {
+  return {
+    id: generateId('routine'),
+    name: '',
+    type: 'custom', // 'morning' | 'evening' | 'custom'
+    steps: [],
+    scheduleDays: [], // ['Monday', 'Tuesday', ...]
+    scheduleTime: null, // 'HH:MM' or null
+    lastCompleted: null,
+    createdAt: Date.now(),
+    ...overrides,
+  };
+}
+
 function createCalendarItem(overrides = {}) {
   return {
     id: generateId('calendar'),
@@ -306,6 +330,28 @@ function normalizeCalendarItem(item) {
   };
 }
 
+function normalizeRoutineStep(step) {
+  return {
+    id: step?.id || generateId('step'),
+    label: typeof step?.label === 'string' ? step.label : '',
+    type: ['task', 'habit', 'focus', 'custom'].includes(step?.type) ? step.type : 'custom',
+    durationMinutes: Number.isFinite(step?.durationMinutes) ? step.durationMinutes : null,
+  };
+}
+
+function normalizeRoutine(routine) {
+  return {
+    id: routine?.id || generateId('routine'),
+    name: typeof routine?.name === 'string' ? routine.name : '',
+    type: ['morning', 'evening', 'custom'].includes(routine?.type) ? routine.type : 'custom',
+    steps: Array.isArray(routine?.steps) ? routine.steps.map(normalizeRoutineStep) : [],
+    scheduleDays: Array.isArray(routine?.scheduleDays) ? routine.scheduleDays.filter(d => typeof d === 'string') : [],
+    scheduleTime: typeof routine?.scheduleTime === 'string' ? routine.scheduleTime : null,
+    lastCompleted: typeof routine?.lastCompleted === 'string' ? routine.lastCompleted : null,
+    createdAt: Number.isFinite(routine?.createdAt) ? routine.createdAt : Date.now(),
+  };
+}
+
 function loadInitialState() {
   if (typeof window === 'undefined') {
     return null;
@@ -343,6 +389,31 @@ function buildDefaultState() {
       createNotification({ title: 'Weekly review', detail: 'Two items need rescheduling this week.' }),
     ],
     habits: [],
+    routines: [
+      createRoutine({
+        name: 'Morning Routine',
+        type: 'morning',
+        scheduleDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        scheduleTime: '07:00',
+        steps: [
+          createRoutineStep({ label: 'Hydrate — drink a glass of water', type: 'habit', durationMinutes: 1 }),
+          createRoutineStep({ label: 'Morning check-in (energy + sleep)', type: 'custom', durationMinutes: 2 }),
+          createRoutineStep({ label: 'Review today\'s top 3 tasks', type: 'task', durationMinutes: 3 }),
+          createRoutineStep({ label: 'Set a focus intention', type: 'focus', durationMinutes: 2 }),
+        ],
+      }),
+      createRoutine({
+        name: 'Evening Wind-Down',
+        type: 'evening',
+        scheduleDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        scheduleTime: '21:00',
+        steps: [
+          createRoutineStep({ label: 'Clear inbox — triage anything captured today', type: 'task', durationMinutes: 5 }),
+          createRoutineStep({ label: 'Set tomorrow\'s top priority', type: 'task', durationMinutes: 3 }),
+          createRoutineStep({ label: 'Log a reflection note', type: 'custom', durationMinutes: 3 }),
+        ],
+      }),
+    ],
     pantryItems: DEFAULT_PANTRY_ITEMS,
     inboxItems: [
       createInboxItem({ text: 'Look into new running shoes before race' }),
@@ -366,6 +437,7 @@ export function TaskProvider({ children }) {
   const [workouts, setWorkouts] = useState(() => (initialState?.workouts || defaults.workouts).map(normalizeWorkout));
   const [notifications, setNotifications] = useState(() => (initialState?.notifications || defaults.notifications).map(normalizeNotification));
   const [habits, setHabits] = useState(() => (initialState?.habits || defaults.habits).map(normalizeHabit));
+  const [routines, setRoutines] = useState(() => (initialState?.routines || defaults.routines).map(normalizeRoutine));
   const [calendarItems, setCalendarItems] = useState(() => (initialState?.calendarItems || defaults.calendarItems).map(normalizeCalendarItem));
   const [inboxItems, setInboxItems] = useState(() => (initialState?.inboxItems || defaults.inboxItems).map(normalizeInboxItem));
   const [pantryItems, setPantryItems] = useState(() => {
@@ -376,9 +448,9 @@ export function TaskProvider({ children }) {
   useEffect(() => {
     window.localStorage.setItem(
       TASKS_STORAGE_KEY,
-      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, calendarItems, inboxItems, pantryItems }),
+      JSON.stringify({ tasks, meals, notes, workouts, notifications, habits, routines, calendarItems, inboxItems, pantryItems }),
     );
-  }, [tasks, meals, notes, workouts, notifications, habits, calendarItems, inboxItems, pantryItems]);
+  }, [tasks, meals, notes, workouts, notifications, habits, routines, calendarItems, inboxItems, pantryItems]);
 
   const value = useMemo(
     () => ({
@@ -403,6 +475,10 @@ export function TaskProvider({ children }) {
       habits,
       setHabits,
       createHabit,
+      routines,
+      setRoutines,
+      createRoutine,
+      createRoutineStep,
       calendarItems,
       setCalendarItems,
       createCalendarItem,
@@ -412,7 +488,7 @@ export function TaskProvider({ children }) {
       pantryItems,
       setPantryItems,
     }),
-    [tasks, meals, notes, workouts, notifications, habits, calendarItems, inboxItems, pantryItems],
+    [tasks, meals, notes, workouts, notifications, habits, routines, calendarItems, inboxItems, pantryItems],
   );
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;

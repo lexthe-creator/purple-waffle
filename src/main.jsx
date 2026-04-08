@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import AppFrame from './components/AppFrame.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
+import FocusTimer from './components/FocusTimer.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
+import RoutinePlayer from './components/RoutinePlayer.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
 import FinanceScreen from './views/FinanceScreen.jsx';
 import HomeScreen from './views/HomeScreen.jsx';
@@ -59,11 +61,6 @@ const ROOT_TABS = [
     iconPath: '<path d="M6 8v8M18 8v8"/><path d="M9 12h6"/><path d="M4 10h2v4H4zM18 10h2v4h-2z"/>',
   },
   {
-  id: 'nutrition',
-  label: 'Nutrition',
-  iconPath: '<path d="M6 3v7"/><path d="M8 3v7"/><path d="M10 3v7"/><path d="M8 10v11"/><path d="M16 3c1.5 2 1.5 5 0 7"/><path d="M16 10v11"/>',
-  },
-  {
     id: 'more',
     label: 'More',
     iconPath: '<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>',
@@ -71,18 +68,15 @@ const ROOT_TABS = [
 ];
 
 const FITNESS_SUBTABS = [
-  { id: 'today', label: 'Today' },
-  { id: 'library', label: 'Workout Library' },
-  { id: 'logging', label: 'Logging' },
+  { id: 'training', label: 'Training' },
+  { id: 'nutrition', label: 'Nutrition' },
 ];
 
 const MORE_SECTIONS = [
-  { id: 'recovery', label: 'Recovery / Health' },
-  { id: 'lifestyle', label: 'Lifestyle' },
-  { id: 'maintenance', label: 'Maintenance' },
+  { id: 'habits', label: 'Habits' },
   { id: 'insights', label: 'Insights' },
   { id: 'finance', label: 'Finance' },
-  { id: 'inbox', label: 'Inbox' },
+  { id: 'maintenance', label: 'Maintenance' },
 ];
 
 const WORKOUT_MISS_HOUR = 20;
@@ -123,13 +117,13 @@ const SHELL_TAB_COPY = {
     description: 'Home is now anchored by tasks first, schedule second, and a compact status check-in.',
     bullets: [
       'Top tasks and a main focus item lead the screen.',
-      'Today’s schedule previews calendar and fitness commitments.',
+      "Today's schedule previews calendar and fitness commitments.",
       'Today status stays compact so action remains primary.',
     ],
   },
   calendar: {
     eyebrow: 'Calendar',
-    title: 'Today’s schedule',
+    title: "Today's schedule",
     description: 'Phase 1 shell placeholder. Calendar structure stays stable for the later rebuild.',
     bullets: [
       'Agenda and day planning go here.',
@@ -142,29 +136,19 @@ const SHELL_TAB_COPY = {
     title: 'Workout space',
     description: 'Fitness is now the workout detail and control layer, while Calendar keeps ownership of timing and scheduling.',
     bullets: [
-      'Today’s workout leads the page.',
+      "Today's workout leads the page.",
       'The full weekly plan sits directly below it.',
       'Library and logging stay available as secondary views.',
     ],
   },
-  nutrition: {
-    eyebrow: 'Nutrition',
-    title: 'Nutrition space',
-    description: 'Phase 1 shell placeholder. Nutrition support stays as shell only for now.',
-    bullets: [
-      'Meal logging lands here later.',
-      'Daily totals are deferred to Phase 6.',
-      'Home only needs indicator status later.',
-    ],
-  },
   more: {
     eyebrow: 'More',
-    title: 'Remaining surfaces',
-    description: 'Phase 1 shell placeholder. More will hold the remaining app areas after the shell is stable.',
+    title: 'Secondary workspaces',
+    description: 'Habits, Insights, Finance, and Maintenance — lifestyle management features not needed every day.',
     bullets: [
-      'Inbox and Settings remain top-right utilities.',
-      'Additional areas stay grouped here later.',
-      'No deeper module logic yet.',
+      'Habits: daily and weekly behavior tracking.',
+      'Insights: weekly review and notes.',
+      'Finance and Maintenance: reference and upkeep.',
     ],
   },
 };
@@ -323,9 +307,10 @@ function getCalendarItemTypeLabel(type) {
 const TASK_STATUS_ORDER = { planned: 0, active: 1 };
 
 function HomeDashboard({ now }) {
-  const { tasks, setTasks, workouts, meals, calendarItems } = useTaskContext();
-  const { fitnessSettings, energyState } = useAppContext();
+  const { tasks, setTasks, workouts, meals, calendarItems, routines, setRoutines } = useTaskContext();
+  const { fitnessSettings, energyState, focusSession, setFocusSession } = useAppContext();
   const { profile } = useProfileContext();
+  const [activeRoutine, setActiveRoutine] = useState(null);
 
   const todayKey = toDateKey(now);
   const athleteDefaults = profile?.athlete || {};
@@ -516,10 +501,62 @@ function HomeDashboard({ now }) {
         </div>
       </section>
 
+      {routines.length > 0 && (
+        <Card variant="flat" className="home-card home-section home-routines-card">
+          <SectionHeader eyebrow="Routines" title="Today's routines" />
+          <div className="home-list">
+            {routines.map(routine => {
+              const isCompleted = routine.lastCompleted === toDateKey(now);
+              return (
+                <ListRow
+                  key={routine.id}
+                  variant="card"
+                  label={routine.name}
+                  sub={`${routine.steps.length} step${routine.steps.length === 1 ? '' : 's'}${routine.scheduleTime ? ` · ${routine.scheduleTime}` : ''}`}
+                  trailing={
+                    isCompleted
+                      ? <span className="status-pill status-done">Done</span>
+                      : (
+                        <button
+                          type="button"
+                          className="ghost-button compact-ghost"
+                          onClick={() => setActiveRoutine(routine)}
+                        >
+                          Start
+                        </button>
+                      )
+                  }
+                />
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       <Card variant="flat" className="home-card home-section home-focus-card">
+        <SectionHeader eyebrow="Focus" title="Deep work session" />
+        {focusSession.active ? (
+          <FocusTimer
+            session={focusSession}
+            onStop={() => setFocusSession(s => ({ ...s, active: false, startedAt: null }))}
+            onDismiss={() => setFocusSession({ active: false, taskLabel: '', durationMinutes: 25, startedAt: null })}
+          />
+        ) : (
+          <FocusTimer
+            session={focusSession}
+            onStart={({ taskLabel, durationMinutes }) =>
+              setFocusSession({ active: true, taskLabel, durationMinutes, startedAt: Date.now() })
+            }
+            onStop={() => setFocusSession(s => ({ ...s, active: false, startedAt: null }))}
+            onDismiss={() => setFocusSession({ active: false, taskLabel: '', durationMinutes: 25, startedAt: null })}
+          />
+        )}
+      </Card>
+
+      <Card variant="flat" className="home-card home-section home-tasks-card">
         <SectionHeader
-          eyebrow="Home"
-          title="Today’s tasks and focus"
+          eyebrow="Tasks"
+          title="Today's top tasks"
           action={<span className={`status-pill ${taskStatusTone}`}>{taskCompletionValue}</span>}
         />
 
@@ -557,7 +594,7 @@ function HomeDashboard({ now }) {
       <Card variant="flat" className="home-card home-section home-schedule-card">
         <SectionHeader
           eyebrow="Today"
-          title="Today’s schedule"
+          title="Today's schedule"
           action={<span className={`status-pill ${calendarTone}`}>{calendarStatus}</span>}
         />
         <p className="home-card-copy">{scheduleIntro}</p>
@@ -601,6 +638,17 @@ function HomeDashboard({ now }) {
         </div>
       </Card>
 
+      {activeRoutine && (
+        <RoutinePlayer
+          routine={activeRoutine}
+          onClose={() => setActiveRoutine(null)}
+          onComplete={routineId =>
+            setRoutines(current =>
+              current.map(r => r.id === routineId ? { ...r, lastCompleted: toDateKey(now) } : r)
+            )
+          }
+        />
+      )}
     </div>
   );
 }
@@ -2394,7 +2442,7 @@ return (
     <section className="task-card today-action-card">
       <p className="eyebrow">Do this now</p>
       <button type="button" className="today-primary-action" onClick={workoutLaunch}>
-        <span>{activeWorkout ? 'Continue today’s workout' : `Start today’s ${workoutName.toLowerCase()}`}</span>
+        <span>{activeWorkout ? "Continue today's workout" : `Start today's ${workoutName.toLowerCase()}`}</span>
         <span aria-hidden="true">›</span>
       </button>
     </section>
@@ -3412,7 +3460,7 @@ function NutritionScreen({ now }) {
       <Card>
         <SectionHeader
           eyebrow="Nutrition"
-          title={isSelectedToday ? "Today’s fuel" : formatDateLabel(selectedPlanDay)}
+          title={isSelectedToday ? "Today's fuel" : formatDateLabel(selectedPlanDay)}
         />
         <div className="ui-metrics-row">
           <MetricBlock value={slotCoverage.planned} label="Planned" />
@@ -3461,7 +3509,7 @@ function NutritionScreen({ now }) {
       </Card>
 
       <Card>
-        <SectionHeader eyebrow="Today’s meals" title="Planned vs logged by slot" />
+        <SectionHeader eyebrow="Today's meals" title="Planned vs logged by slot" />
         <div className="nutrition-slot-grid">
           {mealSlots.map(slot => (
             <article key={slot.id} className="nutrition-slot-card">
@@ -3601,7 +3649,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   const { workouts, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
   const { energyState, setEnergyState, fitnessSettings, selectedDate: selectedDateKey, setSelectedDate: setSelectedDateKey } = useAppContext();
   const { profile } = useProfileContext();
-  const [activeSubTab, setActiveSubTab] = useState('today');
+  const [activeSubTab, setActiveSubTab] = useState('training');
   const [checkInDraft, setCheckInDraft] = useState(() => ({
     mood: energyState.mood || 'steady',
     energy: Number.isFinite(energyState.value) ? energyState.value : 5,
@@ -4208,8 +4256,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           </Card>
 
           <Card variant="flat" className="home-card home-section fitness-nav-card">
-            <SectionHeader eyebrow="Fitness" title="Views" />
-            <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness internal navigation">
+            <div className="segmented-control fitness-subnav" role="tablist" aria-label="Fitness sections">
               {FITNESS_SUBTABS.map(tab => (
                 <button
                   key={tab.id}
@@ -4225,7 +4272,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             </div>
           </Card>
 
-          {activeSubTab === 'today' && (
+          {activeSubTab === 'training' && (
             <>
               <Card variant="flat" className="home-card home-section fitness-support-card">
                 <SectionHeader eyebrow="Daily check-in" title="Open the day with recovery context" />
@@ -4321,71 +4368,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
             </>
           )}
 
-        {activeSubTab === 'library' && (
-          <>
-            {!hasGeneratedSchedule ? (
-              <Card variant="flat" className="home-card home-section fitness-support-card">
-                <EmptyState
-                  title={programEmptyState.title}
-                  description={programEmptyState.description}
-                />
-              </Card>
-            ) : (
-              <>
-                <Card variant="flat" className="home-card home-section fitness-support-card">
-                  <SectionHeader eyebrow="Workout Library" title={activeProgramName} />
-                  {librarySections.length > 0 ? (
-                    <div className="subtle-feed">
-                      {librarySections.map(section => (
-                        <article key={section.title} className="feed-card">
-                          <strong>{section.title}</strong>
-                          <div className="subtle-feed fitness-library-group">
-                            {section.items.map(item => (
-                              <ListRow
-                                key={item.id}
-                                variant="card"
-                                label={item.title}
-                                sub={`${item.duration} min · ${item.objective}`}
-                              />
-                            ))}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <EmptyState
-                      title={programEmptyState.title}
-                      description={normalizeProgramType(fitnessSettings.programType) === 'strength_block'
-                        ? 'This program does not have generated library items yet.'
-                        : programEmptyState.description}
-                    />
-                  )}
-                </Card>
-              </>
-            )}
-          </>
-        )}
-
-        {activeSubTab === 'logging' && (
-          <>
-            <Card variant="flat" className="home-card home-section fitness-support-card">
-              <SectionHeader eyebrow="Logging" title="Recent completed workouts" />
-              <div className="subtle-feed">
-                {recentCompletedWorkouts.length > 0 ? (
-                  recentCompletedWorkouts.map(workout => (
-                    <ListRow
-                      key={workout.id}
-                      variant="card"
-                      label={workout.name}
-                      sub={`${formatDateLabel(workout.completedAt || workout.createdAt)} · ${workout.duration} min · ${getCurrentWorkoutType(workout)}`}
-                    />
-                  ))
-                ) : (
-                  <EmptyState title="No completed workouts yet" description="Finished sessions will appear here once you log them." />
-                )}
-              </div>
-            </Card>
-          </>
+        {activeSubTab === 'nutrition' && (
+          <NutritionScreen now={now} />
         )}
       </>
       )}
@@ -4393,16 +4377,16 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
   );
 }
 
-function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
-  const { profile, setProfile } = useProfileContext();
-  const { workouts, inboxItems, setInboxItems } = useTaskContext();
-  const { energyState, recoveryInputs, setRecoveryInputs, hubInsights, setHubInsights } = useAppContext();
+function MoreScreen({ initialSection = 'habits', onSwitchToTab, now }) {
+  const { profile } = useProfileContext();
+  const { workouts } = useTaskContext();
+  const { hubInsights, setHubInsights } = useAppContext();
   const [activeSection, setActiveSection] = useState(initialSection);
   const [insightDraft, setInsightDraft] = useState('');
   const validSections = useMemo(() => new Set(MORE_SECTIONS.map(section => section.id)), []);
 
   useEffect(() => {
-    setActiveSection(validSections.has(initialSection) ? initialSection : 'tasks');
+    setActiveSection(validSections.has(initialSection) ? initialSection : 'habits');
   }, [initialSection, validSections]);
 
   const weeklyAnalytics = useMemo(() => {
@@ -4470,65 +4454,22 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
         </div>
       </Card>
 
-      {activeSection === 'tasks' && <TasksScreen />}
-      {activeSection === 'meals' && <NutritionScreen now={now || new Date()} />}
-      {activeSection === 'finance' && <FinanceScreen />}
-      {activeSection === 'recovery' && (
+      {activeSection === 'habits' && (
         <Card>
-          <SectionHeader eyebrow="Recovery / Health" title="Downshift and restore" />
+          <SectionHeader eyebrow="Habits" title="Daily and weekly habits" />
           <div className="subtle-feed">
-            <div className="ui-metrics-row">
-              <MetricBlock value={energyState.value} label="Energy" />
-              <MetricBlock value={energyState.sleepHours} label="Sleep" />
-              <MetricBlock value={recoveryInputs.preferredSession} label="Default recovery" />
-            </div>
-            {RECOVERY_SESSIONS.map(session => (
-              <ListRow
-                key={session.id}
-                variant="card"
-                label={session.name}
-                sub={`${session.when} · ${session.dur}`}
-                action={(
-                  <button
-                    type="button"
-                    className="ghost-button compact-ghost"
-                    onClick={() => setRecoveryInputs(current => ({ ...current, preferredSession: session.id }))}
-                  >
-                    Set default
-                  </button>
-                )}
-              />
-            ))}
-          </div>
-        </Card>
-      )}
-      {activeSection === 'lifestyle' && (
-        <Card>
-          <SectionHeader eyebrow="Lifestyle" title="Habits and daily notes" />
-          <div className="subtle-feed">
-            {profile.habits.length > 0 ? profile.habits.map(habit => (
+            {profile.habits && profile.habits.length > 0 ? profile.habits.map(habit => (
               <ListRow key={habit.id} variant="card" label={habit.title || 'Habit'} sub={habit.frequency} />
             )) : (
-              <EmptyState title="No habits yet" description="Use the lifestyle section to track repeated actions." />
+              <EmptyState title="No habits yet" description="Track repeated daily or weekly actions here." />
             )}
           </div>
-        </Card>
-      )}
-      {activeSection === 'maintenance' && (
-        <Card>
-          <SectionHeader eyebrow="Maintenance" title="Household and upkeep" />
-          <HomeScreen />
         </Card>
       )}
       {activeSection === 'insights' && (
         <Card>
           <SectionHeader eyebrow="Insights" title="Weekly review" />
           <div className="subtle-feed">
-            <div className="ui-metrics-row">
-              <MetricBlock value={weeklyAnalytics.sessionsLogged} label="Sessions" />
-              <MetricBlock value={weeklyAnalytics.runMiles} label="Run mi" />
-              <MetricBlock value={weeklyAnalytics.totalMinutes} label="Minutes" />
-            </div>
             <div className="field-stack">
               <textarea
                 className="notes-textarea"
@@ -4536,7 +4477,15 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
                 onChange={event => setInsightDraft(event.target.value)}
                 placeholder="Capture a weekly insight"
               />
-              <button type="button" className="secondary-button" onClick={addInsightNote}>
+              <button type="button" className="secondary-button" onClick={() => {
+                const trimmed = insightDraft.trim();
+                if (!trimmed) return;
+                setHubInsights(current => ({
+                  ...current,
+                  weeklyNotes: [{ id: `note-${Date.now()}`, text: trimmed }, ...(current.weeklyNotes || [])],
+                }));
+                setInsightDraft('');
+              }}>
                 Save insight
               </button>
             </div>
@@ -4548,21 +4497,13 @@ function MoreScreen({ initialSection = 'tasks', onSwitchToTab, now }) {
           </div>
         </Card>
       )}
-
-      <Card>
-        <SectionHeader eyebrow="Quick" title="Shortcuts" />
-        <div className="inline-actions">
-          <button type="button" className="secondary-button" onClick={() => setActiveSection('tasks')}>
-            Open tasks
-          </button>
-          <button type="button" className="secondary-button" onClick={() => setActiveSection('recovery')}>
-            Open recovery
-          </button>
-          <button type="button" className="secondary-button" onClick={() => setActiveSection('inbox')}>
-            Open inbox
-          </button>
-        </div>
-      </Card>
+      {activeSection === 'finance' && <FinanceScreen />}
+      {activeSection === 'maintenance' && (
+        <Card>
+          <SectionHeader eyebrow="Maintenance" title="Household and upkeep" />
+          <HomeScreen />
+        </Card>
+      )}
     </div>
   );
 }
@@ -4719,7 +4660,7 @@ function AppShell() {
     setNotifications(current => [
       createNotification({
         title: 'Workout marked missed',
-        detail: `${todaySession.label || todaySession.title || 'Today’s workout'} was not completed by 8:00 PM.`,
+        detail: `${todaySession.label || todaySession.title || "Today's workout"} was not completed by 8:00 PM.`,
       }),
       ...current,
     ]);
@@ -4760,15 +4701,15 @@ function AppShell() {
     />
   ) : activeTab === 'calendar' ? (
     <CalendarScreen onOpenSettings={openSettingsPage} />
-  ) : activeTab === 'nutrition' ? (
-    <NutritionScreen now={now} />
+  ) : activeTab === 'more' ? (
+    <MoreScreen now={now} onSwitchToTab={handleTabChange} />
   ) : (
     <div className="tab-stack shell-stack">
       <section className="shell-hero task-card">
         <p className="eyebrow">Phase 1 shell</p>
         <h2>Stable navigation and layout are locked</h2>
         <p className="shell-hero-copy">
-          This rebuild branch keeps the app shell fixed so later phases can fill in real Home, Calendar, Fitness, and Nutrition content without changing navigation.
+          This rebuild branch keeps the app shell fixed so later phases can fill in real Home, Calendar, Fitness, and More content without changing navigation.
         </p>
       </section>
 
