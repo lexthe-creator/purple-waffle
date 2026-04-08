@@ -308,17 +308,13 @@ const TASK_STATUS_ORDER = { planned: 0, active: 1 };
 
 function HomeDashboard({ now }) {
   const { tasks, setTasks, workouts, meals, calendarItems, routines, setRoutines } = useTaskContext();
-  const { fitnessSettings, energyState, focusSession, setFocusSession, activeBlock, setActiveBlock } = useAppContext();
+  const { fitnessSettings, energyState, focusSession, setFocusSessionDetails, activeBlock, setActiveBlock } = useAppContext();
   const { profile } = useProfileContext();
 
-  // activeRoutine is derived from activeBlock (compatibility bridge for Step 1)
+  // activeRoutine is derived from activeBlock — no local state
   const activeRoutine = activeBlock?.type === 'routine'
     ? (routines.find(r => r.id === activeBlock.id) ?? null)
     : null;
-
-  function setActiveRoutine(routine) {
-    setActiveBlock(routine ? { type: 'routine', id: routine.id } : null);
-  }
 
   const todayKey = toDateKey(now);
   const athleteDefaults = profile?.athlete || {};
@@ -528,7 +524,7 @@ function HomeDashboard({ now }) {
                         <button
                           type="button"
                           className="ghost-button compact-ghost"
-                          onClick={() => setActiveRoutine(routine)}
+                          onClick={() => setActiveBlock({ type: 'routine', id: routine.id })}
                         >
                           Start
                         </button>
@@ -546,17 +542,30 @@ function HomeDashboard({ now }) {
         {focusSession.active ? (
           <FocusTimer
             session={focusSession}
-            onStop={() => setFocusSession(s => ({ ...s, active: false, startedAt: null }))}
-            onDismiss={() => setFocusSession({ active: false, taskLabel: '', durationMinutes: 25, startedAt: null })}
+            onStop={() => {
+              setActiveBlock(null);
+              setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+            }}
+            onDismiss={() => {
+              setActiveBlock(null);
+              setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+            }}
           />
         ) : (
           <FocusTimer
             session={focusSession}
-            onStart={({ taskLabel, durationMinutes }) =>
-              setFocusSession({ active: true, taskLabel, durationMinutes, startedAt: Date.now() })
-            }
-            onStop={() => setFocusSession(s => ({ ...s, active: false, startedAt: null }))}
-            onDismiss={() => setFocusSession({ active: false, taskLabel: '', durationMinutes: 25, startedAt: null })}
+            onStart={({ taskLabel, durationMinutes }) => {
+              setActiveBlock({ type: 'focus', id: null });
+              setFocusSessionDetails({ taskLabel, durationMinutes, startedAt: Date.now() });
+            }}
+            onStop={() => {
+              setActiveBlock(null);
+              setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+            }}
+            onDismiss={() => {
+              setActiveBlock(null);
+              setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+            }}
           />
         )}
       </Card>
@@ -649,7 +658,7 @@ function HomeDashboard({ now }) {
       {activeRoutine && (
         <RoutinePlayer
           routine={activeRoutine}
-          onClose={() => setActiveRoutine(null)}
+          onClose={() => setActiveBlock(null)}
           onComplete={routineId =>
             setRoutines(current =>
               current.map(r => r.id === routineId ? { ...r, lastCompleted: toDateKey(now) } : r)
