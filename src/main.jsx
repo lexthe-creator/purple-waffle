@@ -20,6 +20,7 @@ import {
   getPlanState,
   getStationMeta,
 } from './data/hyroxPlan.js';
+import { adaptGeneratedSessionToWorkoutRecord } from './data/adaptGeneratedSessionToWorkoutRecord.js';
 import { normalizeProgramType } from './data/programRouter.js';
 import { sessionTypes } from './data/workoutSystemSchema.js';
 import {
@@ -53,7 +54,7 @@ import './styles.css';
 const ROOT_TABS = [
   {
     id: 'home',
-    label: 'Home',
+    label: 'Today',
     iconPath: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
   },
   {
@@ -135,7 +136,7 @@ const WEEKDAY_INDEX = {
 
 const SHELL_TAB_COPY = {
   home: {
-    eyebrow: 'Home',
+    eyebrow: 'Today',
     title: 'Top tasks and focus',
     description: 'Home is now anchored by tasks first, schedule second, and a compact status check-in.',
     bullets: [
@@ -177,16 +178,6 @@ const SHELL_TAB_COPY = {
 };
 
 const SHELL_SURFACE_COPY = {
-  inbox: {
-    eyebrow: 'Inbox',
-    title: 'Quick capture inbox',
-    description: 'Quick Capture opens here during Phase 1. Capture and sorting logic comes later.',
-    bullets: [
-      'Anything captured lands here first.',
-      'Organization rules are deferred to Phase 3.',
-      'This surface keeps the shell route stable.',
-    ],
-  },
   settings: {
     eyebrow: 'Settings',
     title: 'App settings',
@@ -650,7 +641,8 @@ function HomeDashboard({ now }) {
 
   const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
   const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
-  const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
+  // Workout is owned by Zone 3 — schedule card shows calendar items only.
+  const scheduledItemCount = todayCalendarItems.length;
   const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
   const calendarMetricValue = useMemo(() => {
     const timedItems = todayCalendarItems.filter(item => item.startAt instanceof Date);
@@ -687,8 +679,8 @@ function HomeDashboard({ now }) {
   const completedMealSlots = mealSlotProgress.filter(slot => slot.complete).length;
 
   const scheduleIntro = scheduledItemCount > 0
-    ? `${scheduledItemCount} item${scheduledItemCount === 1 ? '' : 's'} are shaping the day.`
-    : 'The day is still open, so this is where upcoming calendar and training items will land.';
+    ? `${scheduledItemCount} calendar item${scheduledItemCount === 1 ? '' : 's'} today.`
+    : 'No calendar blocks yet. Add events or busy blocks from the Calendar tab.';
   const taskStatusTone = taskCompletedCount > 0 ? 'status-active' : 'status-planned';
   const calendarTone = scheduledItemCount > 0 ? 'status-active' : 'status-planned';
   const readinessState = readiness.level === 'High'
@@ -1784,8 +1776,8 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
 }
 
 function createWorkoutFromSession({
-  createWorkout,
-  createExercise,
+  createWorkout,   // unused — kept for call-site compatibility
+  createExercise,  // unused — kept for call-site compatibility
   session,
   settings,
   todayKey,
@@ -1793,94 +1785,14 @@ function createWorkoutFromSession({
   plannedDateOverride = null,
   statusOverride = 'planned',
 }) {
-  const sessionType = session?.type || 'hyrox';
-  const normalizedProgramType = session?.programType || settings?.programType || 'hyrox';
-  const programName = getProgramDisplayName(normalizedProgramType);
-  const content = buildWorkoutContentFromSession(session);
-  const prescribedExercises = Array.isArray(content.blocks) && content.blocks.length > 0
-    ? content.blocks.flatMap(block => (
-      Array.isArray(block.exercises) && block.exercises.length > 0
-        ? block.exercises.map(exercise => createExercise({
-            name: exercise.name || block.title || 'Exercise',
-            detail: [exercise.detail, exercise.note].filter(Boolean).join(' · '),
-            sets: Number.isFinite(exercise.sets) ? exercise.sets : block.repeat,
-            reps: typeof exercise.reps === 'string' ? exercise.reps : null,
-            interval: exercise.interval || null,
-            timedEffort: exercise.timedEffort || block.duration || null,
-            duration: exercise.duration || null,
-            rest: exercise.rest || null,
-            distance: exercise.distance || null,
-            effort: exercise.effort || null,
-            note: exercise.note || null,
-            cue: exercise.cue || null,
-          }))
-        : [createExercise({
-            name: block.title || 'Block',
-            detail: Array.isArray(block.notes) ? block.notes[0] || '' : '',
-            sets: block.repeat,
-            timedEffort: block.duration || null,
-          })]
-    ))
-    : [
-      createExercise({ name: 'Warm-up', detail: '5-10 min easy movement', timedEffort: '5-10 min' }),
-      createExercise({ name: session.title || session.label || 'Main set', detail: session.detail || session.label || 'Training session', sets: 3 }),
-      createExercise({ name: 'Cooldown', detail: '5 min mobility', timedEffort: '5 min' }),
-    ];
-  const scheduledDate = scheduledDateOverride || session?.dateKey || todayKey;
-  const plannedDate = plannedDateOverride || session?.dateKey || scheduledDate;
-  const plannedDurationMinutes = Number.isFinite(session?.plannedDurationMinutes)
-    ? session.plannedDurationMinutes
-    : (Number.isFinite(session?.duration) ? session.duration : null);
-  const workout = createWorkout({
-    name: session.label || session.title || 'Training Session',
-    title: session.label || session.title || 'Training Session',
-    label: session.label || session.title || 'Training Session',
-    detail: session.detail || '',
-    objective: session.objective || session.shortVersionRule || '',
-    programId: normalizedProgramType,
-    programName,
-    type: sessionType.includes('run')
-      ? 'run'
-      : sessionType.includes('hyrox')
-        ? 'hyrox'
-        : sessionType.includes('recovery')
-          ? 'recovery'
-          : 'strength',
+  const resolvedScheduledDate = scheduledDateOverride || session?.dateKey || todayKey;
+  const resolvedPlannedDate = plannedDateOverride || session?.dateKey || resolvedScheduledDate;
+  return adaptGeneratedSessionToWorkoutRecord(session, {
+    scheduledDate: resolvedScheduledDate,
+    plannedDate: resolvedPlannedDate,
     status: statusOverride,
-    scheduledDate,
-    plannedDate,
-    date: scheduledDate,
-    sessionOffset: session.offset ?? null,
-    trainingDays: settings.trainingDays,
-    programType: normalizedProgramType,
-    phase: session.phase || '',
-    week: session.week || null,
-    programWeek: Number.isFinite(session?.programWeek) ? session.programWeek : (Number.isFinite(session?.week) ? session.week : null),
-    duration: plannedDurationMinutes || 45,
-    plannedDurationMinutes: plannedDurationMinutes || 45,
-    plannedTime: session.plannedTime || null,
-    sessionType: session.sessionType || null,
-    sessionTypeCanonical: session.sessionTypeCanonical || null,
-    warmupTemplateId: session.warmupTemplateId || null,
-    cooldownTemplateId: session.cooldownTemplateId || null,
-    shortVersionRule: session.shortVersionRule || null,
-    prescription: session.prescription || null,
-    coachingNote: session.coachingNotes || session.coachingNote || null,
-    exercises: prescribedExercises,
-    content,
-    source: {
-      origin: 'program',
-      importKey: session.id || session.workoutKey || session.workoutId || null,
-      templateId: session.warmupTemplateId || session.cooldownTemplateId || null,
-      libraryId: session.workoutId || session.workoutKey || session.id || null,
-      sessionType: session.sessionType || session.sessionTypeCanonical || session.type || null,
-    },
+    settings,
   });
-
-  return {
-    ...workout,
-    type: workout.type || 'hyrox',
-  };
 }
 
 function getTodayItems({ tasks, workouts, meals, calendarItems, todayKey }) {
