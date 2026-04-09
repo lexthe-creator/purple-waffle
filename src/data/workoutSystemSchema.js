@@ -80,7 +80,7 @@ export const programProfiles = {
       specificityProgression: 'increase_station_density_and_compromised_running_by_phase',
       weaknessBiasAllowed: true,
     },
-    supportedDaysPerWeek: [4, 5],
+    supportedDaysPerWeek: [3, 4, 5],
     defaultDaysPerWeek: 4,
     phaseSequence: ['foundation', 'base', 'build', 'peak', 'recovery_deload'],
   },
@@ -754,6 +754,20 @@ export const warmupTemplates = {
     durationMinutes: 10,
     blocks: [{ instruction: 'Mixed movement prep' }],
   },
+  recovery_reset_v1: {
+    warmupTemplateId: 'recovery_reset_v1',
+    templateType: 'recovery',
+    displayName: 'Recovery Reset Warm-up',
+    durationMinutes: 7,
+    blocks: [{ instruction: 'Breathing + gentle mobility flow' }],
+  },
+  hyrox_standard_v1: {
+    warmupTemplateId: 'hyrox_standard_v1',
+    templateType: 'hyrox',
+    displayName: 'HYROX Standard Warm-up',
+    durationMinutes: 10,
+    blocks: [{ instruction: 'Easy engine + station prep + strides' }],
+  },
 };
 
 export const cooldownTemplates = {
@@ -777,6 +791,20 @@ export const cooldownTemplates = {
     displayName: 'Conditioning Standard Cooldown',
     durationMinutes: 10,
     blocks: [{ instruction: 'Walk + down-regulation' }],
+  },
+  recovery_reset_v1: {
+    cooldownTemplateId: 'recovery_reset_v1',
+    templateType: 'recovery',
+    displayName: 'Recovery Reset Cooldown',
+    durationMinutes: 5,
+    blocks: [{ instruction: 'Breathing reset and gentle mobility' }],
+  },
+  hyrox_standard_v1: {
+    cooldownTemplateId: 'hyrox_standard_v1',
+    templateType: 'hyrox',
+    displayName: 'HYROX Standard Cooldown',
+    durationMinutes: 6,
+    blocks: [{ instruction: 'Easy walk or machine + lower-body mobility' }],
   },
 };
 

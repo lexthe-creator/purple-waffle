@@ -29,6 +29,11 @@ import {
   normalizeWorkoutRecord,
 } from './data/workoutSystemState.js';
 import {
+  applyMovedGeneratedSessionMeta,
+  applySkippedGeneratedSessionMeta,
+  getGeneratedSessionMetaForUi,
+} from './data/workoutGeneratedSessionMeta.js';
+import {
   QUICK_MEAL_TAGS,
   NUTRITION_SLOTS,
   RECOVERY_SESSIONS,
@@ -102,6 +107,23 @@ const AVAILABLE_PROGRAMS = [
     description: 'Placeholder slot for upcoming multi-program planning support.',
   },
 ];
+const SETTINGS_AGE_GROUPS = ['youth', 'adult', 'masters'];
+const SETTINGS_GOAL_OPTIONS = {
+  hyrox: ['hyrox_prep', 'strength', 'endurance', 'general_fitness', 'recovery'],
+  '5k': ['endurance', 'general_fitness', 'fat_loss', 'recovery'],
+  strength_block: ['strength', 'general_fitness', 'fat_loss', 'recovery'],
+};
+
+function formatSettingsValueLabel(value) {
+  return String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function getSettingsGoalOptions(programType) {
+  return SETTINGS_GOAL_OPTIONS[normalizeProgramType(programType)] || SETTINGS_GOAL_OPTIONS.hyrox;
+}
+
 const WEEKDAY_INDEX = {
   Sunday: 0,
   Monday: 1,
@@ -312,6 +334,38 @@ function InboxSurface({ inboxItems, onCapture, onConvert, onClose }) {
 function SettingsSurface({ onClose, fitnessSettings, notificationPrefs, recoveryInputs, mealPrefs, profile }) {
   const copy = SHELL_SURFACE_COPY.settings;
   const fitnessLevel = profile?.athlete?.fitnessLevel || 'unspecified';
+  const { setFitnessSettings } = useAppContext();
+  const [draft, setDraft] = useState(() => ({ ...fitnessSettings }));
+  const [saveBanner, setSaveBanner] = useState('');
+  const saveBannerTimerRef = useRef(null);
+  const goalOptions = getSettingsGoalOptions(draft.programType);
+  const generatorPreview = getGeneratorTransparencySummary(draft);
+
+  useEffect(() => {
+    setDraft({ ...fitnessSettings });
+  }, [fitnessSettings]);
+
+  useEffect(() => () => {
+    if (saveBannerTimerRef.current) {
+      clearTimeout(saveBannerTimerRef.current);
+    }
+  }, []);
+
+  function patchSetting(key, value) {
+    setDraft(current => ({ ...current, [key]: value }));
+  }
+
+  function saveSettings() {
+    setFitnessSettings(current => ({ ...current, ...draft }));
+    setSaveBanner('Settings saved.');
+    if (saveBannerTimerRef.current) {
+      clearTimeout(saveBannerTimerRef.current);
+    }
+    saveBannerTimerRef.current = setTimeout(() => {
+      setSaveBanner('');
+      saveBannerTimerRef.current = null;
+    }, 2500);
+  }
 
   return (
     <div className="tab-stack shell-surface-page">
@@ -331,17 +385,110 @@ function SettingsSurface({ onClose, fitnessSettings, notificationPrefs, recovery
         <div className="ui-metrics-row">
           <MetricBlock value={fitnessSettings.programType || 'hyrox'} label="Program" />
           <MetricBlock value={fitnessSettings.trainingDays || '4-day'} label="Training" />
-          <MetricBlock value={notificationPrefs.morningReminder ? 'On' : 'Off'} label="Morning reminder" />
-          <MetricBlock value={fitnessLevel} label="Fitness level" />
+          <MetricBlock value={formatSettingsValueLabel(fitnessSettings.goal || 'general_fitness')} label="Goal" />
+          <MetricBlock value={formatSettingsValueLabel(fitnessSettings.ageGroup || 'adult')} label="Age group" />
         </div>
       </Card>
 
       <Card className="shell-surface-card">
-        <SectionHeader eyebrow="Shell" title="Settings stays lightweight in Phase 1" />
+        <SectionHeader eyebrow="Generator" title="Workout generator preferences" />
+        {saveBanner ? (
+          <div className="settings-save-banner" role="status" aria-live="polite">
+            {saveBanner}
+          </div>
+        ) : null}
+        <div className="field-stack">
+          <label className="field-stack compact-field">
+            <span>Goal</span>
+            <div className="segmented-control settings-pills">
+              {goalOptions.map(goal => (
+                <button
+                  key={goal}
+                  type="button"
+                  className={`status-chip ${draft.goal === goal ? 'is-active' : ''}`}
+                  onClick={() => patchSetting('goal', goal)}
+                >
+                  {formatSettingsValueLabel(goal)}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <label className="field-stack compact-field">
+            <span>Age group</span>
+            <div className="segmented-control settings-pills">
+              {SETTINGS_AGE_GROUPS.map(ageGroup => (
+                <button
+                  key={ageGroup}
+                  type="button"
+                  className={`status-chip ${draft.ageGroup === ageGroup ? 'is-active' : ''}`}
+                  onClick={() => patchSetting('ageGroup', ageGroup)}
+                >
+                  {formatSettingsValueLabel(ageGroup)}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <label className="field-stack compact-field">
+            <span>Preferred session duration</span>
+            <input
+              type="number"
+              min="20"
+              max="90"
+              step="5"
+              className="task-title-input settings-input"
+              value={draft.preferredSessionDuration ?? 40}
+              onChange={event => patchSetting(
+                'preferredSessionDuration',
+                event.target.value === '' ? 40 : Number(event.target.value),
+              )}
+            />
+          </label>
+
+          <label className="field-stack compact-field">
+            <span>Low-impact preference</span>
+            <div className="segmented-control settings-pills">
+              {[
+                { id: false, label: 'Standard' },
+                { id: true, label: 'Low impact' },
+              ].map(option => (
+                <button
+                  key={String(option.id)}
+                  type="button"
+                  className={`status-chip ${draft.lowImpactPreference === option.id ? 'is-active' : ''}`}
+                  onClick={() => patchSetting('lowImpactPreference', option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </label>
+
+          <div className="generator-summary" aria-label="Generator preview">
+            {generatorPreview.map(item => (
+              <span key={item} className="generator-summary__chip">{item}</span>
+            ))}
+          </div>
+
+          <div className="inline-actions">
+            <button type="button" className="primary-button" onClick={saveSettings}>
+              Save settings
+            </button>
+            <button type="button" className="ghost-button" onClick={() => setDraft({ ...fitnessSettings })}>
+              Reset unsaved
+            </button>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="shell-surface-card">
+        <SectionHeader eyebrow="Shell" title="Other current settings" />
         <div className="shell-surface-list">
           <ListRow variant="card" label="Recovery" sub={recoveryInputs.preferredSession || 'fullbody'} />
           <ListRow variant="card" label="Hydration goal" sub={`${mealPrefs.hydrationGoal || 8} cups`} />
-          <ListRow variant="card" label="Notes" sub="Detailed settings rebuild comes later." />
+          <ListRow variant="card" label="Morning reminder" sub={notificationPrefs.morningReminder ? 'On' : 'Off'} />
+          <ListRow variant="card" label="Fitness level" sub={fitnessLevel} />
         </div>
       </Card>
     </div>
@@ -388,6 +535,7 @@ function HomeDashboard({ now }) {
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
       programType: fitnessSettings.programType,
+      fitnessSettings,
       today: now,
       history: workoutHistory,
       athleteDefaults,
@@ -1287,9 +1435,15 @@ function getWorkoutStateMeta({
   const matchingWorkouts = Array.isArray(workouts)
     ? workouts.filter(workout => workout && (workout.scheduledDate === dateKey || workout.plannedDate === dateKey))
     : [];
+  const sessionMeta = getGeneratedSessionMetaForUi(session);
+  const workoutMetas = matchingWorkouts.map(getGeneratedSessionMetaForUi).filter(Boolean);
   const hasCompleted = session.status === 'completed' || matchingWorkouts.some(workout => workout.status === 'completed');
-  const hasSkipped = session.status === 'skipped' || matchingWorkouts.some(workout => workout.status === 'skipped');
+  const hasSkipped = sessionMeta?.lifecycle?.isSkipped === true
+    || session.status === 'skipped'
+    || matchingWorkouts.some(workout => workout.status === 'skipped')
+    || workoutMetas.some(meta => meta.lifecycle?.isSkipped === true);
   const hasActive = matchingWorkouts.some(workout => workout.status === 'active');
+  const hasMoved = sessionMeta?.lifecycle?.isMoved === true || workoutMetas.some(meta => meta.lifecycle?.isMoved === true);
   const isToday = dateKey === todayKey;
   const isPast = dateKey < todayKey;
   const isLateToday = isToday && isWorkoutPastCutoff(now);
@@ -1312,12 +1466,93 @@ function getWorkoutStateMeta({
     };
   }
 
+  if (hasMoved) {
+    return {
+      state: 'moved',
+      label: 'Moved',
+      className: 'status-planned',
+      tileState: isToday ? 'today' : 'planned',
+    };
+  }
+
   return {
     state: 'planned',
     label: 'Planned',
     className: 'status-planned',
     tileState: isToday ? 'today' : 'planned',
   };
+}
+
+function getWorkoutMetaPresentation(meta, fallbackDateKey = null, formatDate = (value) => String(value || '')) {
+  if (!meta) return null;
+
+  const badges = [];
+  const details = [];
+  const movedSourceDate = meta.movedFrom || meta.originalScheduledDate || fallbackDateKey || null;
+
+  if (meta.lifecycle?.isMoved) {
+    badges.push('Moved');
+    details.push(movedSourceDate ? `Moved from ${formatDate(movedSourceDate)}` : 'Moved');
+    if (meta.currentScheduledDate && meta.currentScheduledDate !== fallbackDateKey) {
+      details.push(`Now ${formatDate(meta.currentScheduledDate)}`);
+    }
+  }
+
+  if (meta.lifecycle?.isSkipped) {
+    badges.push('Skipped');
+    details.push(meta.skipReason ? `Skipped · ${meta.skipReason}` : 'Skipped');
+  }
+
+  if (badges.length === 0 || details.length === 0) return null;
+
+  return {
+    badges,
+    details,
+    summary: details.join(' · '),
+    tone: meta.lifecycle?.isSkipped ? 'skipped' : 'moved',
+  };
+}
+
+function getWorkoutDetailHistory(meta, fallbackDateKey = null, formatDate = (value) => String(value || '')) {
+  if (!meta) return null;
+
+  const originalDate = meta.originalScheduledDate || meta.movedFrom || fallbackDateKey || null;
+  const currentDate = meta.currentScheduledDate || fallbackDateKey || null;
+  const rows = [];
+
+  if (meta.lifecycle?.isMoved && originalDate) {
+    rows.push({ label: 'Original date', value: formatDate(originalDate) });
+  }
+
+  if ((meta.lifecycle?.isMoved || meta.lifecycle?.isSkipped) && currentDate) {
+    rows.push({
+      label: meta.lifecycle?.isMoved ? 'Current date' : 'Skipped on',
+      value: formatDate(currentDate),
+    });
+  }
+
+  if (meta.lifecycle?.isMoved) {
+    rows.push({ label: 'Status', value: 'Moved' });
+  }
+
+  if (meta.lifecycle?.isSkipped) {
+    rows.push({ label: 'Status', value: 'Skipped' });
+    if (meta.skipReason) {
+      rows.push({ label: 'Reason', value: meta.skipReason });
+    }
+  }
+
+  return rows.length > 0 ? rows : null;
+}
+
+function getGeneratorTransparencySummary(settings = {}) {
+  return [
+    `Program · ${getProgramDisplayName(settings.programType || 'hyrox')}`,
+    `Goal · ${formatSettingsValueLabel(settings.goal || 'general_fitness')}`,
+    `Age · ${formatSettingsValueLabel(settings.ageGroup || 'adult')}`,
+    `Duration · ${settings.preferredSessionDuration || 40} min`,
+    settings.lowImpactPreference ? 'Low impact · On' : 'Low impact · Off',
+  ];
 }
 
 function getFitnessProgressSnapshot({
@@ -1506,6 +1741,7 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
   const duration = Number.isFinite(workout.plannedDurationMinutes)
     ? workout.plannedDurationMinutes
     : (Number.isFinite(workout.duration) ? workout.duration : null);
+  const generatedMeta = getGeneratedSessionMetaForUi(workout);
 
   return {
     name: workout.name || workout.label || workout.title || 'Workout',
@@ -1519,6 +1755,8 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
       duration ? `${duration} min` : null,
     ].filter(Boolean).join(' · '),
     statusLabel: workout.statusLabel || getWorkoutLifecycleLabel(workout.status),
+    generatedMeta,
+    metadataLabel: getWorkoutMetaDisplay(generatedMeta, dateValue, formatShortMonthDay),
     notes: Array.isArray(content.notes) ? content.notes : [],
     blocks: Array.isArray(content.blocks) ? content.blocks : [],
     contentSummary: workout.contentSummary || {
@@ -2432,6 +2670,7 @@ function TodayScreen({
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
       programType: fitnessSettings.programType,
+      fitnessSettings,
       today: now,
       history: workoutHistory,
       athleteDefaults,
@@ -2797,8 +3036,9 @@ function CalendarScreen({ onOpenSettings }) {
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
       programType: fitnessSettings.programType,
+      fitnessSettings,
     }),
-    [fitnessSettings.programStartDate, fitnessSettings.programType, fitnessSettings.trainingDays],
+    [fitnessSettings],
   );
 
   const weekStart = useMemo(() => alignDateToAnchor(selectedDate, 'Monday'), [selectedDate]);
@@ -3749,7 +3989,8 @@ function NutritionScreen({ now }) {
   );
 }
 
-function FitnessScreen({ now, onStartWorkout }) {
+function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
+  const SKIP_REASON_PRESETS = ['travel', 'sick', 'recovery', 'schedule'];
   const { workouts, setWorkouts, setNotifications, createNotification, createWorkout, createExercise } = useTaskContext();
   const { energyState, setEnergyState, fitnessSettings, selectedDate: selectedDateKey, setSelectedDate: setSelectedDateKey } = useAppContext();
   const { profile } = useProfileContext();
@@ -3761,6 +4002,8 @@ function FitnessScreen({ now, onStartWorkout }) {
   }));
   const [acceptedRecovery, setAcceptedRecovery] = useState(false);
   const [acknowledgedMisses, setAcknowledgedMisses] = useState(() => new Set());
+  const [isMovePickerOpen, setIsMovePickerOpen] = useState(false);
+  const [selectedSkipReason, setSelectedSkipReason] = useState(null);
 
   useEffect(() => {
     setCheckInDraft({
@@ -3782,6 +4025,7 @@ function FitnessScreen({ now, onStartWorkout }) {
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
       programType: fitnessSettings.programType,
+      fitnessSettings,
       today: now,
       history: normalizedWorkoutHistory,
       athleteDefaults,
@@ -3869,6 +4113,10 @@ function FitnessScreen({ now, onStartWorkout }) {
     ));
   }, [todayKey, weekDays]);
 
+  useEffect(() => {
+    setIsMovePickerOpen(false);
+  }, [selectedDateKey]);
+
   const selectedDay = useMemo(
     () => weekDays.find(day => day.key === selectedDateKey) ?? weekDays.find(day => day.isToday) ?? weekDays[0] ?? null,
     [selectedDateKey, weekDays],
@@ -3900,17 +4148,45 @@ function FitnessScreen({ now, onStartWorkout }) {
     selectedDay?.session?.plannedTime || null,
     Number.isFinite(selectedDay?.session?.duration) ? `${selectedDay.session.duration} min` : null,
   ].filter(Boolean).join(' · ');
+  const selectedMetaPresentation = getWorkoutMetaPresentation(
+    selectedWorkoutDetails?.generatedMeta || getGeneratedSessionMetaForUi(selectedDay?.workoutRecord || selectedDay?.session || null),
+    selectedDay?.key || todayKey,
+    formatShortMonthDay,
+  );
+  const selectedGeneratedMeta = getGeneratedSessionMetaForUi(selectedDay?.workoutRecord || selectedDay?.session || null);
+  const selectedDetailHistory = getWorkoutDetailHistory(
+    selectedGeneratedMeta,
+    selectedDay?.key || todayKey,
+    formatShortMonthDay,
+  );
+  const generatorSummary = getGeneratorTransparencySummary(fitnessSettings);
   const selectedSummary = selectedDay?.session
     ? selectedDay.isToday
-      ? 'Fitness owns the workout details and control. Calendar still owns the schedule.'
-      : 'Selected from the weekly plan. Calendar keeps the scheduled time, and Fitness holds the workout detail.'
+      ? 'Today’s workout details and actions live here.'
+      : 'Selected from this week’s plan.'
     : selectedDay?.isToday
-      ? 'No workout is scheduled today. Calendar stays open, and Fitness is ready when the plan updates.'
+      ? 'No workout is scheduled today.'
       : 'No workout is scheduled for this date.';
   const canStartSelectedWorkout = Boolean(
     selectedDay?.isToday
       && selectedDay?.session
       && selectedStateMeta.state !== 'done',
+  );
+  const moveTargetOptions = useMemo(
+    () => weekDays.filter(day => (
+      day.session
+      && day.key !== selectedDay?.key
+      && !day.workoutRecord
+    )),
+    [selectedDay?.key, weekDays],
+  );
+  const canMoveSelectedWorkout = Boolean(
+    selectedDay?.session
+      && selectedStateMeta.state !== 'done'
+      && selectedDay?.workoutRecord?.status !== 'active'
+      && selectedDay?.workoutRecord?.status !== 'completed'
+      && selectedDay?.workoutRecord?.status !== 'skipped'
+      && moveTargetOptions.length > 0,
   );
 
   const missedSessions = useMemo(
@@ -3928,6 +4204,10 @@ function FitnessScreen({ now, onStartWorkout }) {
     () => missedSessions.filter(session => !acknowledgedMisses.has(`miss-${session.dateKey}`)),
     [acknowledgedMisses, missedSessions],
   );
+
+  useEffect(() => {
+    setSelectedSkipReason(null);
+  }, [selectedDateKey, unacknowledgedMisses.length]);
 
   function upsertNotification(title, detail) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
@@ -4012,10 +4292,56 @@ function FitnessScreen({ now, onStartWorkout }) {
     startWorkout(sessionWorkout.id);
   }
 
+  function moveSelectedSessionToDay(nextDate) {
+    if (!selectedDay?.session || !nextDate) return;
+
+    const targetDay = weekDays.find(day => day.key === nextDate) ?? null;
+    if (!targetDay?.session || targetDay.workoutRecord) return;
+
+    const originalScheduledDate = selectedGeneratedMeta?.originalScheduledDate || selectedDay.session.dateKey || selectedDay.key;
+    const sourceWorkout = selectedDay.workoutRecord;
+
+    if (sourceWorkout && sourceWorkout.status === 'planned') {
+      updateWorkoutById(sourceWorkout.id, workout => applyMovedGeneratedSessionMeta({
+        ...workout,
+        status: 'planned',
+        scheduledDate: nextDate,
+        plannedDate: originalScheduledDate,
+        date: nextDate,
+      }, {
+        originalScheduledDate,
+        nextScheduledDate: nextDate,
+      }));
+    } else {
+      const movedWorkout = applyMovedGeneratedSessionMeta(createWorkoutFromSession({
+        createWorkout,
+        createExercise,
+        session: { ...selectedDay.session, programWeek },
+        settings: fitnessSettings,
+        todayKey: nextDate,
+        scheduledDateOverride: nextDate,
+        plannedDateOverride: originalScheduledDate,
+        statusOverride: 'planned',
+      }), {
+        originalScheduledDate,
+        nextScheduledDate: nextDate,
+      });
+      appendWorkout(movedWorkout);
+    }
+
+    if (selectedDay.session.dateKey < todayKey) {
+      setAcknowledgedMisses(prev => new Set([...prev, `miss-${selectedDay.session.dateKey}`]));
+    }
+
+    setIsMovePickerOpen(false);
+    setSelectedDateKey(nextDate);
+    upsertNotification('Session rescheduled', `${selectedDay.session.label || selectedDay.session.title} moved to ${nextDate}`);
+  }
+
   function moveMissedSession(session) {
     const laterThisWeek = weeklySchedule.find(nextSession => nextSession.dateKey > session.dateKey);
     const nextDate = laterThisWeek?.dateKey ?? toDateKey(addDays(new Date(`${session.dateKey}T00:00:00`), 7));
-    const movedWorkout = createWorkoutFromSession({
+    const movedWorkout = applyMovedGeneratedSessionMeta(createWorkoutFromSession({
       createWorkout,
       createExercise,
       session: { ...session, programWeek },
@@ -4024,14 +4350,17 @@ function FitnessScreen({ now, onStartWorkout }) {
       scheduledDateOverride: nextDate,
       plannedDateOverride: session.dateKey,
       statusOverride: 'planned',
+    }), {
+      originalScheduledDate: session.generatedSessionMeta?.originalScheduledDate || session.dateKey,
+      nextScheduledDate: nextDate,
     });
     appendWorkout(movedWorkout);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
     upsertNotification('Session rescheduled', `${session.label || session.title} moved to ${nextDate}`);
   }
 
-  function skipMissedSession(session) {
-    const skippedWorkout = createWorkoutFromSession({
+  function skipMissedSession(session, skipReason = null) {
+    const skippedWorkout = applySkippedGeneratedSessionMeta(createWorkoutFromSession({
       createWorkout,
       createExercise,
       session: { ...session, programWeek },
@@ -4040,9 +4369,12 @@ function FitnessScreen({ now, onStartWorkout }) {
       scheduledDateOverride: session.dateKey,
       plannedDateOverride: session.dateKey,
       statusOverride: 'skipped',
+    }), {
+      skipReason,
     });
     appendWorkout(skippedWorkout);
     setAcknowledgedMisses(prev => new Set([...prev, `miss-${session.dateKey}`]));
+    setSelectedSkipReason(null);
     upsertNotification('Session skipped', session.label || session.title);
   }
 
@@ -4093,6 +4425,31 @@ function FitnessScreen({ now, onStartWorkout }) {
                   <p className="fitness-hero-kicker">{activeProgramName} · {programPhase}</p>
                   <h2 className="fitness-hero-headline">{selectedWorkoutDetails?.name || selectedDay.session.label || selectedDay.session.title}</h2>
                   <p className="fitness-hero-meta">{selectedSummary}</p>
+                  <div className="generator-summary generator-summary--fitness" aria-label="Why this week was generated this way">
+                    {generatorSummary.map(item => (
+                      <span key={item} className="generator-summary__chip">{item}</span>
+                    ))}
+                  </div>
+                  {selectedMetaPresentation && (
+                    <div className={`fitness-session-meta fitness-session-meta--detail fitness-session-meta--${selectedMetaPresentation.tone}`}>
+                      <div className="fitness-session-meta__badges" aria-label="Workout schedule updates">
+                        {selectedMetaPresentation.badges.map(badge => (
+                          <span key={badge} className="fitness-session-meta__badge">{badge}</span>
+                        ))}
+                      </div>
+                      <p className="fitness-session-meta__summary">{selectedMetaPresentation.summary}</p>
+                      {selectedDetailHistory && (
+                        <dl className="fitness-session-history" aria-label="Workout detail history">
+                          {selectedDetailHistory.map(row => (
+                            <div key={`${row.label}-${row.value}`} className="fitness-session-history__row">
+                              <dt>{row.label}</dt>
+                              <dd>{row.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="fitness-workout-structure">
                   <div className="fitness-workout-meta-grid">
@@ -4184,14 +4541,53 @@ function FitnessScreen({ now, onStartWorkout }) {
                             ? 'Start anyway'
                             : 'Start Workout'}
                   </button>
+                  {selectedDay.session && (
+                    <button
+                      type="button"
+                      className="ghost-button compact-ghost"
+                      onClick={() => setIsMovePickerOpen(current => !current)}
+                      disabled={!canMoveSelectedWorkout}
+                    >
+                      Move
+                    </button>
+                  )}
                 </div>
+                {isMovePickerOpen && selectedDay.session && (
+                  <div className="fitness-move-panel" role="group" aria-label="Move workout to another day">
+                    <p className="fitness-move-panel__copy">Move this workout to another open training day this week.</p>
+                    <div className="fitness-move-panel__options">
+                      {moveTargetOptions.map(day => (
+                        <button
+                          key={day.key}
+                          type="button"
+                          className="status-chip fitness-move-panel__option"
+                          onClick={() => moveSelectedSessionToDay(day.key)}
+                        >
+                          {day.dayLabel} · {formatShortMonthDay(day.key)}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="quick-entry-row fitness-move-panel__actions">
+                      <button
+                        type="button"
+                        className="ghost-button compact-ghost"
+                        onClick={() => setIsMovePickerOpen(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {!canMoveSelectedWorkout && selectedDay.session && moveTargetOptions.length === 0 && (
+                  <p className="fitness-move-panel__empty">No open training days left in this week.</p>
+                )}
               </>
             )}
           </Card>
 
           <Card variant="flat" className="home-card home-section fitness-week-card">
             <SectionHeader eyebrow="This Week" title={planState.label} />
-            <p className="home-card-copy">Tap any day to load that workout into the detail section above.</p>
+            <p className="home-card-copy">Tap a day to load its workout details above.</p>
             <div className="fitness-week-grid" role="list" aria-label="Weekly workout plan">
               {weekDays.map(({ key, dayLabel, session, isToday, tileStatus }) => (
                 <button
@@ -4217,31 +4613,51 @@ function FitnessScreen({ now, onStartWorkout }) {
               ))}
             </div>
             <div className="subtle-feed fitness-week-sessions">
-              {weekDays.map(day => (
-                <article
-                  key={day.key}
-                  className={`feed-card fitness-week-session-card${selectedDateKey === day.key ? ' is-selected' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="fitness-week-session-button"
-                    onClick={() => setSelectedDateKey(day.key)}
+              {weekDays.map(day => {
+                const metaPresentation = day.session
+                  ? getWorkoutMetaPresentation(
+                    getGeneratedSessionMetaForUi(day.workoutRecord || day.session),
+                    day.key,
+                    formatShortMonthDay,
+                  )
+                  : null;
+
+                return (
+                  <article
+                    key={day.key}
+                    className={`feed-card fitness-week-session-card${selectedDateKey === day.key ? ' is-selected' : ''}`}
                   >
-                    <div className="fitness-week-session-row">
-                      <div>
-                        <strong>{day.dayLabel} · {day.session ? (day.session.label || day.session.title) : 'Rest / Recovery'}</strong>
-                        <p>
-                          {day.shortDateLabel}
-                          {day.session
-                            ? ` · ${getProgramWorkoutTypeLabel(day.session)} · ${day.session.duration} min${day.session.plannedTime ? ` · ${day.session.plannedTime}` : ''}`
-                            : ' · No workout scheduled'}
-                        </p>
+                    <button
+                      type="button"
+                      className="fitness-week-session-button"
+                      onClick={() => setSelectedDateKey(day.key)}
+                    >
+                      <div className="fitness-week-session-row">
+                        <div className="fitness-week-session-copy">
+                          <strong>{day.dayLabel} · {day.session ? (day.session.label || day.session.title) : 'Rest / Recovery'}</strong>
+                          <p>
+                            {day.shortDateLabel}
+                            {day.session
+                              ? ` · ${getProgramWorkoutTypeLabel(day.session)} · ${day.session.duration} min${day.session.plannedTime ? ` · ${day.session.plannedTime}` : ''}`
+                              : ' · No workout scheduled'}
+                          </p>
+                        </div>
+                        <span className={`status-pill ${day.stateMeta.className}`}>{day.stateMeta.label}</span>
                       </div>
-                      <span className={`status-pill ${day.stateMeta.className}`}>{day.stateMeta.label}</span>
-                    </div>
-                  </button>
-                </article>
-              ))}
+                      {metaPresentation && (
+                        <div className={`fitness-session-meta fitness-session-meta--list fitness-session-meta--${metaPresentation.tone}`}>
+                          <div className="fitness-session-meta__badges" aria-hidden="true">
+                            {metaPresentation.badges.map(badge => (
+                              <span key={badge} className="fitness-session-meta__badge">{badge}</span>
+                            ))}
+                          </div>
+                          <p className="fitness-session-meta__summary">{metaPresentation.summary}</p>
+                        </div>
+                      )}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
             {progressSnapshot.hasSchedule && (
               <div className="fitness-progress-grid">
@@ -4368,11 +4784,37 @@ function FitnessScreen({ now, onStartWorkout }) {
                     <strong>{unacknowledgedMisses[0].label || unacknowledgedMisses[0].title}</strong>
                     <p>Scheduled {unacknowledgedMisses[0].dateLabel} · {unacknowledgedMisses[0].detail || unacknowledgedMisses[0].title}</p>
                     <p className="empty-message">Move it to the next valid day, or skip it to keep the sequence clean.</p>
+                    <div className="fitness-skip-reason">
+                      <p className="fitness-skip-reason__label">Optional reason</p>
+                      <div className="status-chip-group">
+                        <button
+                          type="button"
+                          className={`status-chip ${selectedSkipReason === null ? 'is-active' : ''}`}
+                          onClick={() => setSelectedSkipReason(null)}
+                        >
+                          No reason
+                        </button>
+                        {SKIP_REASON_PRESETS.map(reason => (
+                          <button
+                            key={reason}
+                            type="button"
+                            className={`status-chip ${selectedSkipReason === reason ? 'is-active' : ''}`}
+                            onClick={() => setSelectedSkipReason(reason)}
+                          >
+                            {reason}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="quick-entry-row">
                       <button type="button" className="secondary-button" onClick={() => moveMissedSession(unacknowledgedMisses[0])}>
                         Move to next training day
                       </button>
-                      <button type="button" className="ghost-button compact-ghost" onClick={() => skipMissedSession(unacknowledgedMisses[0])}>
+                      <button
+                        type="button"
+                        className="ghost-button compact-ghost"
+                        onClick={() => skipMissedSession(unacknowledgedMisses[0], selectedSkipReason)}
+                      >
                         Skip
                       </button>
                     </div>
@@ -4708,6 +5150,7 @@ function AppShell() {
       startDate: fitnessSettings.programStartDate,
       trainingDays: fitnessSettings.trainingDays,
       programType: fitnessSettings.programType,
+      fitnessSettings,
       today: now,
       history: workoutHistory,
       athleteDefaults,
@@ -4755,7 +5198,10 @@ function AppShell() {
       setWorkouts(current => current.map((workout, index) => (
         workout.id === existingWorkout.id
           ? normalizeWorkoutRecord({
-              ...workout,
+              ...applySkippedGeneratedSessionMeta(workout, {
+                skipReason: null,
+                lifecycleStatus: 'skipped',
+              }),
               status: 'skipped',
               workoutLog: normalizeWorkoutLog({
                 ...(workout.workoutLog || {}),
@@ -4774,7 +5220,7 @@ function AppShell() {
           : workout
       )));
     } else {
-      const missedWorkout = createWorkoutFromSession({
+      const missedWorkout = applySkippedGeneratedSessionMeta(createWorkoutFromSession({
         createWorkout,
         createExercise,
         session: todaySession,
@@ -4783,6 +5229,8 @@ function AppShell() {
         scheduledDateOverride: todayKey,
         plannedDateOverride: todayKey,
         statusOverride: 'skipped',
+      }), {
+        skipReason: null,
       });
       setWorkouts(current => [normalizeWorkoutRecord({
         ...missedWorkout,

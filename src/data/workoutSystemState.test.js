@@ -10,6 +10,10 @@ test('normalizeAppState preserves canonical programType through a saved round tr
       programStartDate: '2026-01-05',
       trainingDays: '4-day',
       raceDate: '2026-04-01',
+      ageGroup: 'masters',
+      goal: 'endurance',
+      preferredSessionDuration: 50,
+      lowImpactPreference: true,
     },
   });
 
@@ -18,6 +22,10 @@ test('normalizeAppState preserves canonical programType through a saved round tr
   assert.equal(initial.fitnessSettings.programType, '5k');
   assert.equal(restored.fitnessSettings.programType, '5k');
   assert.equal(restored.fitnessSettings.raceDate, '2026-04-01');
+  assert.equal(restored.fitnessSettings.ageGroup, 'masters');
+  assert.equal(restored.fitnessSettings.goal, 'endurance');
+  assert.equal(restored.fitnessSettings.preferredSessionDuration, 50);
+  assert.equal(restored.fitnessSettings.lowImpactPreference, true);
 });
 
 test('normalizeAppState maps legacy strength settings to strength_block', () => {
@@ -62,6 +70,9 @@ test('normalizeWorkoutRecord builds future-ready workout structure', () => {
   assert.equal(normalized.contentSummary.exerciseCount, 2);
   assert.equal(normalized.contentSummary.hasIntervals, true);
   assert.equal(normalized.source.origin, 'program');
+  assert.equal(normalized.generatedSessionMeta.originalScheduledDate, '2026-04-06');
+  assert.equal(normalized.generatedSessionMeta.currentScheduledDate, '2026-04-06');
+  assert.equal(normalized.generatedSessionMeta.skipStatus, 'not_skipped');
 });
 
 test('normalizeWorkoutRecord preserves workout logging structure while canonicalizing legacy active status', () => {
@@ -93,4 +104,62 @@ test('normalizeWorkoutRecord preserves workout logging structure while canonical
   assert.equal(normalized.workoutLog.segments[0].completed, true);
   assert.equal(normalized.workoutLog.segments[1].metrics.intervalCount, 2);
   assert.equal(normalized.workoutLog.externalRefs.appleHealthWorkoutId, 'health-123');
+  assert.equal(normalized.generatedSessionMeta.lifecycle.status, 'planned');
+});
+
+test('normalizeWorkoutRecord exposes explicit move/skip metadata for moved generated sessions', () => {
+  const normalized = normalizeWorkoutRecord({
+    name: 'Moved Session',
+    programType: '5k',
+    plannedDate: '2026-04-08',
+    scheduledDate: '2026-04-10',
+    status: 'planned',
+    sessionType: 'run_easy',
+    source: {
+      origin: 'program',
+      libraryId: 'run_beginner_easy_base',
+      sessionType: 'run_easy',
+    },
+  });
+
+  assert.equal(normalized.generatedSessionMeta.originalScheduledDate, '2026-04-08');
+  assert.equal(normalized.generatedSessionMeta.currentScheduledDate, '2026-04-10');
+  assert.equal(normalized.generatedSessionMeta.movedFrom, '2026-04-08');
+  assert.equal(normalized.generatedSessionMeta.movedTo, '2026-04-10');
+  assert.equal(normalized.generatedSessionMeta.lifecycle.isMoved, true);
+  assert.equal(normalized.generatedSessionMeta.generationSource.templateId, 'run_beginner_easy_base');
+});
+
+test('normalizeWorkoutRecord preserves explicit skip metadata when provided', () => {
+  const normalized = normalizeWorkoutRecord({
+    name: 'Skipped Session',
+    programType: 'strength_block',
+    plannedDate: '2026-04-12',
+    scheduledDate: '2026-04-12',
+    status: 'skipped',
+    generatedSessionMeta: {
+      originalScheduledDate: '2026-04-12',
+      currentScheduledDate: '2026-04-12',
+      skipStatus: 'skipped',
+      skipReason: 'travel',
+      wasSkipped: true,
+      generationSource: {
+        kind: 'library',
+        programType: 'strength_block',
+        templateId: 'strength_beginner_full_body_a',
+        sessionType: 'strength_full',
+      },
+      lifecycle: {
+        status: 'skipped',
+        isMoved: false,
+        isRescheduled: false,
+        isSkipped: true,
+      },
+    },
+  });
+
+  assert.equal(normalized.generatedSessionMeta.skipStatus, 'skipped');
+  assert.equal(normalized.generatedSessionMeta.skipReason, 'travel');
+  assert.equal(normalized.generatedSessionMeta.wasSkipped, true);
+  assert.equal(normalized.generatedSessionMeta.lifecycle.isSkipped, true);
 });
