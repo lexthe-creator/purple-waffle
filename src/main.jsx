@@ -31,6 +31,7 @@ import {
   applyMovedGeneratedSessionMeta,
   applySkippedGeneratedSessionMeta,
   getGeneratedSessionMetaForUi,
+  getWorkoutMetaDisplay,
 } from './data/workoutGeneratedSessionMeta.js';
 import {
   QUICK_MEAL_TAGS,
