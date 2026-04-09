@@ -367,6 +367,7 @@ function hydrateProgramWorkoutSession(workout, {
   const phase = workout.schedulePhaseType || getPhaseForWeek(weekNumber, programType, totalWeeks).id;
   const phaseDisplay = getPhaseForWeek(weekNumber, programType, totalWeeks).name;
   const sessionLabel = sessionDefinition?.displayName || sessionType;
+  const generatedSessionMeta = workout.generatedSessionMeta || null;
 
   return {
     ...workout,
@@ -390,6 +391,11 @@ function hydrateProgramWorkoutSession(workout, {
     offset,
     dayLabel,
     dateLabel,
+    generatedSessionMeta: generatedSessionMeta ? {
+      ...generatedSessionMeta,
+      originalScheduledDate: generatedSessionMeta.originalScheduledDate || dateKey || null,
+      currentScheduledDate: dateKey || generatedSessionMeta.currentScheduledDate || null,
+    } : null,
     sessionType,
     schedulePhaseType: phase,
   };
@@ -433,7 +439,16 @@ export function getWeeklyTemplate({ trainingDays, weekType, weekNumber, programT
   });
 }
 
-export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekType, athleteDefaults, programType = 'hyrox', totalWeeks = 8 }) {
+export function buildWeeklySchedule({
+  trainingDays,
+  weekNumber,
+  startDate,
+  weekType,
+  athleteDefaults,
+  fitnessSettings,
+  programType = 'hyrox',
+  totalWeeks = 8,
+}) {
   const normalizedProgramType = normalizeProgramType(programType);
   const normalizedDays = normalizeTrainingDays(trainingDays, normalizedProgramType);
   const normalizedWeekType = normalizeWeekType(weekType, weekNumber);
@@ -444,6 +459,8 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekT
     weekType: normalizedWeekType,
     weekNumber,
     schedulePhase,
+    fitnessSettings,
+    athleteProfile: athleteDefaults,
     totalWeeks,
   });
   const sessions = rawSessions.map(session => hydrateProgramWorkoutSession(session, {
@@ -485,6 +502,11 @@ export function buildWeeklySchedule({ trainingDays, weekNumber, startDate, weekT
       dateKey: toDateKey(date),
       dayLabel: date.toLocaleDateString('en-US', { weekday: 'short' }),
       dateLabel: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      generatedSessionMeta: personalized?.generatedSessionMeta ? {
+        ...personalized.generatedSessionMeta,
+        originalScheduledDate: personalized.generatedSessionMeta.originalScheduledDate || toDateKey(date),
+        currentScheduledDate: toDateKey(date),
+      } : null,
       stations: stationListForWorkout(personalized),
       title: personalized?.label,
       detail: personalized?.detail,
@@ -502,6 +524,7 @@ export function resolveWeeklyPlanStatus({
   history = [],
   today = new Date(),
   athleteDefaults,
+  fitnessSettings,
   carryMissed = true,
 }) {
   const todayKey = toDateKey(today);
@@ -514,6 +537,7 @@ export function resolveWeeklyPlanStatus({
     startDate,
     weekType,
     athleteDefaults,
+    fitnessSettings,
   });
 
   return scheduled.map((session, index) => {
@@ -544,9 +568,28 @@ export function resolveWeeklyPlanStatus({
       movedToDate = movedLog.scheduledDate;
     }
 
+    const movedFrom = movedLog?.plannedDate || null;
+    const skipReason = skippedLog?.generatedSessionMeta?.skipReason || null;
+
     return {
       ...session,
       status,
+      generatedSessionMeta: session.generatedSessionMeta ? {
+        ...session.generatedSessionMeta,
+        currentScheduledDate: movedLog?.scheduledDate || session.generatedSessionMeta.currentScheduledDate || session.dateKey,
+        movedFrom,
+        movedTo: movedToDate,
+        skipStatus: skippedLog ? 'skipped' : 'not_skipped',
+        skipReason,
+        wasSkipped: Boolean(skippedLog),
+        lifecycle: {
+          ...(session.generatedSessionMeta.lifecycle || {}),
+          status,
+          isMoved: status === 'moved',
+          isRescheduled: Boolean(movedToDate),
+          isSkipped: Boolean(skippedLog),
+        },
+      } : null,
       completedLog: completedLog || null,
       movedToDate,
       skippedLog: skippedLog || null,
@@ -568,6 +611,7 @@ export function getTodayResolvedWorkout({
   today = new Date(),
   history = [],
   athleteDefaults,
+  fitnessSettings,
 }) {
   const week = getCurrentWeek({ startDate, today, programType, totalWeeks });
   const weekType = normalizeWeekType(null, week);
@@ -581,6 +625,7 @@ export function getTodayResolvedWorkout({
     history,
     today,
     athleteDefaults,
+    fitnessSettings,
     carryMissed: true,
   });
   return resolvedWeek.find(session => session.status === 'today' || (session.status === 'moved' && session.movedToDate === toDateKey(today))) ?? null;
@@ -594,6 +639,7 @@ export function getPlanState({
   today = new Date(),
   history = [],
   athleteDefaults,
+  fitnessSettings,
 }) {
   const normalizedProgramType = normalizeProgramType(programType);
   const week = getCurrentWeek({ startDate, today, programType: normalizedProgramType, totalWeeks });
@@ -609,6 +655,7 @@ export function getPlanState({
     history,
     today,
     athleteDefaults,
+    fitnessSettings,
     carryMissed: true,
   });
 

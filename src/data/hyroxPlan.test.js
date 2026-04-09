@@ -58,7 +58,8 @@ test('buildWeeklySchedule routes by programType and preserves the active program
 
   assert.ok(fiveK.length > 0);
   assert.ok(fiveK.every(session => session.programType === '5k'));
-  assert.deepEqual(strength, []);
+  assert.ok(strength.length > 0);
+  assert.ok(strength.every(session => session.programType === 'strength_block'));
 });
 
 test('generator emits the expected workout count for each training day mode', () => {
@@ -157,6 +158,8 @@ test('generated workouts preserve warmup and cooldown references', () => {
   assert.ok(generatedFiveDay.every(session => typeof session.warmupTemplateId === 'string' && HYROX_WARMUP_TEMPLATES[session.warmupTemplateId]));
   assert.ok(generated.every(session => typeof session.cooldownTemplateId === 'string' && HYROX_COOLDOWN_TEMPLATES[session.cooldownTemplateId]));
   assert.ok(generatedFiveDay.every(session => typeof session.cooldownTemplateId === 'string' && HYROX_COOLDOWN_TEMPLATES[session.cooldownTemplateId]));
+  assert.ok(generated.every(session => session.generatedSessionMeta?.originalScheduledDate === session.dateKey));
+  assert.ok(generated.every(session => session.generatedSessionMeta?.currentScheduledDate === session.dateKey));
   assert.ok(generated.every(session => typeof session.shortVersionRule === 'string' && session.shortVersionRule.length > 0));
   assert.ok(generatedFiveDay.every(session => typeof session.shortVersionRule === 'string' && session.shortVersionRule.length > 0));
   assert.ok(generated.every(session => Array.isArray(session.ex) && session.ex.length > 0));
