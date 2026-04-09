@@ -1,11 +1,7 @@
 import {
-  generateHyroxWorkoutSchedule,
-  generateHyroxWeeklyWorkoutSelection,
-} from './hyroxWorkoutGenerator.js';
-import {
-  generate5kWorkoutSchedule,
-  generate5kWeeklyWorkoutSelection,
-} from './5kWorkoutGenerator.js';
+  generateGeneralWorkoutSchedule,
+  generateGeneralWeeklyWorkoutSelection,
+} from './generalWorkoutGenerator.js';
 import { supportedProgramTypes } from './workoutSystemSchema.js';
 
 export const PROGRAM_TYPES = Object.freeze({
@@ -35,6 +31,10 @@ export function normalizeProgramType(programType) {
     return PROGRAM_TYPES.RUN_5K;
   }
 
+  if (['running', 'run', 'running plan'].includes(value)) {
+    return PROGRAM_TYPES.RUN_5K;
+  }
+
   if (['strength', 'strength_block', 'strength block'].includes(value)) {
     return PROGRAM_TYPES.STRENGTH;
   }
@@ -56,7 +56,7 @@ export function generateProgramWorkoutSchedule({
 
   switch (activeProgramType) {
     case PROGRAM_TYPES.RUN_5K:
-      return annotateProgramSessions(generate5kWorkoutSchedule({
+      return annotateProgramSessions(generateGeneralWorkoutSchedule({
         phaseType,
         schedulePhase,
         weekNumber,
@@ -66,10 +66,18 @@ export function generateProgramWorkoutSchedule({
         totalWeeks,
       }), activeProgramType);
     case PROGRAM_TYPES.STRENGTH:
-      return [];
+      return annotateProgramSessions(generateGeneralWorkoutSchedule({
+        phaseType,
+        schedulePhase,
+        weekNumber,
+        weekType,
+        trainingDays,
+        fitnessSettings,
+        totalWeeks,
+      }), activeProgramType);
     case PROGRAM_TYPES.HYROX:
     default:
-      return annotateProgramSessions(generateHyroxWorkoutSchedule({
+      return annotateProgramSessions(generateGeneralWorkoutSchedule({
         phaseType,
         schedulePhase,
         weekNumber,
@@ -95,7 +103,7 @@ export function generateProgramWeeklySelection({
 
   switch (activeProgramType) {
     case PROGRAM_TYPES.RUN_5K:
-      return annotateProgramSessions(generate5kWeeklyWorkoutSelection({
+      return annotateProgramSessions(generateGeneralWeeklyWorkoutSelection({
         phaseType,
         schedulePhase,
         weekNumber,
@@ -105,10 +113,18 @@ export function generateProgramWeeklySelection({
         totalWeeks,
       }), activeProgramType);
     case PROGRAM_TYPES.STRENGTH:
-      return [];
+      return annotateProgramSessions(generateGeneralWeeklyWorkoutSelection({
+        phaseType,
+        schedulePhase,
+        weekNumber,
+        weekType,
+        trainingDays,
+        fitnessSettings,
+        totalWeeks,
+      }), activeProgramType);
     case PROGRAM_TYPES.HYROX:
     default:
-      return annotateProgramSessions(generateHyroxWeeklyWorkoutSelection({
+      return annotateProgramSessions(generateGeneralWeeklyWorkoutSelection({
         phaseType,
         schedulePhase,
         weekNumber,

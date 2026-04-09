@@ -613,6 +613,172 @@ p {
   font-size: 0.82rem;
 }
 
+.generator-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.generator-summary--fitness {
+  margin-top: 8px;
+}
+
+.generator-summary__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-card);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.fitness-session-meta {
+  display: grid;
+  gap: 6px;
+}
+
+.fitness-session-meta--detail {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-card);
+  background: var(--surface);
+}
+
+.fitness-session-meta--moved {
+  border-color: var(--primary-alpha-md);
+  background: rgba(241, 236, 232, 0.9);
+}
+
+.fitness-session-meta--skipped {
+  border-color: var(--warning-border);
+  background: rgba(220, 155, 108, 0.08);
+}
+
+.fitness-session-meta__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fitness-session-meta__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border-card);
+  color: var(--text);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fitness-session-meta--moved .fitness-session-meta__badge {
+  color: var(--primary);
+  border-color: var(--primary-alpha-md);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.fitness-session-meta--skipped .fitness-session-meta__badge {
+  color: var(--warning-text);
+  border-color: var(--warning-border);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.fitness-session-meta__summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.fitness-session-history {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.fitness-session-history__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.fitness-session-history__row dt,
+.fitness-session-history__row dd {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.fitness-session-history__row dt {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fitness-session-history__row dd {
+  color: var(--text);
+  text-align: right;
+}
+
+.fitness-move-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-card);
+  background: var(--surface);
+}
+
+.fitness-move-panel__copy,
+.fitness-move-panel__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.fitness-move-panel__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fitness-move-panel__option {
+  border-color: var(--primary-alpha-md);
+  background: var(--card);
+}
+
+.fitness-move-panel__actions {
+  justify-content: flex-end;
+}
+
+.fitness-skip-reason {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.fitness-skip-reason__label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
 /* ── Fitness Week Grid ── */
 .fitness-week-grid {
   display: grid;
@@ -742,6 +908,10 @@ p {
   display: block;
 }
 
+.fitness-week-session-copy {
+  min-width: 0;
+}
+
 .fitness-week-session-row {
   display: flex;
   justify-content: space-between;
@@ -753,6 +923,13 @@ p {
   margin: 2px 0 0;
   color: var(--muted);
   font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.fitness-session-meta--list {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
 }
 
 .summary-row,

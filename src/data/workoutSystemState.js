@@ -15,10 +15,14 @@ export const DEFAULT_FITNESS_SETTINGS = Object.freeze({
   programType: 'hyrox',
   programStartDate: new Date().toISOString().slice(0, 10),
   trainingDays: '4-day',
+  ageGroup: 'adult',
+  goal: 'general_fitness',
   raceDate: null,
   raceName: '',
   raceCategory: '',
   fitnessLevel: '',
+  preferredSessionDuration: 40,
+  lowImpactPreference: false,
   equipmentAccess: 'full-gym',
   equipmentMode: 'full_gym',
   equipmentAvailability: {},
@@ -297,6 +301,50 @@ function normalizeWorkoutSource(raw, fallback = {}) {
   };
 }
 
+function normalizeGeneratedSessionMeta(raw, fallback = {}) {
+  const src = isPlainObject(raw) ? raw : {};
+  const originalScheduledDate = normalizeDateKey(
+    src.originalScheduledDate,
+    normalizeDateKey(fallback.originalScheduledDate, null),
+  );
+  const currentScheduledDate = normalizeDateKey(
+    src.currentScheduledDate,
+    normalizeDateKey(fallback.currentScheduledDate, null),
+  );
+  const movedFrom = normalizeDateKey(src.movedFrom, normalizeDateKey(fallback.movedFrom, null));
+  const movedTo = normalizeDateKey(src.movedTo, normalizeDateKey(fallback.movedTo, null));
+  const skipStatus = ['not_skipped', 'skipped'].includes(src.skipStatus)
+    ? src.skipStatus
+    : (fallback.skipStatus || 'not_skipped');
+  const skipReason = normalizeText(src.skipReason, normalizeText(fallback.skipReason));
+  const fallbackGenerationSource = isPlainObject(fallback.generationSource) ? fallback.generationSource : {};
+  const generationSource = isPlainObject(src.generationSource) ? src.generationSource : {};
+  const fallbackLifecycle = isPlainObject(fallback.lifecycle) ? fallback.lifecycle : {};
+  const lifecycle = isPlainObject(src.lifecycle) ? src.lifecycle : {};
+
+  return {
+    originalScheduledDate,
+    currentScheduledDate,
+    movedFrom,
+    movedTo,
+    skipStatus,
+    skipReason,
+    wasSkipped: src.wasSkipped === true || fallback.wasSkipped === true || skipStatus === 'skipped',
+    generationSource: {
+      kind: normalizeText(generationSource.kind, normalizeText(fallbackGenerationSource.kind, 'legacy')),
+      programType: normalizeText(generationSource.programType, normalizeText(fallbackGenerationSource.programType)),
+      templateId: normalizeText(generationSource.templateId, normalizeText(fallbackGenerationSource.templateId)),
+      sessionType: normalizeText(generationSource.sessionType, normalizeText(fallbackGenerationSource.sessionType)),
+    },
+    lifecycle: {
+      status: normalizeText(lifecycle.status, normalizeText(fallbackLifecycle.status, 'scheduled')),
+      isMoved: lifecycle.isMoved === true || fallbackLifecycle.isMoved === true || Boolean(movedFrom || movedTo),
+      isRescheduled: lifecycle.isRescheduled === true || fallbackLifecycle.isRescheduled === true || Boolean(movedTo),
+      isSkipped: lifecycle.isSkipped === true || fallbackLifecycle.isSkipped === true || skipStatus === 'skipped',
+    },
+  };
+}
+
 function normalizeEquipmentMode(value, equipmentAccess = 'full-gym') {
   if (hyroxEquipmentModes.includes(value)) return value;
   if (value === 'limited' || equipmentAccess === 'limited') return 'limited_gym';
@@ -474,6 +522,10 @@ export function normalizeFitnessSettings(raw) {
     raceName: typeof src.raceName === 'string' ? src.raceName : '',
     raceCategory: typeof src.raceCategory === 'string' ? src.raceCategory : '',
     fitnessLevel: typeof src.fitnessLevel === 'string' ? src.fitnessLevel : '',
+    ageGroup: ['youth', 'adult', 'masters'].includes(src.ageGroup) ? src.ageGroup : DEFAULT_FITNESS_SETTINGS.ageGroup,
+    goal: typeof src.goal === 'string' && src.goal.trim().length > 0 ? src.goal.trim() : DEFAULT_FITNESS_SETTINGS.goal,
+    preferredSessionDuration: Number.isFinite(src.preferredSessionDuration) ? src.preferredSessionDuration : DEFAULT_FITNESS_SETTINGS.preferredSessionDuration,
+    lowImpactPreference: src.lowImpactPreference === true,
     equipmentAccess: normalizeEquipmentAccess(src.equipmentAccess, equipmentMode),
     equipmentMode,
     equipmentAvailability: buildEquipmentAvailability(equipmentMode, isPlainObject(src.equipmentAvailability) ? src.equipmentAvailability : {}),
@@ -534,6 +586,27 @@ export function normalizeWorkoutRecord(raw, index = 0) {
   });
   const contentSummary = summarizeWorkoutContent(content);
   const plannedLabel = [plannedTime, duration ? `${duration} min` : null].filter(Boolean).join(' · ') || null;
+  const generatedSessionMeta = normalizeGeneratedSessionMeta(src.generatedSessionMeta, {
+    originalScheduledDate: plannedDate || scheduledDate,
+    currentScheduledDate: scheduledDate || plannedDate,
+    movedFrom: plannedDate && scheduledDate && plannedDate !== scheduledDate ? plannedDate : null,
+    movedTo: plannedDate && scheduledDate && plannedDate !== scheduledDate ? scheduledDate : null,
+    skipStatus: normalizedStatus === 'skipped' ? 'skipped' : 'not_skipped',
+    skipReason: null,
+    wasSkipped: normalizedStatus === 'skipped',
+    generationSource: {
+      kind: src.programType || src.programId ? 'program' : 'manual',
+      programType,
+      templateId: src.workoutId || src.source?.libraryId || null,
+      sessionType: src.sessionType || src.sessionTypeCanonical || src.source?.sessionType || null,
+    },
+    lifecycle: {
+      status: normalizedStatus,
+      isMoved: Boolean(plannedDate && scheduledDate && plannedDate !== scheduledDate),
+      isRescheduled: Boolean(plannedDate && scheduledDate && plannedDate !== scheduledDate),
+      isSkipped: normalizedStatus === 'skipped',
+    },
+  });
 
   return {
     id: typeof src.id === 'string' && src.id.length > 0 ? src.id : `workout-${index}-${Date.now()}`,
@@ -559,7 +632,7 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     phase: typeof src.phase === 'string' && src.phase.length > 0 ? src.phase : 'Base',
     week: programWeek,
     programWeek,
-    frequency: src.frequency === '5-day' ? '5-day' : '4-day',
+    frequency: src.frequency === '3-day' ? '3-day' : src.frequency === '5-day' ? '5-day' : '4-day',
     anchorDay: ['Sunday', 'Monday', 'Wednesday'].includes(src.anchorDay) ? src.anchorDay : 'Monday',
     exercises,
     content,
@@ -587,6 +660,7 @@ export function normalizeWorkoutRecord(raw, index = 0) {
     summaryLine2: typeof src.summaryLine2 === 'string' && src.summaryLine2.length > 0 ? src.summaryLine2 : null,
     warmupSteps: Array.isArray(src.warmupSteps) ? src.warmupSteps : [],
     cooldownSteps: Array.isArray(src.cooldownSteps) ? src.cooldownSteps : [],
+    generatedSessionMeta,
     workoutLog: src.workoutLog ? normalizeWorkoutLog(src.workoutLog, { startedAt: src.startedAt }) : null,
     startedAt: Number.isFinite(src.startedAt) ? src.startedAt : null,
     completedAt: Number.isFinite(src.completedAt) ? src.completedAt : null,
