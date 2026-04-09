@@ -20,6 +20,7 @@ import {
   getPlanState,
   getStationMeta,
 } from './data/hyroxPlan.js';
+import { adaptGeneratedSessionToWorkoutRecord } from './data/adaptGeneratedSessionToWorkoutRecord.js';
 import { normalizeProgramType } from './data/programRouter.js';
 import { sessionTypes } from './data/workoutSystemSchema.js';
 import {
@@ -1537,8 +1538,8 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
 }
 
 function createWorkoutFromSession({
-  createWorkout,
-  createExercise,
+  createWorkout,   // unused — kept for call-site compatibility
+  createExercise,  // unused — kept for call-site compatibility
   session,
   settings,
   todayKey,
@@ -1546,94 +1547,14 @@ function createWorkoutFromSession({
   plannedDateOverride = null,
   statusOverride = 'planned',
 }) {
-  const sessionType = session?.type || 'hyrox';
-  const normalizedProgramType = session?.programType || settings?.programType || 'hyrox';
-  const programName = getProgramDisplayName(normalizedProgramType);
-  const content = buildWorkoutContentFromSession(session);
-  const prescribedExercises = Array.isArray(content.blocks) && content.blocks.length > 0
-    ? content.blocks.flatMap(block => (
-      Array.isArray(block.exercises) && block.exercises.length > 0
-        ? block.exercises.map(exercise => createExercise({
-            name: exercise.name || block.title || 'Exercise',
-            detail: [exercise.detail, exercise.note].filter(Boolean).join(' · '),
-            sets: Number.isFinite(exercise.sets) ? exercise.sets : block.repeat,
-            reps: typeof exercise.reps === 'string' ? exercise.reps : null,
-            interval: exercise.interval || null,
-            timedEffort: exercise.timedEffort || block.duration || null,
-            duration: exercise.duration || null,
-            rest: exercise.rest || null,
-            distance: exercise.distance || null,
-            effort: exercise.effort || null,
-            note: exercise.note || null,
-            cue: exercise.cue || null,
-          }))
-        : [createExercise({
-            name: block.title || 'Block',
-            detail: Array.isArray(block.notes) ? block.notes[0] || '' : '',
-            sets: block.repeat,
-            timedEffort: block.duration || null,
-          })]
-    ))
-    : [
-      createExercise({ name: 'Warm-up', detail: '5-10 min easy movement', timedEffort: '5-10 min' }),
-      createExercise({ name: session.title || session.label || 'Main set', detail: session.detail || session.label || 'Training session', sets: 3 }),
-      createExercise({ name: 'Cooldown', detail: '5 min mobility', timedEffort: '5 min' }),
-    ];
-  const scheduledDate = scheduledDateOverride || session?.dateKey || todayKey;
-  const plannedDate = plannedDateOverride || session?.dateKey || scheduledDate;
-  const plannedDurationMinutes = Number.isFinite(session?.plannedDurationMinutes)
-    ? session.plannedDurationMinutes
-    : (Number.isFinite(session?.duration) ? session.duration : null);
-  const workout = createWorkout({
-    name: session.label || session.title || 'Training Session',
-    title: session.label || session.title || 'Training Session',
-    label: session.label || session.title || 'Training Session',
-    detail: session.detail || '',
-    objective: session.objective || session.shortVersionRule || '',
-    programId: normalizedProgramType,
-    programName,
-    type: sessionType.includes('run')
-      ? 'run'
-      : sessionType.includes('hyrox')
-        ? 'hyrox'
-        : sessionType.includes('recovery')
-          ? 'recovery'
-          : 'strength',
+  const resolvedScheduledDate = scheduledDateOverride || session?.dateKey || todayKey;
+  const resolvedPlannedDate = plannedDateOverride || session?.dateKey || resolvedScheduledDate;
+  return adaptGeneratedSessionToWorkoutRecord(session, {
+    scheduledDate: resolvedScheduledDate,
+    plannedDate: resolvedPlannedDate,
     status: statusOverride,
-    scheduledDate,
-    plannedDate,
-    date: scheduledDate,
-    sessionOffset: session.offset ?? null,
-    trainingDays: settings.trainingDays,
-    programType: normalizedProgramType,
-    phase: session.phase || '',
-    week: session.week || null,
-    programWeek: Number.isFinite(session?.programWeek) ? session.programWeek : (Number.isFinite(session?.week) ? session.week : null),
-    duration: plannedDurationMinutes || 45,
-    plannedDurationMinutes: plannedDurationMinutes || 45,
-    plannedTime: session.plannedTime || null,
-    sessionType: session.sessionType || null,
-    sessionTypeCanonical: session.sessionTypeCanonical || null,
-    warmupTemplateId: session.warmupTemplateId || null,
-    cooldownTemplateId: session.cooldownTemplateId || null,
-    shortVersionRule: session.shortVersionRule || null,
-    prescription: session.prescription || null,
-    coachingNote: session.coachingNotes || session.coachingNote || null,
-    exercises: prescribedExercises,
-    content,
-    source: {
-      origin: 'program',
-      importKey: session.id || session.workoutKey || session.workoutId || null,
-      templateId: session.warmupTemplateId || session.cooldownTemplateId || null,
-      libraryId: session.workoutId || session.workoutKey || session.id || null,
-      sessionType: session.sessionType || session.sessionTypeCanonical || session.type || null,
-    },
+    settings,
   });
-
-  return {
-    ...workout,
-    type: workout.type || 'hyrox',
-  };
 }
 
 function getTodayItems({ tasks, workouts, meals, calendarItems, todayKey }) {
