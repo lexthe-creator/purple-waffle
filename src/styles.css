@@ -3772,15 +3772,18 @@ p {
   background: var(--muted);
 }
 
-.home-fitness-dot--pending {
+.home-fitness-dot--pending,
+.home-fitness-dot--missed {
   background: var(--danger);
 }
 
-.home-fitness-dot--rest {
+.home-fitness-dot--rest,
+.home-fitness-dot--planned {
   background: var(--border-muted);
 }
 
-.home-fitness-dot--complete {
+.home-fitness-dot--complete,
+.home-fitness-dot--done {
   background: var(--success);
 }
 

@@ -155,16 +155,6 @@ const SHELL_TAB_COPY = {
 };
 
 const SHELL_SURFACE_COPY = {
-  inbox: {
-    eyebrow: 'Inbox',
-    title: 'Quick capture inbox',
-    description: 'Quick Capture opens here during Phase 1. Capture and sorting logic comes later.',
-    bullets: [
-      'Anything captured lands here first.',
-      'Organization rules are deferred to Phase 3.',
-      'This surface keeps the shell route stable.',
-    ],
-  },
   settings: {
     eyebrow: 'Settings',
     title: 'App settings',
@@ -502,7 +492,8 @@ function HomeDashboard({ now }) {
 
   const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
   const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
-  const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
+  // Workout is owned by Zone 3 — schedule card shows calendar items only.
+  const scheduledItemCount = todayCalendarItems.length;
   const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
   const calendarMetricValue = useMemo(() => {
     const timedItems = todayCalendarItems.filter(item => item.startAt instanceof Date);
@@ -539,8 +530,8 @@ function HomeDashboard({ now }) {
   const completedMealSlots = mealSlotProgress.filter(slot => slot.complete).length;
 
   const scheduleIntro = scheduledItemCount > 0
-    ? `${scheduledItemCount} item${scheduledItemCount === 1 ? '' : 's'} are shaping the day.`
-    : 'The day is still open, so this is where upcoming calendar and training items will land.';
+    ? `${scheduledItemCount} calendar item${scheduledItemCount === 1 ? '' : 's'} today.`
+    : 'No calendar blocks yet. Add events or busy blocks from the Calendar tab.';
   const taskStatusTone = taskCompletedCount > 0 ? 'status-active' : 'status-planned';
   const calendarTone = scheduledItemCount > 0 ? 'status-active' : 'status-planned';
   const readinessState = readiness.level === 'High'
