@@ -48,7 +48,7 @@ import './styles.css';
 const ROOT_TABS = [
   {
     id: 'home',
-    label: 'Home',
+    label: 'Today',
     iconPath: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
   },
   {
@@ -113,7 +113,7 @@ const WEEKDAY_INDEX = {
 
 const SHELL_TAB_COPY = {
   home: {
-    eyebrow: 'Home',
+    eyebrow: 'Today',
     title: 'Top tasks and focus',
     description: 'Home is now anchored by tasks first, schedule second, and a compact status check-in.',
     bullets: [
