@@ -178,7 +178,8 @@ function createInboxItem(overrides = {}) {
     text: '',
     note: '',
     createdAt: Date.now(),
-    module: null, // null | 'task' | 'fitness' | 'calendar' | 'note'
+    stage: 'capture', // 'capture' | 'triaged'
+    module: null, // null | 'task' | 'workout' | 'calendar' | 'meal' | 'note'
     scheduledDate: null,
     ...overrides,
   };
@@ -306,12 +307,15 @@ function normalizeHabit(habit) {
 }
 
 function normalizeInboxItem(item, index) {
+  // Legacy migration: 'fitness' → 'workout'
+  const rawModule = item?.module === 'fitness' ? 'workout' : item?.module;
   return {
     id: item?.id || generateId('inbox'),
     text: typeof item?.text === 'string' ? item.text : '',
     note: typeof item?.note === 'string' ? item.note : '',
     createdAt: Number.isFinite(item?.createdAt) ? item.createdAt : Date.now() + index,
-    module: ['task', 'fitness', 'calendar', 'note'].includes(item?.module) ? item.module : null,
+    stage: ['capture', 'triaged'].includes(item?.stage) ? item.stage : 'capture',
+    module: ['task', 'workout', 'calendar', 'meal', 'note'].includes(rawModule) ? rawModule : null,
     scheduledDate: typeof item?.scheduledDate === 'string' ? item.scheduledDate : null,
   };
 }

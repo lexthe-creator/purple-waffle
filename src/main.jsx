@@ -195,54 +195,124 @@ function ShellTabPanel({ active, eyebrow, title, description, bullets }) {
   );
 }
 
-function InboxSurface({ inboxItems, onClose }) {
-  const copy = SHELL_SURFACE_COPY.inbox;
+const INBOX_TRIAGE_TARGETS = [
+  { id: 'task', label: 'Task' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'workout', label: 'Workout' },
+  { id: 'meal', label: 'Meal' },
+  { id: 'note', label: 'Note' },
+];
+
+function InboxSurface({ inboxItems, onCapture, onConvert, onClose }) {
   const items = Array.isArray(inboxItems) ? inboxItems : [];
+  const [captureText, setCaptureText] = React.useState('');
+  const [openMenuId, setOpenMenuId] = React.useState(null);
+  const captureRef = React.useRef(null);
+
+  // Close popover when clicking outside
+  React.useEffect(() => {
+    if (!openMenuId) return undefined;
+    function handleClick(e) {
+      if (!e.target.closest('.inbox-item')) setOpenMenuId(null);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openMenuId]);
+
+  function handleCapture(e) {
+    e.preventDefault();
+    const text = captureText.trim();
+    if (!text) return;
+    onCapture(text);
+    setCaptureText('');
+    captureRef.current?.focus();
+  }
+
+  function handleConvert(itemId, target) {
+    setOpenMenuId(null);
+    onConvert(itemId, target);
+  }
 
   return (
     <div className="tab-stack shell-surface-page">
       <Card className="shell-surface-card">
         <div className="modal-header">
           <div>
-            <p className="eyebrow">{copy.eyebrow}</p>
-            <h2>{copy.title}</h2>
+            <p className="eyebrow">Inbox</p>
+            <h2>Capture inbox</h2>
           </div>
           <button type="button" className="ghost-button compact-ghost" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <p className="shell-surface-copy">{copy.description}</p>
+        <form className="inbox-capture-form" onSubmit={handleCapture}>
+          <input
+            ref={captureRef}
+            className="inbox-capture-input"
+            type="text"
+            placeholder="Capture a thought, task, or idea…"
+            value={captureText}
+            onChange={e => setCaptureText(e.target.value)}
+            maxLength={200}
+          />
+          <button type="submit" className="inbox-capture-submit" aria-label="Add to inbox">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </form>
 
         {items.length === 0 ? (
           <EmptyState
-            title="Inbox is empty"
-            description="Quick Capture items will land here first. Later phases will add review, assignment, and conversion."
+            title="Inbox is clear"
+            description="Captured items land here for triage. Use the field above or Quick Add to capture anything."
           />
         ) : (
-          <div className="shell-surface-list">
+          <div className="inbox-list">
             {items.map(item => (
-              <ListRow
-                key={item.id}
-                variant="card"
-                label={item.text || 'Captured item'}
-                sub={item.note || 'Ready for later review'}
-                trailing={<span className="status-pill status-planned">Captured</span>}
-              />
+              <div key={item.id} className="inbox-item">
+                <p className="inbox-item-text">{item.text || 'Captured item'}</p>
+                <div className="inbox-item-actions">
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      className="ghost-button compact-ghost"
+                      aria-expanded={openMenuId === item.id}
+                      onClick={() => setOpenMenuId(id => (id === item.id ? null : item.id))}
+                    >
+                      Convert ▾
+                    </button>
+                    {openMenuId === item.id && (
+                      <div className="triage-menu" role="menu">
+                        <p className="triage-menu-heading">Send to</p>
+                        {INBOX_TRIAGE_TARGETS.map(target => (
+                          <button
+                            key={target.id}
+                            type="button"
+                            className="triage-option"
+                            role="menuitem"
+                            onClick={() => handleConvert(item.id, target.id)}
+                          >
+                            {target.label}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="triage-option inbox-delete-btn"
+                          role="menuitem"
+                          onClick={() => handleConvert(item.id, 'delete')}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}
-      </Card>
-
-      <Card className="shell-surface-card">
-        <SectionHeader eyebrow="Flow" title="Capture now, organize later" />
-        <div className="shell-tab-points">
-          {copy.bullets.map(point => (
-            <div key={point} className="shell-tab-point">
-              {point}
-            </div>
-          ))}
-        </div>
       </Card>
     </div>
   );
@@ -4440,22 +4510,6 @@ function MoreScreen({ initialSection = 'habits', onSwitchToTab, now }) {
     setInsightDraft('');
   }
 
-  function promoteInboxItem(itemId, module = 'note') {
-    const item = inboxItems.find(entry => entry.id === itemId);
-    if (!item) return;
-    setInboxItems(current => current.filter(entry => entry.id !== itemId));
-    if (module === 'note') {
-      setProfile(current => ({
-        ...current,
-        dailyLogs: {
-          ...current.dailyLogs,
-          [toDateKey(new Date())]: [...(current.dailyLogs[toDateKey(new Date())] || []), item.text],
-        },
-      }));
-    }
-    if (module === 'task' && onSwitchToTab) onSwitchToTab('more');
-  }
-
   const sectionDescriptions = {
     tasks: 'Task execution and triage.',
     meals: 'Fuel logging and planning.',
@@ -4544,10 +4598,23 @@ function AppShell() {
     notifications,
     inboxItems,
     setInboxItems,
+    createInboxItem,
     workouts,
     setWorkouts,
     createWorkout,
     createExercise,
+    tasks,
+    setTasks,
+    createTask,
+    meals,
+    setMeals,
+    createMeal,
+    notes,
+    setNotes,
+    createNote,
+    calendarItems,
+    setCalendarItems,
+    createCalendarItem,
     setNotifications,
     createNotification,
     routines,
@@ -4610,6 +4677,44 @@ function AppShell() {
   const activeRoutine = activeBlock?.type === 'routine'
     ? (routines.find(r => r.id === activeBlock.id) ?? null)
     : null;
+
+  // ---------------------------------------------------------------------------
+  // Inbox: capture and conversion (centralized)
+  // ---------------------------------------------------------------------------
+  function captureToInbox(text) {
+    setInboxItems(current => [createInboxItem({ text, stage: 'capture' }), ...current]);
+  }
+
+  function convertInboxItem(itemId, target) {
+    const item = inboxItems.find(entry => entry.id === itemId);
+    if (!item) return;
+    const text = item.text || '';
+    const todayKey = toDateKey(now);
+
+    switch (target) {
+      case 'task':
+        if (text) setTasks(current => [createTask({ title: text }), ...current]);
+        break;
+      case 'calendar':
+        if (text) setCalendarItems(current => [createCalendarItem({ title: text, date: todayKey }), ...current]);
+        break;
+      case 'workout':
+        setWorkouts(current => [createWorkout({ name: text || 'Workout', scheduledDate: todayKey, plannedDate: todayKey }), ...current]);
+        break;
+      case 'meal':
+        if (text) setMeals(current => [createMeal({ name: text }), ...current]);
+        break;
+      case 'note':
+        if (text) setNotes(current => [createNote({ content: text }), ...current]);
+        break;
+      case 'delete':
+        break;
+      default:
+        return;
+    }
+
+    setInboxItems(current => current.filter(entry => entry.id !== itemId));
+  }
 
   // ---------------------------------------------------------------------------
   // Workout execution handlers (promoted from FitnessScreen for shell-level WorkoutPlayer)
@@ -4834,6 +4939,8 @@ function AppShell() {
   ) : activeSurface === 'inbox' ? (
     <InboxSurface
       inboxItems={inboxItems}
+      onCapture={captureToInbox}
+      onConvert={convertInboxItem}
       onClose={() => setActiveSurface(null)}
     />
   ) : activeSurface === 'settings' ? (
