@@ -4684,3 +4684,91 @@ p {
 .home-nutrition-slot.is-logged .home-nutrition-slot-label {
   color: var(--text);
 }
+
+/* ─── Home compact summary strip ────────────────────────────────────── */
+
+.home-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--border-card);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+}
+
+.home-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 6px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-card);
+  cursor: pointer;
+  transition: background 0.12s ease;
+  min-height: 56px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-summary-item:last-child {
+  border-right: none;
+}
+
+.home-summary-item:hover,
+.home-summary-item.is-active {
+  background: var(--surface);
+}
+
+.home-summary-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.home-summary-value {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
+}
+
+/* ─── Home tab bar ───────────────────────────────────────────────────── */
+
+.home-tab-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.home-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Inverted fill for selected tab — clearly distinct from routine .is-done chips */
+.home-tab-btn.is-tab-active {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--card);
+  font-weight: 600;
+}
+
+@media (max-width: 360px) {
+  .home-summary-value { font-size: 0.72rem; }
+  .home-summary-item  { padding: 8px 4px; }
+}
