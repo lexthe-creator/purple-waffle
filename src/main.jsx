@@ -690,6 +690,8 @@ function HomeDashboard({ now }) {
       ? 'moderate'
       : 'low';
 
+  const [activeTab, setActiveTab] = useState('tasks');
+
   function handleStartTodayWorkout() {
     if (todayWorkoutRecord) {
       setActiveBlock({ type: 'workout', id: todayWorkoutRecord.id });
@@ -866,121 +868,186 @@ function HomeDashboard({ now }) {
         </div>
       )}
 
-      <Card variant="flat" className="home-card home-section home-focus-card">
-        <SectionHeader eyebrow="Focus" title="Deep work session" />
-        {/* Active FocusTimer is promoted to AppShell level (survives tab switches).
-            This card only renders the idle setup form; once active, AppShell takes over. */}
-        <FocusTimer
-          session={focusSession}
-          onStart={({ taskLabel, durationMinutes }) => {
-            setActiveBlock({ type: 'focus', id: null });
-            setFocusSessionDetails({ taskLabel, durationMinutes, startedAt: Date.now() });
-          }}
-          onStop={() => {
-            setActiveBlock(null);
-            setFocusSessionDetails(s => ({ ...s, startedAt: null }));
-          }}
-          onDismiss={() => {
-            setActiveBlock(null);
-            setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
-          }}
-        />
-      </Card>
+      {/* ─── Compact summary strip ───────────────────────────────────────── */}
+      <div className="home-summary-strip home-section" role="group" aria-label="Today summary">
+        <button
+          type="button"
+          className={`home-summary-item${activeTab === 'tasks' ? ' is-active' : ''}`}
+          onClick={() => setActiveTab('tasks')}
+          aria-pressed={activeTab === 'tasks'}
+        >
+          <span className="home-summary-label">Tasks</span>
+          <span className="home-summary-value">{taskCompletionValue}</span>
+        </button>
+        <button
+          type="button"
+          className={`home-summary-item${activeTab === 'schedule' ? ' is-active' : ''}`}
+          onClick={() => setActiveTab('schedule')}
+          aria-pressed={activeTab === 'schedule'}
+        >
+          <span className="home-summary-label">Schedule</span>
+          <span className="home-summary-value">{calendarStatus}</span>
+        </button>
+        <button
+          type="button"
+          className={`home-summary-item${activeTab === 'meals' ? ' is-active' : ''}`}
+          onClick={() => setActiveTab('meals')}
+          aria-pressed={activeTab === 'meals'}
+        >
+          <span className="home-summary-label">Meals</span>
+          <span className="home-summary-value">{completedMealSlots}/4</span>
+        </button>
+        <button
+          type="button"
+          className={`home-summary-item${activeTab === 'focus' ? ' is-active' : ''}`}
+          onClick={() => setActiveTab('focus')}
+          aria-pressed={activeTab === 'focus'}
+        >
+          <span className="home-summary-label">Focus</span>
+          <span className="home-summary-value">{focusSession.startedAt ? 'Active' : 'Idle'}</span>
+        </button>
+      </div>
 
-      <Card variant="flat" className="home-card home-section home-tasks-card">
-        <SectionHeader
-          eyebrow="Tasks"
-          title="Today's top tasks"
-          action={<span className={`status-pill ${taskStatusTone}`}>{taskCompletionValue}</span>}
-        />
+      {/* ─── Segmented tab bar ───────────────────────────────────────────── */}
+      <div className="home-tab-bar home-section" role="tablist" aria-label="Section tabs">
+        {[
+          { id: 'tasks',    label: 'Tasks'    },
+          { id: 'schedule', label: 'Schedule' },
+          { id: 'meals',    label: 'Meals'    },
+          { id: 'focus',    label: 'Focus'    },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={`status-chip home-tab-btn${activeTab === tab.id ? ' is-tab-active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        {openTasks.length === 0 ? (
-          <EmptyState
-            title="No open tasks yet"
-            description="Quick Capture or Inbox will be the right place to add the next priority."
+      {/* ─── Single panel (tab content) ─────────────────────────────────── */}
+      {activeTab === 'tasks' && (
+        <Card variant="flat" className="home-card home-section home-tasks-card">
+          <SectionHeader
+            eyebrow="Tasks"
+            title="Today's top tasks"
+            action={<span className={`status-pill ${taskStatusTone}`}>{taskCompletionValue}</span>}
           />
-        ) : (
-          <div className="home-list">
-            {openTasks.map(task => (
-              <ListRow
-                key={task.id}
-                variant="card"
-                label={task.title || 'Untitled task'}
-                sub={task.notes || (task.status === 'active' ? 'Active' : 'Planned')}
-                onClick={() =>
-                  setTasks(current =>
-                    current.map(t =>
-                      t.id === task.id ? { ...t, status: t.status === 'done' ? 'active' : 'done' } : t
+          {openTasks.length === 0 ? (
+            <EmptyState
+              title="No open tasks yet"
+              description="Quick Capture or Inbox will be the right place to add the next priority."
+            />
+          ) : (
+            <div className="home-list">
+              {openTasks.map(task => (
+                <ListRow
+                  key={task.id}
+                  variant="card"
+                  label={task.title || 'Untitled task'}
+                  sub={task.notes || (task.status === 'active' ? 'Active' : 'Planned')}
+                  onClick={() =>
+                    setTasks(current =>
+                      current.map(t =>
+                        t.id === task.id ? { ...t, status: t.status === 'done' ? 'active' : 'done' } : t
+                      )
                     )
-                  )
-                }
-                trailing={(
-                  <span className={`status-pill ${task.priority ? 'status-priority' : task.status === 'active' ? 'status-active' : 'status-planned'}`}>
-                    {task.priority ? 'Priority' : task.status === 'active' ? 'Active' : 'Planned'}
-                  </span>
-                )}
+                  }
+                  trailing={(
+                    <span className={`status-pill ${task.priority ? 'status-priority' : task.status === 'active' ? 'status-active' : 'status-planned'}`}>
+                      {task.priority ? 'Priority' : task.status === 'active' ? 'Active' : 'Planned'}
+                    </span>
+                  )}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {activeTab === 'schedule' && (
+        <Card variant="flat" className="home-card home-section home-schedule-card">
+          <SectionHeader
+            eyebrow="Today"
+            title="Today's schedule"
+            action={<span className={`status-pill ${calendarTone}`}>{calendarStatus}</span>}
+          />
+          <p className="home-card-copy">{scheduleIntro}</p>
+          <div className="home-list">
+            {todayCalendarItems.filter(item => item.isCurrent).map(item => (
+              <ListRow
+                key={item.id}
+                variant="card"
+                label={item.title || 'Untitled item'}
+                sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
+                trailing={<span className="status-pill status-active">Now</span>}
               />
             ))}
+            {todayCalendarItems.filter(item => !item.isCurrent).map(item => (
+              <ListRow
+                key={item.id}
+                variant="card"
+                label={item.title || 'Untitled item'}
+                sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
+                trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
+              />
+            ))}
+            {todayCalendarItems.length === 0 && (
+              <EmptyState
+                title="No schedule items yet"
+                description="Home will show today's plan once Calendar has something scheduled."
+              />
+            )}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
-      <Card variant="flat" className="home-card home-section home-schedule-card">
-        <SectionHeader
-          eyebrow="Today"
-          title="Today's schedule"
-          action={<span className={`status-pill ${calendarTone}`}>{calendarStatus}</span>}
-        />
-        <p className="home-card-copy">{scheduleIntro}</p>
+      {activeTab === 'meals' && (
+        <Card variant="flat" className="home-card home-section home-nutrition-card">
+          <SectionHeader
+            eyebrow="Nutrition"
+            title="Today's meals"
+            action={<span className="home-card-copy">{completedMealSlots}/4 logged</span>}
+          />
+          <div className="home-nutrition-slots">
+            {mealSlotProgress.map(slot => (
+              <div key={slot.id} className={`home-nutrition-slot${slot.complete ? ' is-logged' : ''}`}>
+                <span className="home-nutrition-slot-label">{slot.label}</span>
+                <span className={`status-pill ${slot.complete ? 'status-done' : 'status-planned'}`}>
+                  {slot.complete ? 'Logged' : 'Empty'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-        <div className="home-list">
-          {todayCalendarItems.filter(item => item.isCurrent).map(item => (
-            <ListRow
-              key={item.id}
-              variant="card"
-              label={item.title ||'Untitled item'}
-              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
-              trailing={<span className="status-pill status-active">Now</span>}
-            />
-          ))}
-
-          {todayCalendarItems.filter(item => !item.isCurrent).map(item => (
-            <ListRow
-              key={item.id}
-              variant="card"
-              label={item.title || 'Untitled item'}
-              sub={`${item.startTime || '—'} - ${item.endTime || '—'}${item.notes ? ` · ${item.notes}` : ''}`}
-              trailing={<span className="status-pill status-planned">{getCalendarItemTypeLabel(item.type)}</span>}
-            />
-          ))}
-
-          {todayCalendarItems.length === 0 && (
-            <EmptyState
-              title="No schedule items yet"
-              description="Home will show today's plan once Calendar has something scheduled."
-            />
-          )}
-        </div>
-      </Card>
-
-      {/* Zone 7: Nutrition bar */}
-      <Card variant="flat" className="home-card home-section home-nutrition-card">
-        <SectionHeader
-          eyebrow="Nutrition"
-          title="Today's meals"
-          action={<span className="home-card-copy">{completedMealSlots}/4 logged</span>}
-        />
-        <div className="home-nutrition-slots">
-          {mealSlotProgress.map(slot => (
-            <div key={slot.id} className={`home-nutrition-slot${slot.complete ? ' is-logged' : ''}`}>
-              <span className="home-nutrition-slot-label">{slot.label}</span>
-              <span className={`status-pill ${slot.complete ? 'status-done' : 'status-planned'}`}>
-                {slot.complete ? 'Logged' : 'Empty'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {activeTab === 'focus' && (
+        <Card variant="flat" className="home-card home-section home-focus-card">
+          <SectionHeader eyebrow="Focus" title="Deep work session" />
+          {/* Active FocusTimer is promoted to AppShell level (survives tab switches).
+              This card only renders the idle setup form; once active, AppShell takes over. */}
+          <FocusTimer
+            session={focusSession}
+            onStart={({ taskLabel, durationMinutes }) => {
+              setActiveBlock({ type: 'focus', id: null });
+              setFocusSessionDetails({ taskLabel, durationMinutes, startedAt: Date.now() });
+            }}
+            onStop={() => {
+              setActiveBlock(null);
+              setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+            }}
+            onDismiss={() => {
+              setActiveBlock(null);
+              setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+            }}
+          />
+        </Card>
+      )}
 
     </div>
   );
