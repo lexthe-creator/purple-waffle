@@ -28,6 +28,7 @@ import {
   normalizeWorkoutLog,
   normalizeWorkoutRecord,
 } from './data/workoutSystemState.js';
+import { adaptGeneratedSessionToWorkoutRecord } from './data/adaptGeneratedSessionToWorkoutRecord.js';
 import {
   applyMovedGeneratedSessionMeta,
   applySkippedGeneratedSessionMeta,

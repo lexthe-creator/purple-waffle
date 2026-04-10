@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import { adaptGeneratedSessionToWorkoutRecord } from '../src/data/adaptGeneratedSessionToWorkoutRecord.js';
 import {
   normalizeAppState,
   normalizeProfile,
@@ -59,10 +60,98 @@ export function runWorkoutSystemStateAudit() {
   assert(Array.isArray(normalizedWorkout.content?.blocks), 'Workout record normalization should build structured content blocks', issues);
   assert(normalizedWorkout.content?.blocks?.[0]?.exercises?.[0]?.name === 'Warm-up', 'Structured workout content should preserve exercise names', issues);
 
+  const adaptedRunSession = adaptGeneratedSessionToWorkoutRecord({
+    id: 'run-1',
+    label: 'Base Run',
+    title: 'Base Run',
+    programType: '5k',
+    category: 'run',
+    sessionTypeCanonical: 'run_easy',
+    durationMinutes: 45,
+    dateKey: '2026-04-10',
+    content: {
+      version: 1,
+      source: 'program',
+      blocks: [{
+        id: 'run-block',
+        title: 'Main Set',
+        type: 'main',
+        exercises: [{ id: 'run-ex-1', name: 'Easy Run', duration: '30 min' }],
+      }],
+      notes: ['Stay conversational'],
+    },
+  }, { createdAt: 111 });
+  assert(adaptedRunSession.type === 'run', 'Adapter should preserve run type for 5k sessions', issues);
+  assert(adaptedRunSession.scheduledDate === '2026-04-10', 'Adapter should map scheduledDate from dateKey', issues);
+  assert(adaptedRunSession.plannedDurationMinutes === 45, 'Adapter should map plannedDurationMinutes from durationMinutes', issues);
+  assert(adaptedRunSession.content.blocks.length === 1, 'Adapter should preserve explicit content blocks', issues);
+  assert(adaptedRunSession.createdAt === 111, 'Adapter should use override createdAt deterministically', issues);
+
+  const adaptedStrengthSession = adaptGeneratedSessionToWorkoutRecord({
+    workoutId: 'strength-1',
+    programType: 'strength_block',
+    category: 'strength',
+    sessionTypeCanonical: 'strength_full',
+    duration: 50,
+    dateKey: '2026-04-11',
+    structure: [{
+      blockId: 'main',
+      name: 'Main Set',
+      details: '3 x 8 squat',
+      durationMinutes: 25,
+      rounds: 3,
+    }],
+  }, { createdAt: 222 });
+  assert(adaptedStrengthSession.type === 'strength', 'Adapter should derive strength type from category', issues);
+  assert(adaptedStrengthSession.title === 'Strength Full', 'Adapter should fall back to readable session title', issues);
+  assert(adaptedStrengthSession.content.blocks.length === 1, 'Adapter should normalize structure into content', issues);
+  assert(adaptedStrengthSession.exercises.length > 0, 'Adapter should flatten exercises from normalized content', issues);
+
+  const adaptedHyroxSession = adaptGeneratedSessionToWorkoutRecord({
+    id: 'hyrox-1',
+    title: 'Power Simulation',
+    programType: 'hyrox',
+    sessionTypeCanonical: 'hyrox_sim',
+    durationMinutes: 60,
+    dateKey: '2026-04-12',
+    librarySessionId: 'hyrox_sim_a',
+    warmupTemplateId: 'hyrox_standard_v1',
+    cooldownTemplateId: 'hyrox_standard_v1',
+    generatedSessionMeta: {
+      originalScheduledDate: '2026-04-12',
+      currentScheduledDate: '2026-04-12',
+      movedFrom: null,
+      movedTo: null,
+      skipStatus: 'not_skipped',
+      skipReason: null,
+      wasSkipped: false,
+      generationSource: {
+        kind: 'hyrox_generator',
+        programType: 'hyrox',
+        templateId: 'hyrox_sim_a',
+        sessionType: 'hyrox_sim',
+      },
+      lifecycle: {
+        status: 'scheduled',
+        isMoved: false,
+        isRescheduled: false,
+        isSkipped: false,
+      },
+    },
+    ex: [{ id: 'sled', name: 'Sled Push', detail: '4 x 20m' }],
+  }, { createdAt: 333 });
+  assert(adaptedHyroxSession.type === 'hyrox', 'Adapter should preserve hyrox type', issues);
+  assert(adaptedHyroxSession.source.libraryId === 'hyrox_sim_a', 'Adapter should build source libraryId from librarySessionId', issues);
+  assert(adaptedHyroxSession.generatedSessionMeta.generationSource.templateId === 'hyrox_sim_a', 'Adapter should preserve generatedSessionMeta', issues);
+
+  const normalizedAdaptedWorkout = normalizeWorkoutRecord(adaptedHyroxSession, 3);
+  assert(normalizedAdaptedWorkout.status === 'planned', 'Normalized adapted workout should remain planned', issues);
+  assert(normalizedAdaptedWorkout.content.blocks.length >= 1, 'Normalized adapted workout should remain executable', issues);
+
   return {
     ok: issues.length === 0,
     issues,
-    raw: { normalizedAppState, normalizedProfile, normalizedWorkout },
+    raw: { normalizedAppState, normalizedProfile, normalizedWorkout, adaptedRunSession, adaptedStrengthSession, adaptedHyroxSession },
   };
 }
 
