@@ -3761,7 +3761,7 @@ p {
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 68vh;
-  padding: 0 0 var(--sp-3);
+  padding: 10px 0 var(--sp-3);
 }
 
 /* Two-column grid: labels | lane */

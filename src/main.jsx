@@ -3466,7 +3466,7 @@ function CalendarScreen({ onOpenSettings }) {
       {/* Empty hint when truly nothing scheduled */}
       {selectedDayItems.length === 0 && (
         <p className="cal-timeline-empty-hint">
-          Tap + to add a busy block, event, or task — or tap any hour in the timeline above.
+          Tap any hour to add a busy block, event, or task.
         </p>
       )}
     </Card>
