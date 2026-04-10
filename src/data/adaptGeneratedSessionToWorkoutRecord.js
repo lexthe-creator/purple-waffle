@@ -1,211 +1,128 @@
-import { normalizeProgramType } from './programRouter.js';
 import {
   buildWorkoutContentFromSession,
-  normalizeWorkoutExercise,
+  normalizeWorkoutRecord,
 } from './workoutSystemState.js';
+import { normalizeProgramType } from './programRouter.js';
 
 function getProgramDisplayName(programType) {
   const normalized = normalizeProgramType(programType);
   if (normalized === '5k') return '5K run builder';
   if (normalized === 'strength_block') return 'Strength Block plan';
-  return 'HYROX plan';
+  return 'HYROX 32-week plan';
 }
 
-function humanizeSessionType(value) {
-  const text = String(value || '').trim();
-  if (!text) return 'Workout';
-  return text
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, char => char.toUpperCase());
+function generateWorkoutId() {
+  return `workout-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function normalizeType(session, programType) {
-  const rawType = String(session?.type || '').toLowerCase();
-  const rawCategory = String(session?.category || '').toLowerCase();
-  const rawSessionType = String(session?.sessionTypeCanonical || session?.sessionType || '').toLowerCase();
-
-  if (rawType === 'run' || rawCategory === 'run' || rawSessionType.includes('run')) return 'run';
-  if (rawType === 'recovery' || rawCategory === 'recovery' || rawSessionType.includes('recovery')) return 'recovery';
-  if (rawType === 'strength' || rawCategory === 'strength' || rawSessionType.includes('strength')) return 'strength';
-  if (normalizeProgramType(programType) === 'hyrox') return 'hyrox';
+function inferWorkoutType(sessionType) {
+  const t = String(sessionType || '').toLowerCase();
+  if (t.includes('run')) return 'run';
+  if (t.includes('hyrox')) return 'hyrox';
+  if (t.includes('recovery')) return 'recovery';
   return 'strength';
 }
 
-function normalizeDateLike(value) {
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
-  return null;
-}
+/**
+ * Pure adapter: converts a generator session object into a normalized workout
+ * record ready for persistence. No React or factory-function dependencies.
+ *
+ * @param {object} session  - Output from hyroxWorkoutGenerator, 5kWorkoutGenerator,
+ *                            or programRouter (or any session-shaped object).
+ * @param {object} [options]
+ * @param {string|null}  [options.scheduledDate]  - YYYY-MM-DD override
+ * @param {string|null}  [options.plannedDate]    - YYYY-MM-DD override
+ * @param {string}       [options.status]         - 'planned' | 'active' | 'completed' | 'skipped'
+ * @param {object}       [options.settings]       - fitnessSettings for program/trainingDays defaults
+ * @param {number|null}  [options.programWeek]    - explicit program week override
+ * @param {string|null}  [options.id]             - provide a stable ID (otherwise generated)
+ * @returns {object} Normalized workout record (same shape as normalizeWorkoutRecord output)
+ */
+export function adaptGeneratedSessionToWorkoutRecord(session, options = {}) {
+  const src = session && typeof session === 'object' ? session : {};
+  const {
+    scheduledDate: scheduledDateOpt = null,
+    plannedDate: plannedDateOpt = null,
+    status = 'planned',
+    settings = {},
+    programWeek: programWeekOpt = null,
+    id: idOpt = null,
+  } = options;
 
-function summarizeContent(content) {
-  const blocks = Array.isArray(content?.blocks) ? content.blocks : [];
-  const exercises = blocks.flatMap(block => (Array.isArray(block.exercises) ? block.exercises : []));
+  const normalizedProgramType = normalizeProgramType(src.programType || settings.programType || 'hyrox');
+  const workoutType = inferWorkoutType(src.type || src.sessionType);
 
-  return {
-    blockCount: blocks.length,
-    exerciseCount: exercises.length,
-    hasIntervals: exercises.some(exercise => Boolean(exercise.interval)),
-    hasTimedEfforts: exercises.some(exercise => Boolean(exercise.timedEffort || exercise.duration)),
-    hasNotes: Boolean(
-      (Array.isArray(content?.notes) && content.notes.length > 0)
-      || exercises.some(exercise => Boolean(exercise.note || exercise.cue || exercise.detail))
-    ),
-  };
-}
+  const content = buildWorkoutContentFromSession(src);
 
-function flattenExercises(content, session) {
-  const blockExercises = Array.isArray(content?.blocks)
-    ? content.blocks.flatMap(block => (
-      Array.isArray(block.exercises)
-        ? block.exercises.map((exercise, index) => normalizeWorkoutExercise(exercise, index))
-        : []
-    ))
+  // Flat exercises array derived from content blocks (for the top-level exercises field)
+  const exercises = Array.isArray(content.blocks) && content.blocks.length > 0
+    ? content.blocks.flatMap(block =>
+        Array.isArray(block.exercises) && block.exercises.length > 0
+          ? block.exercises
+          : [],
+      )
     : [];
 
-  if (blockExercises.length > 0) return blockExercises;
+  const resolvedScheduledDate = scheduledDateOpt || src.dateKey || null;
+  const resolvedPlannedDate = plannedDateOpt || src.dateKey || resolvedScheduledDate;
 
-  const fallbackExercises = Array.isArray(session?.exercises)
-    ? session.exercises
-    : Array.isArray(session?.ex)
-      ? session.ex
-      : [];
-  return fallbackExercises.map((exercise, index) => normalizeWorkoutExercise(exercise, index));
-}
+  const plannedDurationMinutes = Number.isFinite(src.plannedDurationMinutes)
+    ? src.plannedDurationMinutes
+    : Number.isFinite(src.duration)
+      ? src.duration
+      : null;
 
-function buildSafeGeneratedSessionMeta(session, programType, scheduledDate) {
-  return session?.generatedSessionMeta && typeof session.generatedSessionMeta === 'object'
-    ? {
-        ...session.generatedSessionMeta,
-        generationSource: session.generatedSessionMeta.generationSource
-          ? { ...session.generatedSessionMeta.generationSource }
-          : null,
-        lifecycle: session.generatedSessionMeta.lifecycle
-          ? { ...session.generatedSessionMeta.lifecycle }
-          : null,
-      }
-    : {
-        originalScheduledDate: scheduledDate,
-        currentScheduledDate: scheduledDate,
-        movedFrom: null,
-        movedTo: null,
-        skipStatus: 'not_skipped',
-        skipReason: null,
-        wasSkipped: false,
-        generationSource: {
-          kind: 'program',
-          programType,
-          templateId: session?.librarySessionId || session?.workoutId || null,
-          sessionType: session?.sessionTypeCanonical || session?.sessionType || null,
-        },
-        lifecycle: {
-          status: 'planned',
-          isMoved: false,
-          isRescheduled: false,
-          isSkipped: false,
-        },
-      };
-}
+  const programWeek = Number.isFinite(programWeekOpt)
+    ? programWeekOpt
+    : Number.isFinite(src.programWeek)
+      ? src.programWeek
+      : Number.isFinite(src.week)
+        ? src.week
+        : null;
 
-function maybeWarnForMissingFields(session, payload) {
-  const isDev = typeof process === 'undefined' || process.env?.NODE_ENV !== 'production';
-  if (!isDev) return;
+  const sessionName = src.label || src.title || 'Training Session';
 
-  const missing = [];
-  if (!payload.id) missing.push('id');
-  if (!payload.programType) missing.push('programType');
-  if (!Number.isFinite(payload.duration)) missing.push('duration');
-  if (!payload.title) missing.push('title');
-
-  if (missing.length > 0) {
-    console.warn('[adaptGeneratedSessionToWorkoutRecord] Missing required fields:', missing.join(', '), session);
-  }
-}
-
-export function adaptGeneratedSessionToWorkoutRecord(session, options = {}) {
-  const safeSession = session && typeof session === 'object' ? session : {};
-  const programType = normalizeProgramType(safeSession.programType);
-  const durationMinutes = Number.isFinite(safeSession.durationMinutes)
-    ? safeSession.durationMinutes
-    : (Number.isFinite(safeSession.duration) ? safeSession.duration : 30);
-  const scheduledDate = normalizeDateLike(options.scheduledDate)
-    || normalizeDateLike(safeSession.dateKey)
-    || normalizeDateLike(safeSession.date)
-    || null;
-  const plannedDate = normalizeDateLike(options.plannedDate)
-    || scheduledDate;
-  const content = buildWorkoutContentFromSession(safeSession);
-  const exercises = flattenExercises(content, safeSession);
-  const title = safeSession.title
-    || safeSession.label
-    || humanizeSessionType(safeSession.sessionTypeCanonical || safeSession.sessionType);
-
-  const payload = {
-    id: options.id || safeSession.id || safeSession.workoutId || `generated-${programType}-${safeSession.sessionTypeCanonical || 'workout'}`,
-    name: safeSession.label || safeSession.title || title,
-    title,
-    label: safeSession.label || safeSession.title || title,
-    detail: safeSession.detail || null,
-    objective: safeSession.objective || safeSession.shortVersionRule || null,
-
-    type: normalizeType(safeSession, programType),
-    programId: programType,
-    programType,
-    programName: getProgramDisplayName(programType),
-    sessionType: safeSession.sessionType || null,
-    sessionTypeCanonical: safeSession.sessionTypeCanonical || safeSession.sessionType || null,
-
-    status: options.status || 'planned',
-
-    scheduledDate,
-    plannedDate,
-    date: scheduledDate,
-    plannedTime: safeSession.plannedTime || null,
-
-    duration: durationMinutes,
-    plannedDurationMinutes: durationMinutes,
-
-    phase: safeSession.phase || safeSession.schedulePhaseType || null,
-    week: Number.isFinite(safeSession.week) ? safeSession.week : null,
-    programWeek: Number.isFinite(safeSession.programWeek)
-      ? safeSession.programWeek
-      : (Number.isFinite(safeSession.week) ? safeSession.week : null),
-    sessionOffset: Number.isFinite(safeSession.offset) ? safeSession.offset : null,
-    trainingDays: safeSession.trainingDays || null,
-
-    content: {
-      version: 1,
-      source: 'program',
-      blocks: Array.isArray(content?.blocks) ? content.blocks : [],
-      notes: Array.isArray(content?.notes) ? content.notes : [],
-    },
+  const raw = {
+    id: typeof idOpt === 'string' && idOpt.length > 0 ? idOpt : generateWorkoutId(),
+    name: sessionName,
+    title: sessionName,
+    label: sessionName,
+    detail: src.detail || null,
+    objective: src.objective || src.shortVersionRule || null,
+    programId: normalizedProgramType,
+    programType: normalizedProgramType,
+    programName: getProgramDisplayName(normalizedProgramType),
+    type: workoutType,
+    status,
+    scheduledDate: resolvedScheduledDate,
+    plannedDate: resolvedPlannedDate,
+    date: resolvedScheduledDate,
+    sessionOffset: src.offset != null ? src.offset : null,
+    trainingDays: settings.trainingDays || '4-day',
+    phase: src.phase || '',
+    week: programWeek,
+    programWeek,
+    duration: plannedDurationMinutes || 45,
+    plannedDurationMinutes: plannedDurationMinutes || 45,
+    plannedTime: src.plannedTime || null,
+    sessionType: src.sessionType || null,
+    sessionTypeCanonical: src.sessionTypeCanonical || null,
+    warmupTemplateId: src.warmupTemplateId || null,
+    cooldownTemplateId: src.cooldownTemplateId || null,
+    shortVersionRule: src.shortVersionRule || null,
+    prescription: src.prescription || null,
+    coachingNote: src.coachingNotes || src.coachingNote || null,
     exercises,
-    contentSummary: summarizeContent(content),
-    notes: Array.isArray(content?.notes) ? content.notes : [],
-
-    warmupTemplateId: safeSession.warmupTemplateId || null,
-    cooldownTemplateId: safeSession.cooldownTemplateId || null,
-    shortVersionRule: safeSession.shortVersionRule || null,
-    prescription: safeSession.prescription || null,
-    coachingNote: safeSession.coachingNote || safeSession.coachingNotes || null,
-
+    content,
     source: {
       origin: 'program',
-      importKey: safeSession.id || safeSession.workoutKey || safeSession.workoutId || null,
-      templateId: safeSession.librarySessionId || safeSession.warmupTemplateId || safeSession.cooldownTemplateId || null,
-      libraryId: safeSession.librarySessionId || safeSession.workoutId || safeSession.workoutKey || safeSession.id || null,
-      sessionType: safeSession.sessionTypeCanonical || safeSession.sessionType || null,
+      importKey: src.id || src.workoutKey || src.workoutId || null,
+      templateId: src.warmupTemplateId || src.cooldownTemplateId || null,
+      libraryId: src.workoutId || src.workoutKey || src.id || null,
+      sessionType: src.sessionType || src.sessionTypeCanonical || src.type || null,
     },
-
-    generatedSessionMeta: buildSafeGeneratedSessionMeta(safeSession, programType, scheduledDate),
-
-    workoutLog: null,
-    startedAt: null,
-    completedAt: null,
-    createdAt: Number.isFinite(options.createdAt)
-      ? options.createdAt
-      : (Number.isFinite(safeSession.createdAt) ? safeSession.createdAt : 0),
+    createdAt: Date.now(),
   };
 
-  maybeWarnForMissingFields(safeSession, payload);
-  return payload;
+  return normalizeWorkoutRecord(raw, 0);
 }

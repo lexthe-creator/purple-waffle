@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import AppFrame from './components/AppFrame.jsx';
 import ExecutionTaskItem from './components/ExecutionTaskItem.jsx';
 import FocusTimer from './components/FocusTimer.jsx';
+import MorningCheckinModal from './components/MorningCheckinModal.jsx';
 import QuickAddModal from './components/QuickAddModal.jsx';
 import RoutinePlayer from './components/RoutinePlayer.jsx';
 import WorkoutPlayer from './components/WorkoutPlayer.jsx';
@@ -19,6 +20,7 @@ import {
   getPlanState,
   getStationMeta,
 } from './data/hyroxPlan.js';
+import { adaptGeneratedSessionToWorkoutRecord } from './data/adaptGeneratedSessionToWorkoutRecord.js';
 import { normalizeProgramType } from './data/programRouter.js';
 import { sessionTypes } from './data/workoutSystemSchema.js';
 import {
@@ -54,7 +56,7 @@ import './styles.css';
 const ROOT_TABS = [
   {
     id: 'home',
-    label: 'Home',
+    label: 'Today',
     iconPath: '<path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/>',
   },
   {
@@ -136,7 +138,7 @@ const WEEKDAY_INDEX = {
 
 const SHELL_TAB_COPY = {
   home: {
-    eyebrow: 'Home',
+    eyebrow: 'Today',
     title: 'Top tasks and focus',
     description: 'Home is now anchored by tasks first, schedule second, and a compact status check-in.',
     bullets: [
@@ -178,16 +180,6 @@ const SHELL_TAB_COPY = {
 };
 
 const SHELL_SURFACE_COPY = {
-  inbox: {
-    eyebrow: 'Inbox',
-    title: 'Quick capture inbox',
-    description: 'Quick Capture opens here during Phase 1. Capture and sorting logic comes later.',
-    bullets: [
-      'Anything captured lands here first.',
-      'Organization rules are deferred to Phase 3.',
-      'This surface keeps the shell route stable.',
-    ],
-  },
   settings: {
     eyebrow: 'Settings',
     title: 'App settings',
@@ -218,54 +210,124 @@ function ShellTabPanel({ active, eyebrow, title, description, bullets }) {
   );
 }
 
-function InboxSurface({ inboxItems, onClose }) {
-  const copy = SHELL_SURFACE_COPY.inbox;
+const INBOX_TRIAGE_TARGETS = [
+  { id: 'task', label: 'Task' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'workout', label: 'Workout' },
+  { id: 'meal', label: 'Meal' },
+  { id: 'note', label: 'Note' },
+];
+
+function InboxSurface({ inboxItems, onCapture, onConvert, onClose }) {
   const items = Array.isArray(inboxItems) ? inboxItems : [];
+  const [captureText, setCaptureText] = React.useState('');
+  const [openMenuId, setOpenMenuId] = React.useState(null);
+  const captureRef = React.useRef(null);
+
+  // Close popover when clicking outside
+  React.useEffect(() => {
+    if (!openMenuId) return undefined;
+    function handleClick(e) {
+      if (!e.target.closest('.inbox-item')) setOpenMenuId(null);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openMenuId]);
+
+  function handleCapture(e) {
+    e.preventDefault();
+    const text = captureText.trim();
+    if (!text) return;
+    onCapture(text);
+    setCaptureText('');
+    captureRef.current?.focus();
+  }
+
+  function handleConvert(itemId, target) {
+    setOpenMenuId(null);
+    onConvert(itemId, target);
+  }
 
   return (
     <div className="tab-stack shell-surface-page">
       <Card className="shell-surface-card">
         <div className="modal-header">
           <div>
-            <p className="eyebrow">{copy.eyebrow}</p>
-            <h2>{copy.title}</h2>
+            <p className="eyebrow">Inbox</p>
+            <h2>Capture inbox</h2>
           </div>
           <button type="button" className="ghost-button compact-ghost" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <p className="shell-surface-copy">{copy.description}</p>
+        <form className="inbox-capture-form" onSubmit={handleCapture}>
+          <input
+            ref={captureRef}
+            className="inbox-capture-input"
+            type="text"
+            placeholder="Capture a thought, task, or idea…"
+            value={captureText}
+            onChange={e => setCaptureText(e.target.value)}
+            maxLength={200}
+          />
+          <button type="submit" className="inbox-capture-submit" aria-label="Add to inbox">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        </form>
 
         {items.length === 0 ? (
           <EmptyState
-            title="Inbox is empty"
-            description="Quick Capture items will land here first. Later phases will add review, assignment, and conversion."
+            title="Inbox is clear"
+            description="Captured items land here for triage. Use the field above or Quick Add to capture anything."
           />
         ) : (
-          <div className="shell-surface-list">
+          <div className="inbox-list">
             {items.map(item => (
-              <ListRow
-                key={item.id}
-                variant="card"
-                label={item.text || 'Captured item'}
-                sub={item.note || 'Ready for later review'}
-                trailing={<span className="status-pill status-planned">Captured</span>}
-              />
+              <div key={item.id} className="inbox-item">
+                <p className="inbox-item-text">{item.text || 'Captured item'}</p>
+                <div className="inbox-item-actions">
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      className="ghost-button compact-ghost"
+                      aria-expanded={openMenuId === item.id}
+                      onClick={() => setOpenMenuId(id => (id === item.id ? null : item.id))}
+                    >
+                      Convert ▾
+                    </button>
+                    {openMenuId === item.id && (
+                      <div className="triage-menu" role="menu">
+                        <p className="triage-menu-heading">Send to</p>
+                        {INBOX_TRIAGE_TARGETS.map(target => (
+                          <button
+                            key={target.id}
+                            type="button"
+                            className="triage-option"
+                            role="menuitem"
+                            onClick={() => handleConvert(item.id, target.id)}
+                          >
+                            {target.label}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          className="triage-option inbox-delete-btn"
+                          role="menuitem"
+                          onClick={() => handleConvert(item.id, 'delete')}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}
-      </Card>
-
-      <Card className="shell-surface-card">
-        <SectionHeader eyebrow="Flow" title="Capture now, organize later" />
-        <div className="shell-tab-points">
-          {copy.bullets.map(point => (
-            <div key={point} className="shell-tab-point">
-              {point}
-            </div>
-          ))}
-        </div>
       </Card>
     </div>
   );
@@ -456,12 +518,12 @@ function getCalendarItemTypeLabel(type) {
 const TASK_STATUS_ORDER = { planned: 0, active: 1 };
 
 function HomeDashboard({ now }) {
-  const { tasks, setTasks, workouts, meals, calendarItems, routines, setRoutines } = useTaskContext();
-  const { fitnessSettings, energyState, focusSession, setFocusSession } = useAppContext();
+  const { tasks, setTasks, workouts, setWorkouts, meals, calendarItems, routines, createWorkout, createExercise } = useTaskContext();
+  const { fitnessSettings, energyState, focusSession, setFocusSessionDetails, setActiveBlock, activeBlock } = useAppContext();
   const { profile } = useProfileContext();
-  const [activeRoutine, setActiveRoutine] = useState(null);
 
   const todayKey = toDateKey(now);
+  const todayDayName = now.toLocaleDateString('en-US', { weekday: 'long' });
   const athleteDefaults = profile?.athlete || {};
   const workoutHistory = useMemo(
     () => workouts.map(workout => ({
@@ -558,9 +620,31 @@ function HomeDashboard({ now }) {
     [loggedMeals],
   );
 
+  const todayRoutines = useMemo(
+    () => routines.filter(r => Array.isArray(r.scheduleDays) && r.scheduleDays.includes(todayDayName)),
+    [routines, todayDayName],
+  );
+
+  const todayWorkoutRecord = useMemo(
+    () => getWorkoutRecordForDate(workouts, todayKey),
+    [workouts, todayKey],
+  );
+
+  const activeBlockLabel = useMemo(() => {
+    if (!activeBlock) return null;
+    if (activeBlock.type === 'focus') return focusSession.taskLabel || 'Focus session';
+    if (activeBlock.type === 'workout') {
+      const w = workouts.find(workout => workout.id === activeBlock.id);
+      return w?.title || w?.name || 'Workout';
+    }
+    const r = routines.find(routine => routine.id === activeBlock.id);
+    return r?.name || 'Routine';
+  }, [activeBlock, focusSession.taskLabel, workouts, routines]);
+
   const taskCompletedCount = tasks.filter(task => task.status === 'done').length;
   const taskCompletionValue = `${taskCompletedCount}/${tasks.length}`;
-  const scheduledItemCount = todayCalendarItems.length + (todayWorkoutCard.kind === 'workout' ? 1 : 0);
+  // Workout is owned by Zone 3 — schedule card shows calendar items only.
+  const scheduledItemCount = todayCalendarItems.length;
   const calendarStatus = scheduledItemCount > 0 ? `${scheduledItemCount} scheduled` : 'Open';
   const calendarMetricValue = useMemo(() => {
     const timedItems = todayCalendarItems.filter(item => item.startAt instanceof Date);
@@ -597,8 +681,8 @@ function HomeDashboard({ now }) {
   const completedMealSlots = mealSlotProgress.filter(slot => slot.complete).length;
 
   const scheduleIntro = scheduledItemCount > 0
-    ? `${scheduledItemCount} item${scheduledItemCount === 1 ? '' : 's'} are shaping the day.`
-    : 'The day is still open, so this is where upcoming calendar and training items will land.';
+    ? `${scheduledItemCount} calendar item${scheduledItemCount === 1 ? '' : 's'} today.`
+    : 'No calendar blocks yet. Add events or busy blocks from the Calendar tab.';
   const taskStatusTone = taskCompletedCount > 0 ? 'status-active' : 'status-planned';
   const calendarTone = scheduledItemCount > 0 ? 'status-active' : 'status-planned';
   const readinessState = readiness.level === 'High'
@@ -606,6 +690,57 @@ function HomeDashboard({ now }) {
     : readiness.level === 'Moderate'
       ? 'moderate'
       : 'low';
+
+  function handleStartTodayWorkout() {
+    if (todayWorkoutRecord) {
+      setActiveBlock({ type: 'workout', id: todayWorkoutRecord.id });
+      return;
+    }
+    if (todayWorkoutCard.kind !== 'workout' || !todayWorkoutCard.session) return;
+    const newWorkout = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...todayWorkoutCard.session, programWeek: planState.programWeek },
+      settings: fitnessSettings,
+      todayKey,
+      statusOverride: 'active',
+    });
+    setWorkouts(ws => [...ws, newWorkout]);
+    setActiveBlock({ type: 'workout', id: newWorkout.id });
+  }
+
+  function handleSkipTodayWorkout() {
+    if (todayWorkoutRecord) {
+      setWorkouts(ws => ws.map(w => w.id === todayWorkoutRecord.id ? { ...w, status: 'skipped' } : w));
+    } else if (todayWorkoutCard.kind === 'workout' && todayWorkoutCard.session) {
+      const skipped = createWorkoutFromSession({
+        createWorkout,
+        createExercise,
+        session: { ...todayWorkoutCard.session, programWeek: planState.programWeek },
+        settings: fitnessSettings,
+        todayKey,
+        statusOverride: 'skipped',
+      });
+      setWorkouts(ws => [...ws, skipped]);
+    }
+  }
+
+  function handleMoveTodayWorkout() {
+    if (todayWorkoutCard.kind !== 'workout' || !todayWorkoutCard.session) return;
+    const nextDate = toDateKey(addDays(new Date(`${todayKey}T00:00:00`), 1));
+    const moved = createWorkoutFromSession({
+      createWorkout,
+      createExercise,
+      session: { ...todayWorkoutCard.session, programWeek: planState.programWeek },
+      settings: fitnessSettings,
+      todayKey: nextDate,
+      scheduledDateOverride: nextDate,
+      plannedDateOverride: todayKey,
+      statusOverride: 'planned',
+    });
+    setWorkouts(ws => [...ws, moved]);
+    handleSkipTodayWorkout();
+  }
 
   return (
     <div className="tab-stack home-dashboard">
@@ -651,56 +786,106 @@ function HomeDashboard({ now }) {
         </div>
       </section>
 
-      {routines.length > 0 && (
-        <Card variant="flat" className="home-card home-section home-routines-card">
-          <SectionHeader eyebrow="Routines" title="Today's routines" />
-          <div className="home-list">
-            {routines.map(routine => {
-              const isCompleted = routine.lastCompleted === toDateKey(now);
+      {/* Zone 2: Active block indicator */}
+      {activeBlock && (
+        <div className="home-active-block" role="status" aria-live="polite">
+          <span className={`home-active-block-dot home-active-block-dot--${activeBlock.type}`} aria-hidden="true" />
+          <span className="home-active-block-label">{activeBlockLabel}</span>
+          <span className="status-pill status-active">Active</span>
+        </div>
+      )}
+
+      {/* Zone 3: Today's workout card */}
+      {todayWorkoutCard.kind === 'workout' && (
+        <Card variant="flat" className="home-card home-section home-workout-card">
+          <SectionHeader
+            eyebrow="Today's workout"
+            title={todayWorkoutCard.title}
+            action={
+              hasCompletedWorkout
+                ? <span className="status-pill status-done">Done</span>
+                : workoutMarkedMissed
+                  ? <span className="status-pill status-missed">Missed</span>
+                  : <span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>
+            }
+          />
+          {todayWorkoutCard.metaLine && (
+            <p className="home-card-copy">{todayWorkoutCard.metaLine}</p>
+          )}
+          {!hasCompletedWorkout && (
+            <div className="quick-entry-row">
+              {workoutMarkedMissed ? (
+                <>
+                  <button type="button" className="secondary-button" onClick={handleMoveTodayWorkout}>
+                    Move to tomorrow
+                  </button>
+                  <button type="button" className="ghost-button compact-ghost" onClick={handleSkipTodayWorkout}>
+                    Skip
+                  </button>
+                </>
+              ) : todayWorkoutCard.canStart ? (
+                <>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleStartTodayWorkout}
+                    disabled={activeBlock !== null && !(activeBlock.type === 'workout' && activeBlock.id === todayWorkoutRecord?.id)}
+                  >
+                    Start
+                  </button>
+                  <button type="button" className="ghost-button compact-ghost" onClick={handleSkipTodayWorkout}>
+                    Skip
+                  </button>
+                </>
+              ) : null}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Zone 5: Today's routine strip */}
+      {todayRoutines.length > 0 && (
+        <div className="home-routine-strip home-section">
+          <p className="home-routine-strip-label">Routines</p>
+          <div className="home-routine-chips">
+            {todayRoutines.map(routine => {
+              const isCompleted = routine.lastCompleted === todayKey;
               return (
-                <ListRow
+                <button
                   key={routine.id}
-                  variant="card"
-                  label={routine.name}
-                  sub={`${routine.steps.length} step${routine.steps.length === 1 ? '' : 's'}${routine.scheduleTime ? ` · ${routine.scheduleTime}` : ''}`}
-                  trailing={
-                    isCompleted
-                      ? <span className="status-pill status-done">Done</span>
-                      : (
-                        <button
-                          type="button"
-                          className="ghost-button compact-ghost"
-                          onClick={() => setActiveRoutine(routine)}
-                        >
-                          Start
-                        </button>
-                      )
-                  }
-                />
+                  type="button"
+                  className={`status-chip${isCompleted ? ' is-done' : ''}`}
+                  onClick={() => !isCompleted && setActiveBlock({ type: 'routine', id: routine.id })}
+                  disabled={isCompleted}
+                  aria-label={`${routine.name}${isCompleted ? ' — done' : ''}`}
+                >
+                  {routine.name}
+                </button>
               );
             })}
           </div>
-        </Card>
+        </div>
       )}
 
       <Card variant="flat" className="home-card home-section home-focus-card">
         <SectionHeader eyebrow="Focus" title="Deep work session" />
-        {focusSession.active ? (
-          <FocusTimer
-            session={focusSession}
-            onStop={() => setFocusSession(s => ({ ...s, active: false, startedAt: null }))}
-            onDismiss={() => setFocusSession({ active: false, taskLabel: '', durationMinutes: 25, startedAt: null })}
-          />
-        ) : (
-          <FocusTimer
-            session={focusSession}
-            onStart={({ taskLabel, durationMinutes }) =>
-              setFocusSession({ active: true, taskLabel, durationMinutes, startedAt: Date.now() })
-            }
-            onStop={() => setFocusSession(s => ({ ...s, active: false, startedAt: null }))}
-            onDismiss={() => setFocusSession({ active: false, taskLabel: '', durationMinutes: 25, startedAt: null })}
-          />
-        )}
+        {/* Active FocusTimer is promoted to AppShell level (survives tab switches).
+            This card only renders the idle setup form; once active, AppShell takes over. */}
+        <FocusTimer
+          session={focusSession}
+          onStart={({ taskLabel, durationMinutes }) => {
+            setActiveBlock({ type: 'focus', id: null });
+            setFocusSessionDetails({ taskLabel, durationMinutes, startedAt: Date.now() });
+          }}
+          onStop={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+          }}
+          onDismiss={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+          }}
+        />
       </Card>
 
       <Card variant="flat" className="home-card home-section home-tasks-card">
@@ -760,15 +945,6 @@ function HomeDashboard({ now }) {
             />
           ))}
 
-          {todayWorkoutCard.kind === 'workout' && (
-            <ListRow
-              variant="card"
-              label={todayWorkoutCard.title}
-              sub={todayWorkoutCard.metaLine}
-              trailing={<span className={`status-pill ${todayWorkoutCard.status.className}`}>{todayWorkoutCard.status.label}</span>}
-            />
-          )}
-
           {todayCalendarItems.filter(item => !item.isCurrent).map(item => (
             <ListRow
               key={item.id}
@@ -779,26 +955,34 @@ function HomeDashboard({ now }) {
             />
           ))}
 
-          {todayWorkoutCard.kind !== 'workout' && todayCalendarItems.length === 0 && (
+          {todayCalendarItems.length === 0 && (
             <EmptyState
               title="No schedule items yet"
-              description="Home will show today's plan once Calendar or Fitness has something scheduled."
+              description="Home will show today's plan once Calendar has something scheduled."
             />
           )}
         </div>
       </Card>
 
-      {activeRoutine && (
-        <RoutinePlayer
-          routine={activeRoutine}
-          onClose={() => setActiveRoutine(null)}
-          onComplete={routineId =>
-            setRoutines(current =>
-              current.map(r => r.id === routineId ? { ...r, lastCompleted: toDateKey(now) } : r)
-            )
-          }
+      {/* Zone 7: Nutrition bar */}
+      <Card variant="flat" className="home-card home-section home-nutrition-card">
+        <SectionHeader
+          eyebrow="Nutrition"
+          title="Today's meals"
+          action={<span className="home-card-copy">{completedMealSlots}/4 logged</span>}
         />
-      )}
+        <div className="home-nutrition-slots">
+          {mealSlotProgress.map(slot => (
+            <div key={slot.id} className={`home-nutrition-slot${slot.complete ? ' is-logged' : ''}`}>
+              <span className="home-nutrition-slot-label">{slot.label}</span>
+              <span className={`status-pill ${slot.complete ? 'status-done' : 'status-planned'}`}>
+                {slot.complete ? 'Logged' : 'Empty'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+
     </div>
   );
 }
@@ -1594,6 +1778,8 @@ function getStructuredWorkoutDetails(workout, programNameFallback = '') {
 }
 
 function createWorkoutFromSession({
+  createWorkout,   // unused — kept for call-site compatibility
+  createExercise,  // unused — kept for call-site compatibility
   session,
   settings,
   todayKey,
@@ -1601,16 +1787,14 @@ function createWorkoutFromSession({
   plannedDateOverride = null,
   statusOverride = 'planned',
 }) {
-  return normalizeWorkoutRecord(adaptGeneratedSessionToWorkoutRecord({
-    ...session,
-    programType: session?.programType || settings?.programType || 'hyrox',
-    trainingDays: settings?.trainingDays || session?.trainingDays || null,
-  }, {
-    scheduledDate: scheduledDateOverride || session?.dateKey || todayKey,
-    plannedDate: plannedDateOverride || session?.dateKey || scheduledDateOverride || todayKey,
+  const resolvedScheduledDate = scheduledDateOverride || session?.dateKey || todayKey;
+  const resolvedPlannedDate = plannedDateOverride || session?.dateKey || resolvedScheduledDate;
+  return adaptGeneratedSessionToWorkoutRecord(session, {
+    scheduledDate: resolvedScheduledDate,
+    plannedDate: resolvedPlannedDate,
     status: statusOverride,
-    createdAt: Date.now(),
-  }));
+    settings,
+  });
 }
 
 function getTodayItems({ tasks, workouts, meals, calendarItems, todayKey }) {
@@ -3831,11 +4015,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     });
   }, [energyState.mood, energyState.value, energyState.sleepHours]);
 
-  const activeWorkout = useMemo(
-    () => workouts.find(workout => workout.id === activeWorkoutId) ?? null,
-    [workouts, activeWorkoutId],
-  );
-
   const todayKey = toDateKey(now);
   const normalizedProgramType = normalizeProgramType(fitnessSettings.programType);
   const athleteDefaults = profile?.athlete || {};
@@ -4036,44 +4215,8 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
     setNotifications(current => [createNotification({ title, detail }), ...current]);
   }
 
-  function updateWorkoutById(workoutId, updater) {
-    setWorkouts(current => current.map((workout, index) => (
-      workout.id === workoutId
-        ? normalizeWorkoutRecord(updater(workout), index)
-        : workout
-    )));
-  }
-
   function appendWorkout(workout) {
     setWorkouts(current => [normalizeWorkoutRecord(workout, current.length), ...current]);
-  }
-
-  function mergeWorkoutLog(workout, patch = {}) {
-    const nextLog = normalizeWorkoutLog({
-      ...(workout.workoutLog || {}),
-      ...patch,
-      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
-      segments: (() => {
-        const currentSegments = Array.isArray(workout.workoutLog?.segments)
-          ? workout.workoutLog.segments
-          : [];
-
-        if (Array.isArray(patch.segments)) {
-          return patch.segments;
-        }
-
-        if (!patch.segment) {
-          return currentSegments;
-        }
-
-        const remainingSegments = currentSegments.filter(entry => entry.id !== patch.segment.id);
-        return [...remainingSegments, patch.segment];
-      })(),
-    }, {
-      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
-    });
-
-    return nextLog;
   }
 
   function startWorkout(workoutId) {
@@ -4108,44 +4251,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           ? normalizeWorkoutRecord({ ...workout, status: 'planned' }, index)
           : workout
     )));
-  }
-
-  function cancelWorkout() {
-    if (!activeWorkoutId) return;
-    updateWorkoutById(activeWorkoutId, workout => ({ ...workout, status: 'planned' }));
-    onStartWorkout(null);
-  }
-
-  function completeWorkout(workoutLog) {
-    if (!activeWorkoutId) return;
-    const completedAt = Date.now();
-    updateWorkoutById(activeWorkoutId, workout => ({
-      ...workout,
-      status: 'completed',
-      completedAt,
-      workoutLog: mergeWorkoutLog(workout, {
-        ...(workoutLog || {}),
-        completionLoggedAt: workoutLog?.completionLoggedAt || completedAt,
-        completionSource: workoutLog?.completionSource || 'manual_completion',
-        lastUpdatedAt: completedAt,
-        notes: typeof workoutLog?.notes === 'string' ? workoutLog.notes : (workout.workoutLog?.notes || ''),
-      }),
-    }));
-    upsertNotification('Workout completed', activeWorkout?.name || 'Workout');
-    onStartWorkout(null);
-  }
-
-  function logCompletion(workoutLog) {
-    if (!activeWorkoutId) return;
-    completeWorkout(workoutLog);
-  }
-
-  function updateWorkoutLog(patch) {
-    if (!activeWorkoutId) return;
-    updateWorkoutById(activeWorkoutId, workout => ({
-      ...workout,
-      workoutLog: mergeWorkoutLog(workout, patch),
-    }));
   }
 
   function saveCheckIn() {
@@ -4277,18 +4382,7 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
 
   return (
     <div className="tab-stack fitness-stack">
-      {activeWorkout && (
-        <WorkoutPlayer
-          workout={activeWorkout}
-          onCancel={cancelWorkout}
-          onComplete={completeWorkout}
-          onLogCompletion={logCompletion}
-          onUpdateWorkoutLog={updateWorkoutLog}
-        />
-      )}
-
-      {!activeWorkout && (
-        <>
+      <>
           <TrackingStrip
             selectedDate={selectedDateKey}
             setSelectedDate={setSelectedDateKey}
@@ -4736,7 +4830,6 @@ function FitnessScreen({ now, activeWorkoutId, onStartWorkout }) {
           <NutritionScreen now={now} />
         )}
       </>
-      )}
     </div>
   );
 }
@@ -4771,22 +4864,6 @@ function MoreScreen({ initialSection = 'habits', onSwitchToTab, now }) {
       weeklyNotes: [{ id: `note-${Date.now()}`, text: trimmed }, ...(current.weeklyNotes || [])],
     }));
     setInsightDraft('');
-  }
-
-  function promoteInboxItem(itemId, module = 'note') {
-    const item = inboxItems.find(entry => entry.id === itemId);
-    if (!item) return;
-    setInboxItems(current => current.filter(entry => entry.id !== itemId));
-    if (module === 'note') {
-      setProfile(current => ({
-        ...current,
-        dailyLogs: {
-          ...current.dailyLogs,
-          [toDateKey(new Date())]: [...(current.dailyLogs[toDateKey(new Date())] || []), item.text],
-        },
-      }));
-    }
-    if (module === 'task' && onSwitchToTab) onSwitchToTab('more');
   }
 
   const sectionDescriptions = {
@@ -4877,12 +4954,27 @@ function AppShell() {
     notifications,
     inboxItems,
     setInboxItems,
+    createInboxItem,
     workouts,
     setWorkouts,
     createWorkout,
     createExercise,
+    tasks,
+    setTasks,
+    createTask,
+    meals,
+    setMeals,
+    createMeal,
+    notes,
+    setNotes,
+    createNote,
+    calendarItems,
+    setCalendarItems,
+    createCalendarItem,
     setNotifications,
     createNotification,
+    routines,
+    setRoutines,
   } = useTaskContext();
   const {
     quickAddOpen,
@@ -4891,14 +4983,16 @@ function AppShell() {
     recoveryInputs,
     mealPrefs,
     fitnessSettings,
+    activeBlock,
+    setActiveBlock,
+    conflictMessage,
+    setConflictMessage,
+    focusSession,
+    setFocusSessionDetails,
   } = useAppContext();
   const { profile } = useProfileContext();
   const [activeTab, setActiveTab] = useState('home');
   const [activeSurface, setActiveSurface] = useState(null);
-  const [activeWorkoutId, setActiveWorkoutId] = useState(() => {
-    const activeWorkout = workouts.find(workout => workout.status === 'active');
-    return activeWorkout?.id ?? null;
-  });
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -4906,14 +5000,143 @@ function AppShell() {
     return () => window.clearInterval(interval);
   }, []);
 
+  // Boot: on first render, initialize activeBlock from any persisted active workout.
+  // Uses force:true to bypass conflict check — no user intent involved.
+  // Runs once; workouts list is stable enough at mount for this purpose.
   useEffect(() => {
-    setActiveWorkoutId(current => {
-      const currentWorkout = current ? workouts.find(workout => workout.id === current) ?? null : null;
-      if (currentWorkout?.status === 'active') return currentWorkout.id;
-      const activeWorkout = workouts.find(workout => workout.status === 'active');
-      return activeWorkout?.id ?? null;
-    });
-  }, [workouts]);
+    const persisted = workouts.find(workout => workout.status === 'active');
+    if (persisted) {
+      setActiveBlock({ type: 'workout', id: persisted.id }, { force: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync: if the active workout is completed/cancelled externally, clear activeBlock.
+  useEffect(() => {
+    if (activeBlock?.type !== 'workout') return;
+    const currentWorkout = workouts.find(workout => workout.id === activeBlock.id);
+    if (!currentWorkout || currentWorkout.status !== 'active') {
+      setActiveBlock(null);
+    }
+  }, [workouts, activeBlock, setActiveBlock]);
+
+  // ---------------------------------------------------------------------------
+  // Derived execution objects (used by promoted overlays)
+  // ---------------------------------------------------------------------------
+  const activeWorkoutId = activeBlock?.type === 'workout' ? activeBlock.id : null;
+
+  const activeWorkout = useMemo(
+    () => (activeWorkoutId ? workouts.find(w => w.id === activeWorkoutId) ?? null : null),
+    [activeWorkoutId, workouts],
+  );
+
+  const activeRoutine = activeBlock?.type === 'routine'
+    ? (routines.find(r => r.id === activeBlock.id) ?? null)
+    : null;
+
+  // ---------------------------------------------------------------------------
+  // Inbox: capture and conversion (centralized)
+  // ---------------------------------------------------------------------------
+  function captureToInbox(text) {
+    setInboxItems(current => [createInboxItem({ text, stage: 'capture' }), ...current]);
+  }
+
+  function convertInboxItem(itemId, target) {
+    const item = inboxItems.find(entry => entry.id === itemId);
+    if (!item) return;
+    const text = item.text || '';
+    const todayKey = toDateKey(now);
+
+    switch (target) {
+      case 'task':
+        if (text) setTasks(current => [createTask({ title: text }), ...current]);
+        break;
+      case 'calendar':
+        if (text) setCalendarItems(current => [createCalendarItem({ title: text, date: todayKey }), ...current]);
+        break;
+      case 'workout':
+        setWorkouts(current => [createWorkout({ name: text || 'Workout', scheduledDate: todayKey, plannedDate: todayKey }), ...current]);
+        break;
+      case 'meal':
+        if (text) setMeals(current => [createMeal({ name: text }), ...current]);
+        break;
+      case 'note':
+        if (text) setNotes(current => [createNote({ content: text }), ...current]);
+        break;
+      case 'delete':
+        break;
+      default:
+        return;
+    }
+
+    setInboxItems(current => current.filter(entry => entry.id !== itemId));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Workout execution handlers (promoted from FitnessScreen for shell-level WorkoutPlayer)
+  // ---------------------------------------------------------------------------
+  function shellUpdateWorkoutById(workoutId, updater) {
+    setWorkouts(current => current.map((workout, index) => (
+      workout.id === workoutId ? normalizeWorkoutRecord(updater(workout), index) : workout
+    )));
+  }
+
+  function shellUpsertNotification(title, detail) {
+    setNotifications(current => [createNotification({ title, detail }), ...current]);
+  }
+
+  function shellMergeWorkoutLog(workout, patch = {}) {
+    const currentSegments = Array.isArray(workout.workoutLog?.segments)
+      ? workout.workoutLog.segments : [];
+    const nextSegments = Array.isArray(patch.segments)
+      ? patch.segments
+      : patch.segment
+        ? [...currentSegments.filter(e => e.id !== patch.segment.id), patch.segment]
+        : currentSegments;
+    return normalizeWorkoutLog({
+      ...(workout.workoutLog || {}),
+      ...patch,
+      startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now(),
+      segments: nextSegments,
+    }, { startedAt: workout.startedAt || workout.workoutLog?.startedAt || Date.now() });
+  }
+
+  function cancelWorkout() {
+    if (!activeWorkoutId) return;
+    shellUpdateWorkoutById(activeWorkoutId, w => ({ ...w, status: 'planned' }));
+    setActiveBlock(null);
+  }
+
+  function completeWorkout(workoutLog) {
+    if (!activeWorkoutId) return;
+    const completedAt = Date.now();
+    shellUpdateWorkoutById(activeWorkoutId, w => ({
+      ...w,
+      status: 'completed',
+      completedAt,
+      workoutLog: shellMergeWorkoutLog(w, {
+        ...(workoutLog || {}),
+        completionLoggedAt: workoutLog?.completionLoggedAt || completedAt,
+        completionSource: workoutLog?.completionSource || 'manual_completion',
+        lastUpdatedAt: completedAt,
+        notes: typeof workoutLog?.notes === 'string' ? workoutLog.notes : (w.workoutLog?.notes || ''),
+      }),
+    }));
+    shellUpsertNotification('Workout completed', activeWorkout?.name || 'Workout');
+    setActiveBlock(null);
+  }
+
+  function logCompletion(workoutLog) {
+    completeWorkout(workoutLog);
+  }
+
+  function updateWorkoutLog(patch) {
+    if (!activeWorkoutId) return;
+    shellUpdateWorkoutById(activeWorkoutId, w => ({
+      ...w,
+      workoutLog: shellMergeWorkoutLog(w, patch),
+    }));
+  }
 
   const unreadNotifications = useMemo(
     () => notifications.filter(notification => !notification.read),
@@ -5047,9 +5270,39 @@ function AppShell() {
   ]);
 
   const activeCopy = SHELL_TAB_COPY[activeTab] ?? SHELL_TAB_COPY.home;
-  const shellContent = activeSurface === 'inbox' ? (
+
+  // Execution overlays take priority over surface and tab routing.
+  // They are mounted here so they survive tab switches.
+  const shellContent = activeBlock?.type === 'workout' && activeWorkout ? (
+    <WorkoutPlayer
+      workout={activeWorkout}
+      onCancel={cancelWorkout}
+      onComplete={completeWorkout}
+      onLogCompletion={logCompletion}
+      onUpdateWorkoutLog={updateWorkoutLog}
+    />
+  ) : activeBlock?.type === 'focus' ? (
+    <div className="tab-stack">
+      <Card variant="flat" className="home-card home-section home-focus-card">
+        <SectionHeader eyebrow="Focus" title="Deep work session" />
+        <FocusTimer
+          session={focusSession}
+          onStop={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails(s => ({ ...s, startedAt: null }));
+          }}
+          onDismiss={() => {
+            setActiveBlock(null);
+            setFocusSessionDetails({ taskLabel: '', durationMinutes: 25, startedAt: null });
+          }}
+        />
+      </Card>
+    </div>
+  ) : activeSurface === 'inbox' ? (
     <InboxSurface
       inboxItems={inboxItems}
+      onCapture={captureToInbox}
+      onConvert={convertInboxItem}
       onClose={() => setActiveSurface(null)}
     />
   ) : activeSurface === 'settings' ? (
@@ -5066,8 +5319,7 @@ function AppShell() {
   ) : activeTab === 'fitness' ? (
     <FitnessScreen
       now={now}
-      activeWorkoutId={activeWorkoutId}
-      onStartWorkout={setActiveWorkoutId}
+      onStartWorkout={id => setActiveBlock(id ? { type: 'workout', id } : null)}
     />
   ) : activeTab === 'calendar' ? (
     <CalendarScreen onOpenSettings={openSettingsPage} />
@@ -5129,6 +5381,64 @@ function AppShell() {
         onClose={() => setQuickAddOpen(false)}
         todayKey={toDateKey(now)}
       />
+      {/* RoutinePlayer portals to document.body internally; mounted here so it
+          survives HomeDashboard unmounting on tab switch. */}
+      {activeRoutine && (
+        <RoutinePlayer
+          routine={activeRoutine}
+          onClose={() => setActiveBlock(null)}
+          onComplete={routineId =>
+            setRoutines(current =>
+              current.map(r => r.id === routineId ? { ...r, lastCompleted: toDateKey(now) } : r)
+            )
+          }
+        />
+      )}
+      {/* MorningCheckinModal portals to document.body; self-gates on showMorningCheckin. */}
+      <MorningCheckinModal />
+      {/* Conflict toast — shown when setActiveBlock blocks a transition.
+          Minimal fixed alert; Step 5 can replace this with polished UI. */}
+      {conflictMessage && createPortal(
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            bottom: 88,
+            left: 16,
+            right: 16,
+            background: 'var(--bg-card, #1e1e2e)',
+            border: '1px solid var(--border-card, rgba(255,255,255,0.1))',
+            borderRadius: 12,
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            zIndex: 1100,
+          }}
+        >
+          <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4, color: 'var(--text, #fff)' }}>
+            {conflictMessage}
+          </span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setConflictMessage(null)}
+            style={{
+              flexShrink: 0,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 4,
+              color: 'var(--text-muted, rgba(255,255,255,0.5))',
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            ✕
+          </button>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }
